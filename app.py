@@ -4,6 +4,7 @@ from streamlit_calendar import calendar
 from streamlit_cookies_controller import CookieController
 import os
 import json
+import time
 
 # App-Konfiguration
 st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="⛪", layout="wide")
@@ -85,10 +86,16 @@ def get_dienst_gruppe(datum):
 
 alle_leiter = sorted([m['name'] for m in st.session_state.mitglieder if m['rolle'] in ["Chef", "Teamleiter"]])
 
-# AUTOMATISCHER LOGIN ÜBER COOKIES PRÜFEN
-saved_user = controller.get('eingeloggt_als')
-if saved_user and "eingeloggt_als" not in st.session_state:
-    st.session_state.eingeloggt_als = saved_user
+# ----------------------------------------------------
+# COOKIE GUSTAV - ASYNCHRONER RE-RUN MECHANISMUS (NEU!)
+# ----------------------------------------------------
+if "eingeloggt_als" not in st.session_state:
+    # Gib dem Browser 0.1 Sekunden Zeit, die Cookies zu laden
+    time.sleep(0.1)
+    saved_user = controller.get('eingeloggt_als')
+    if saved_user:
+        st.session_state.eingeloggt_als = saved_user
+        st.rerun()
 
 # ----------------------------------------------------
 # LOGIN-SYSTEM
@@ -139,6 +146,11 @@ if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als i
         st.stop()
 
 user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
+
+if not user:
+    controller.remove('eingeloggt_als')
+    st.session_state.eingeloggt_als = None
+    st.rerun()
 
 # ----------------------------------------------------
 # ERSTMALIGE DATENERFASSUNG
@@ -303,7 +315,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
 st.sidebar.write("---")
 if st.sidebar.button("🚪 Abmelden", use_container_width=True):
     controller.remove('eingeloggt_als')
-    st.session_state.eingeloggt_als = None
+    st.session_state.clear()  # Session komplett leeren
     st.rerun()
 
 
@@ -318,7 +330,6 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
         if msg['zeit'] == 'Info' or msg['von'] == user['name']:
             continue
         
-        # Sicherer Abgleich ohne versteckte Leerzeichenprobleme
         an_ziel = str(msg.get('an', '')).strip().lower()
         aktueller_user = str(user['name']).strip().lower()
         
@@ -425,7 +436,7 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
         "allDay": True
     })
 
-# Kalender rendern mit eindeutigem, dynamischem Key basierend auf der Event-Anzahl
+# Kalender rendern
 calendar_key = f"fecg_calendar_{len(kalender_events)}"
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key=calendar_key)
 st.write("---")

@@ -106,7 +106,7 @@ if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als i
                 st.rerun()
     st.stop()
 
-user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state
+user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
 
 # ----------------------------------------------------
 # SIDEBAR NAVIGATION

@@ -66,23 +66,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# MITGLIEDER SPEICHERN MIT ERWEITERTEN INFOS
+# MITGLIEDER SPEICHERN MIT GEBURTSTAGS-SUPPORT
 # ----------------------------------------------------
 DB_FILE = "mitglieder_data.json"
 
 def hole_standard_liste():
+    # Neues Feld: 'geburtstag' (Format: YYYY-MM-DD oder leerer String)
     return [
-        {'name': 'Komjagin Andreas', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Chef', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Hauf Valintin', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Geier Enriko', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Ilchuk Vasyl', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Volkov Slawik', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Teamleiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Tissen Eduard', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Eberhart Wili', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Paul Steffen', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Schäfer Peter', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Teamleiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Akulenko Wili', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''},
-        {'name': 'Hermann Bogdan', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': ''}
+        {'name': 'Komjagin Andreas', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Chef', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Hauf Valintin', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Geier Enriko', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Ilchuk Vasyl', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Volkov Slawik', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Teamleiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Tissen Eduard', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Eberhart Wili', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Paul Steffen', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Schäfer Peter', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Teamleiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Akulenko Wili', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
+        {'name': 'Hermann Bogdan', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''}
     ]
 
 def speichere_mitglieder(liste):
@@ -96,6 +97,7 @@ if os.path.exists(DB_FILE):
             if 'telefon' not in m: m['telefon'] = ''
             if 'anschrift' not in m: m['anschrift'] = ''
             if 'infos' not in m: m['infos'] = ''
+            if 'geburtstag' not in m: m['geburtstag'] = ''
 else:
     st.session_state.mitglieder = hole_standard_liste()
     speichere_mitglieder(st.session_state.mitglieder)
@@ -117,7 +119,7 @@ def get_dienst_gruppe(datum):
     return ["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"][wochen % 3]
 
 # ----------------------------------------------------
-# LOGIN-SYSTEM UND ERST-ANMELDUNG
+# LOGIN-SYSTEM
 # ----------------------------------------------------
 if st.session_state.eingeloggt_als is None:
     st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner App Login</h1>", unsafe_allow_html=True)
@@ -165,24 +167,26 @@ if st.session_state.eingeloggt_als is None:
 user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
 
 # ----------------------------------------------------
-# ERSTMALIGE DATENERFASSUNG (Zwingend nach PW-Wechsel)
+# ERSTMALIGE DATENERFASSUNG (Inklusive Geburtstag)
 # ----------------------------------------------------
-if user['telefon'].strip() == "" and user['anschrift'].strip() == "":
-    st.markdown("<h1 class='main-title'>📝 Kontaktdaten vervollständigen</h1>", unsafe_allow_html=True)
-    st.info(f"Hallo **{user['name']}**, da du dich zum ersten Mal anmeldest, trage bitte kurz deine Kontaktdaten ein. Deine Teamleiter sehen diese Änderungen sofort automatisch.")
+if user['telefon'].strip() == "" and user['anschrift'].strip() == "" and user['geburtstag'].strip() == "":
+    st.markdown("<h1 class='main-title'>📝 Kontaktdaten & Geburtstag vervollständigen</h1>", unsafe_allow_html=True)
+    st.info(f"Hallo **{user['name']}**, trage bitte deine Daten ein. Dein Geburtstag wird danach für dein gesamtes Team im Kalender angezeigt!")
     
     with st.form("erst_erfassung_form"):
         init_tel = st.text_input("📱 Deine Telefonnummer:", placeholder="z.B. 0176 / 12345678")
         init_adr = st.text_input("🏠 Deine Anschrift:", placeholder="Straße, Hausnummer, PLZ, Ort")
+        init_geb = st.date_input("📅 Dein Geburtsdatum:", value=datetime(1995, 1, 1).date(), min_value=datetime(1940, 1, 1).date(), max_value=datetime.now().date())
         
         if st.form_submit_button("Daten speichern & zur App", use_container_width=True):
             if init_tel.strip() == "" or init_adr.strip() == "":
-                st.error("Bitte fülle beide Felder aus, damit dein Team dich im Notfall erreichen kann!")
+                st.error("Bitte fülle alle Textfelder aus!")
             else:
                 user['telefon'] = init_tel.strip()
                 user['anschrift'] = init_adr.strip()
+                user['geburtstag'] = init_geb.strftime("%Y-%m-%d")
                 speichere_mitglieder(st.session_state.mitglieder)
-                st.success("Perfekt! Deine Daten wurden gespeichert.")
+                st.success("Erfolgreich eingetragen!")
                 st.rerun()
     st.stop()
 
@@ -193,44 +197,49 @@ st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner-Zentrale<
 
 st.sidebar.header("👤 Dein Profil")
 st.sidebar.success(f"**{user['name']}**")
-st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}")
+# Geburtstag im Profil anzeigen
+geb_formatiert = "Nicht eingetragen"
+if user.get('geburtstag'):
+    geb_formatiert = datetime.strptime(user['geburtstag'], "%Y-%m-%d").strftime("%d.%m.%Y")
+st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}\nGeburtstag: {geb_formatiert}")
 
-# SELBSTSTÄNDIGE PROFILÄNDERUNG JEDERZEIT IN SIDEBAR
-with st.sidebar.expander("⚙️ Meine Kontaktdaten ändern"):
+# SELBSTSTÄNDIGE PROFILÄNDERUNG IN SIDEBAR
+with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
     mein_neues_tel = st.text_input("📱 Telefonnummer:", value=user.get('telefon', ''), key="my_own_tel")
     mein_neues_adr = st.text_input("🏠 Anschrift:", value=user.get('anschrift', ''), key="my_own_adr")
+    
+    aktueller_geb_date = datetime.strptime(user['geburtstag'], "%Y-%m-%d").date() if user.get('geburtstag') else datetime(1995, 1, 1).date()
+    mein_neuer_geb = st.date_input("📅 Geburtstag:", value=aktueller_geb_date, key="my_own_geb", min_value=datetime(1940, 1, 1).date())
+    
     if st.button("💾 Profil aktualisieren", use_container_width=True, key="save_my_profile"):
         user['telefon'] = mein_neues_tel
         user['anschrift'] = mein_neues_adr
+        user['geburtstag'] = mein_neuer_geb.strftime("%Y-%m-%d")
         speichere_mitglieder(st.session_state.mitglieder)
         st.sidebar.success("Daten aktualisiert!")
         st.rerun()
 
 # ----------------------------------------------------
-# FEATURE: "MEIN TEAM" UND GESAMTMITGLIEDER (FÜR ANDREAS / LEITER)
+# FEATURE: "MEIN TEAM" UND GESAMTMITGLIEDER
 # ----------------------------------------------------
 st.sidebar.write("---")
 show_team_section = st.sidebar.checkbox("👥 Mein Team & Mitglieder-Infos", value=False)
 
 if show_team_section:
     st.write("## 👥 Teamverwaltung & Stammdaten")
-    
     person_ausgewaehlt = None
     
-    # BEREICH 1: EIGENES TEAM (Für jeden sichtbar, auch für Andreas)
     st.write(f"### 🛡️ Mein Team ({user['gruppe']})")
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
-    namen_eigenes_team = sorted([m['name'] for m in eigenes_team])
+    namen_eigenes_team = sorted([m['name'] for m in erstes_team_mitglied] if (erstes_team_mitglied := eigenes_team) else [])
     
     wahl_eigenes_team = st.selectbox("Mitglied aus deinem Team wählen:", options=["-- Bitte wählen --"] + namen_eigenes_team, key="sel_my_team")
     if wahl_eigenes_team != "-- Bitte wählen --":
         person_ausgewaehlt = wahl_eigenes_team
 
-    # BEREICH 2: ABGESETZTE GESAMTLISTE (NUR für den Chef Andreas sichtbar)
     if user['rolle'] == "Chef":
         st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
         st.write("### 🌍 Alle anderen Ordner-Mitglieder (Gesamtübersicht)")
-        
         andere_mitglieder = [m for m in st.session_state.mitglieder if m['gruppe'] != user['gruppe']]
         namen_andere = sorted([m['name'] for m in andere_mitglieder])
         
@@ -238,7 +247,6 @@ if show_team_section:
         if wahl_andere != "-- Bitte wählen --":
             person_ausgewaehlt = wahl_andere
 
-    # FORMULAR ZUM BEARBEITEN (Falls eine Person selektiert wurde, können Leiter manuell eingreifen)
     if person_ausgewaehlt:
         person_daten = next((m for m in st.session_state.mitglieder if m['name'] == person_ausgewaehlt), None)
         if person_daten:
@@ -247,20 +255,24 @@ if show_team_section:
             
             p_telefon = st.text_input("📱 Telefonnummer:", value=person_daten.get('telefon', ''), key="edit_tel")
             p_anschrift = st.text_input("🏠 Anschrift (Straße, PLZ, Ort):", value=person_daten.get('anschrift', ''), key="edit_adr")
-            p_infos = st.text_area("ℹ️ Weitere Infos / Notizen (Nur für Leiter sichtbar):", value=person_daten.get('infos', ''), key="edit_inf")
+            
+            p_geb_date = datetime.strptime(person_daten['geburtstag'], "%Y-%m-%d").date() if person_daten.get('geburtstag') else datetime(1995, 1, 1).date()
+            p_geb = st.date_input("📅 Geburtstag:", value=p_geb_date, key="edit_geb", min_value=datetime(1940, 1, 1).date())
+            
+            p_infos = st.text_area("ℹ️ Weitere Infos / Notizen:", value=person_daten.get('infos', ''), key="edit_inf")
             
             if st.button("💾 Änderungen für diese Person speichern", use_container_width=True, key="save_person_btn"):
                 person_daten['telefon'] = p_telefon
                 person_daten['anschrift'] = p_anschrift
+                person_daten['geburtstag'] = p_geb.strftime("%Y-%m-%d")
                 person_daten['infos'] = p_infos
                 speichere_mitglieder(st.session_state.mitglieder)
                 st.success(f"Die Daten für {person_daten['name']} wurden erfolgreich aktualisiert!")
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
-            
     st.write("---")
 
-# Allgemeine Mitglieder-Verwaltung (Hinzufügen/Entfernen in der Sidebar)
+# Allgemeine Admin-Verwaltung in Sidebar
 if user['rolle'] in ["Chef", "Teamleiter"]:
     st.sidebar.subheader("⚙️ System-Verwaltung")
     with st.sidebar.expander("➕ Neues Mitglied anlegen"):
@@ -273,10 +285,10 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
             if neu_name.strip() and not any(m['name'].lower() == neu_name.strip().lower() for m in st.session_state.mitglieder):
                 st.session_state.mitglieder.append({
                     'name': neu_name.strip(), 'gruppe': neu_gruppe_chef, 'rolle': neu_rolle, 'passwort': 'Ordner',
-                    'telefon': '', 'anschrift': '', 'infos': ''
+                    'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''
                 })
                 speichere_mitglieder(st.session_state.mitglieder)
-                st.sidebar.success(f"Erstellt! Passwort: Ordner")
+                st.sidebar.success(f"Erstellt!")
                 st.rerun()
                 
     with st.sidebar.expander("🗑️ Mitglied entfernen"):
@@ -298,7 +310,7 @@ if st.sidebar.button("🚪 Abmelden", use_container_width=True):
     st.rerun()
 
 # ----------------------------------------------------
-# RESTLICHE APP (CHAT, KALENDER & ABFRAGEN)
+# RESTLICHE APP (CHAT)
 # ----------------------------------------------------
 if user['rolle'] in ["Chef", "Teamleiter"]:
     st.write("### 💬 Interner Chat (Nur für Gruppenleiter sichtbar)")
@@ -316,13 +328,18 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
             st.rerun()
     st.write("---")
 
-st.write("### 📅 Dienstplan-Übersicht")
+# ----------------------------------------------------
+# KALENDER-GENERIERUNG INKLUSIVE GEBURTSTAGE
+# ----------------------------------------------------
+st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()
 aktueller_sonntag = heute - timedelta(days=(heute.weekday() + 1) % 7)
 if heute.weekday() == 6: aktueller_sonntag = heute
 st.success(f"📢 **Aktuelle Woche:** {get_dienst_gruppe(aktueller_sonntag)} hat Dienst.")
 
 kalender_events = []
+
+# 1. Dienstplan-Wochen generieren
 for i in range(-4, 150):
     w_sonntag = datetime(2026, 6, 21).date() + timedelta(weeks=i)
     w_samstag = w_sonntag + timedelta(days=6)
@@ -330,9 +347,51 @@ for i in range(-4, 150):
     farbe = "#1e3a8a" if "Andreas K." in grp else "#8b5cf6" if "Slawik V." in grp else "#f97316"
     kalender_events.append({"title": f"🛠️ {grp}", "start": w_sonntag.isoformat(), "end": (w_samstag + timedelta(days=1)).isoformat(), "backgroundColor": farbe, "borderColor": farbe, "allDay": True})
 
+# 2. NEU: Geburtstage des EIGENEN Teams einbetten (Sichtbar für alle Gruppenmitglieder)
+for m in st.session_state.mitglieder:
+    # Bedingung: Muss in der gleichen Gruppe sein. Wenn der User 'Chef' ist, sieht er alle Geburtstage.
+    if user['rolle'] == "Chef" or m['gruppe'] == user['gruppe']:
+        if m.get('geburtstag') and m['geburtstag'].strip() != "":
+            geb_date = datetime.strptime(m['geburtstag'], "%Y-%m-%d").date()
+            # Geburtstag auf das aktuelle Planungsjahr (2026) übertragen
+            geb_2026 = datetime(2026, geb_date.month, geb_date.day).date()
+            
+            kalender_events.append({
+                "title": f"🎉 Geb.: {m['name']}",
+                "start": geb_2026.isoformat(),
+                "end": (geb_2026 + timedelta(days=1)).isoformat(),
+                "backgroundColor": "#eab308", # Gold-Gelb für gute Sichtbarkeit
+                "borderColor": "#ca8a04",
+                "allDay": True
+            })
+
+# 3. Urlaube & Engpässe
+urlaubs_tage_zaehler = {}
+for u in st.session_state.urlaube:
+    u_mitglied = next((m for m in st.session_state.mitglieder if m['name'] == u['name']), None)
+    if u_mitglied:
+        akt_tag = u['von']
+        if isinstance(akt_tag, str): akt_tag = datetime.strptime(akt_tag, "%Y-%m-%d").date()
+        u_bis_date = u['bis']
+        if isinstance(u_bis_date, str): u_bis_date = datetime.strptime(u_bis_date, "%Y-%m-%d").date()
+        
+        while akt_tag <= u_bis_date:
+            if u_mitglied['gruppe'] == get_dienst_gruppe(akt_tag):
+                if akt_tag not in urlaubs_tage_zaehler: urlaubs_tage_zaehler[akt_tag] = []
+                if u['name'] not in urlaubs_tage_zaehler[akt_tag]: urlaubs_tage_zaehler[akt_tag].append(u['name'])
+            akt_tag += timedelta(days=1)
+
+for tag, namen_liste in urlaubs_tage_zaehler.items():
+    anzahl_fehlende = len(namen_liste)
+    u_farbe = "#eab308" if anzahl_fehlende == 1 else "#ef4444"
+    kalender_events.append({"title": f"⚠️ Urlaub: {', '.join(namen_liste)}", "start": tag.isoformat(), "end": (tag + timedelta(days=1)).isoformat(), "backgroundColor": u_farbe, "borderColor": u_farbe, "allDay": True})
+
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
 st.write("---")
 
+# ----------------------------------------------------
+# ABFRAGEN & INTERAKTIONEN
+# ----------------------------------------------------
 st.write("### 📋 Aktuelle Anwesenheits-Abfragen für dich")
 abfragen_gefunden = False
 for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
@@ -345,63 +404,4 @@ for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
             helfer_liste = v_abfrage.get('helfer', [])
             max_benoetigt = v_abfrage.get('bedarf', 1)
             if user['name'] in helfer_liste:
-                abfragen_gefunden = True
-                st.success(f"✅ Du hast für den {ziel_datum.strftime('%d.%m.%Y')} verbindlich zugesagt!")
-                continue
-            if len(helfer_liste) >= max_benoetigt: continue
-            abfragen_gefunden = True
-            st.error(f"🚨 **HILFERUF AN ALLE:** Für den {ziel_datum.strftime('%d.%m.%Y')} werden noch Helfer gesucht!")
-            if st.button(f"🤝 Als {user['name']} einspringen", key=f"gesamt_zusage_{k_abfrage}", use_container_width=True):
-                v_abfrage['helfer'].append(user['name'])
-                v_abfrage['rueckmeldungen'][user['name']] = "🟢 Eingesprungen"
-                st.rerun()
-        elif is_fuer_meine_gruppe:
-            if user['name'] in v_abfrage['rueckmeldungen']: continue
-            abfragen_gefunden = True
-            st.info(f"➔ [Deine Gruppe] **Offene Abfrage:** {ziel_datum.strftime('%d.%m.%Y')}")
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("🟢 Ich bin DA", key=f"da_{k_abfrage}"):
-                    v_abfrage['rueckmeldungen'][user['name']] = "🟢 Bin da"
-                    st.rerun()
-            with c2:
-                if st.button("🔴 Ich bin NICHT da", key=f"weg_{k_abfrage}"):
-                    v_abfrage['rueckmeldungen'][user['name']] = "🔴 Nicht da"
-                    st.rerun()
-if not abfragen_gefunden: st.write("✅ Keine offenen Abfragen ausstehend.")
-st.write("---")
-
-col_box1, col_box2 = st.columns(2)
-with col_box1:
-    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-    st.subheader("🚀 Anwesenheits-Abfrage")
-    if user['rolle'] in ["Chef", "Teamleiter"]:
-        if not st.session_state.show_abfrage_form:
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("👥 Eigene Gruppenabfrage", use_container_width=True):
-                    st.session_state.show_abfrage_form = True; st.session_state.abfrage_typ = "gruppe"; st.rerun()
-            with c2:
-                if st.button("🌍 Gesamtabfrage (ALLE)", use_container_width=True):
-                    st.session_state.show_abfrage_form = True; st.session_state.abfrage_typ = "alle"; st.rerun()
-        else:
-            gewaehltes_datum = st.date_input("Für welchen Tag:", value=aktueller_sonntag)
-            bedarf_personen = st.number_input("Benötigte Personen:", min_value=1, value=2) if st.session_state.abfrage_typ == "alle" else 0
-            if st.button("✅ Starten", use_container_width=True):
-                key = f"{user['gruppe'] if st.session_state.abfrage_typ=='gruppe' else 'ALLE'}_{gewaehltes_datum.strftime('%Y-%m-%d')}"
-                st.session_state.gruppen_abfragen[key] = {'status': 'offen', 'typ': st.session_state.abfrage_typ, 'bedarf': bedarf_personen, 'helfer': [], 'rueckmeldungen': {}}
-                st.session_state.show_abfrage_form = False; st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with col_box2:
-    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-    st.subheader("🌴 Urlaubsverwaltung")
-    if not st.session_state.show_urlaub_form:
-        if st.button("📅 Urlaub eintragen", use_container_width=True): st.session_state.show_urlaub_form = True; st.rerun()
-    else:
-        u_von = st.date_input("Urlaub von:", value=heute)
-        u_bis = st.date_input("Urlaub bis:", value=heute + timedelta(days=7))
-        if st.button("✅ Speichern", use_container_width=True):
-            st.session_state.urlaube.append({'name': user['name'], 'von': u_von, 'bis': u_bis})
-            st.session_state.show_urlaub_form = False; st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+                abfragen_gefunden = True; st.success(f"✅ Du hast für den {ziel_datum.strftime('%

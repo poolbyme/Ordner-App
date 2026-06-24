@@ -13,11 +13,18 @@ st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="�
 controller = CookieController()
 
 # --- COOKIE-WIEDERERKENNUNG ---
+# ... (deine Importe)
+controller = CookieController()
+
+# --- HIER DEN CODE EINFÜGEN ---
 if "eingeloggt_als" not in st.session_state:
     saved_user = controller.get('eingeloggt_als')
     if saved_user:
         st.session_state.eingeloggt_als = saved_user
-        st.rerun()
+# ------------------------------
+
+# Hier geht dein restlicher Code weiter, wie er schon immer war!
+# Also ab hier kommen deine Datenbank-Definitionen (DB_FILE = ...)
 
 # CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)
 st.markdown("""

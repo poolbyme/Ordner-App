@@ -5,7 +5,11 @@ from datetime import datetime, timedelta
 from streamlit_calendar import calendar
 
 # 1. KONFIGURATION
-st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="⛪", layout="wide")
+st.set_page_config(
+    page_title="FECG App", 
+    page_icon="⛪",  # Hier kannst du ein Emoji oder ein Bild einfügen
+    layout="wide"
+)
 
 # 2. URL-PARAMETER-RETTUNG (Damit man beim F5-Refresh eingeloggt bleibt)
 params = st.query_params

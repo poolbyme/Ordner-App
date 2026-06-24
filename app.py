@@ -1,17 +1,22 @@
 import os
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
-# Verbindung zum Sheet herstellen
 def connect_to_sheet():
+    # Holt die Daten aus den Streamlit Secrets
+    creds_dict = st.secrets["gcp"]
+    
+    # Wandelt das Dictionary in Anmeldedaten um
+    creds = Credentials.from_service_account_info(creds_dict)
+    
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
-    client = gspread.authorize(creds)
+    creds_with_scope = creds.with_scopes(scope)
+    
+    client = gspread.authorize(creds_with_scope)
     sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1UzSiHPDQTv5tW686r5d5zutkmWCa5ZiESYWABa-GawU/edit").sheet1
     return sheet
 
-# Beispiel: Daten lesen
 sheet = connect_to_sheet()
 alle_mitglieder = sheet.get_all_records()
 from streamlit_calendar import calendar

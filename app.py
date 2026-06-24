@@ -57,6 +57,13 @@ st.markdown("""
         border-top: 5px solid #1e3a8a;
         margin-bottom: 20px;
     }
+    .popup-box {
+        background-color: #ffe4e6;
+        padding: 15px;
+        border-left: 6px solid #f43f5e;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -94,20 +101,24 @@ else:
 # Speicherstrukturen initialisieren
 if "urlaube" not in st.session_state: st.session_state.urlaube = []
 if "gruppen_abfragen" not in st.session_state: st.session_state.gruppen_abfragen = {}
-if "leiter_chat" not in st.session_state: st.session_state.leiter_chat = [{'von': 'System', 'text': 'Willkommen im internen Chat!', 'zeit': 'Info'}]
 if "eingeloggt_als" not in st.session_state: st.session_state.eingeloggt_als = None
 if "passwort_aendern_fuer" not in st.session_state: st.session_state.passwort_aendern_fuer = None
 if "show_abfrage_form" not in st.session_state: st.session_state.show_abfrage_form = False
 if "abfrage_typ" not in st.session_state: st.session_state.abfrage_typ = None
 if "show_urlaub_form" not in st.session_state: st.session_state.show_urlaub_form = False
-
-# Zustände für die Auswahllisten (Wichtig für das automatische Verstecken/Ersetzen!)
 if "gewaehltes_mitglied" not in st.session_state: st.session_state.gewaehltes_mitglied = None
+
+# CHAT DATENSTRUKTUR ERWEITERN (Für Pop-up Quittierung)
+if "leiter_chat" not in st.session_state: 
+    st.session_state.leiter_chat = [{'von': 'System', 'text': 'Willkommen im internen Chat!', 'zeit': 'Info', 'an': 'Alle', 'gelesen_von': []}]
 
 def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
     wochen = (datum - basis_datum).days // 7
     return ["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"][wochen % 3]
+
+# Liste aller verfügbaren Leiter für die Chat-Auswahl ermitteln
+alle_leiter = sorted([m['name'] for m in st.session_state.mitglieder if m['rolle'] in ["Chef", "Teamleiter"]])
 
 # ----------------------------------------------------
 # LOGIN-SYSTEM
@@ -210,41 +221,31 @@ with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
 # UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN" (AUTOMATISCHES ERSETZEN & VERSTECKEN)
 st.sidebar.write("---")
 with st.sidebar.expander("👥 Teamverwaltung & Stammdaten", expanded=True):
-    
-    # Listen aufbereiten
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
     namen_eigenes_team = ["-- Bitte wählen --"] + sorted([m['name'] for m in eigenes_team])
     
     andere_mitglieder = [m for m in st.session_state.mitglieder if m['gruppe'] != user['gruppe']]
     namen_andere = ["-- Bitte wählen --"] + sorted([m['name'] for m in andere_mitglieder])
 
-    # Wenn bereits jemand ausgewählt ist, zeigen wir einen Reset-Button an
     if st.session_state.gewaehltes_mitglied is not None:
         if st.button("🔄 Anderes Mitglied suchen", use_container_width=True):
             st.session_state.gewaehltes_mitglied = None
             st.rerun()
 
-    # LOGIK: Falls noch niemand gewählt wurde, zeige die Boxen an
     if st.session_state.gewaehltes_mitglied is None:
-        
-        # 1. EIGENES TEAM BOX
         st.write(f"**🛡️ Mein Team ({user['gruppe']})**")
         wahl_team = st.selectbox("Mitglied aus deinem Team wählen:", options=namen_eigenes_team, key="select_team_box")
-        
         if wahl_team != "-- Bitte wählen --":
             st.session_state.gewaehltes_mitglied = wahl_team
             st.rerun()
 
-        # 2. ALLE ANDEREN MITGLIEDER BOX (Nur sichtbar, wenn oben nichts gewählt wurde und Chef eingeloggt)
         if user['rolle'] == "Chef":
             st.write("**🌍 Alle anderen Ordner-Mitglieder**")
             wahl_andere = st.selectbox("Anderes Mitglied wählen:", options=namen_andere, key="select_andere_box")
-            
             if wahl_andere != "-- Bitte wählen --":
                 st.session_state.gewaehltes_mitglied = wahl_andere
                 st.rerun()
 
-    # DETAILS DETAILSANZEIGE (Wenn jemand ausgewählt wurde, verschwinden die Auswahllisten)
     if st.session_state.gewaehltes_mitglied:
         person_daten = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.gewaehltes_mitglied), None)
         if person_daten:
@@ -264,21 +265,34 @@ with st.sidebar.expander("👥 Teamverwaltung & Stammdaten", expanded=True):
                 st.success("Änderungen erfolgreich gespeichert!")
                 st.rerun()
 
-# UNTERMENÜ: "INTERNER CHAT"
+# UNTERMENÜ: "INTERNER CHAT" (Mit gezielter Empfänger-Auswahl)
 if user['rolle'] in ["Chef", "Teamleiter"]:
     with st.sidebar.expander("💬 Interner Leiter-Chat"):
         for msg in st.session_state.leiter_chat:
             if msg['zeit'] == 'Info': 
                 st.markdown(f"<div class='chat-system'>ℹ️ {msg['text']}</div>", unsafe_allow_html=True)
-            elif msg['von'] == user['name']: 
-                st.markdown(f"<div class='chat-bubble-user'><b>Du</b> ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
-            else: 
-                st.markdown(f"<div class='chat-bubble-other'><b>{msg['von']}</b> ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
+            else:
+                ziel_info = f" ➔ 🔒 <i>{msg['an']}</i>" if msg['an'] != "Alle" else ""
+                if msg['von'] == user['name']: 
+                    st.markdown(f"<div class='chat-bubble-user'><b>Du</b>{ziel_info} ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
+                else: 
+                    st.markdown(f"<div class='chat-bubble-other'><b>{msg['von']}</b>{ziel_info} ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
                 
         with st.form(key="chat_form_sidebar", clear_on_submit=True):
             neue_nachricht = st.text_input("Nachricht...", placeholder="Schreiben...")
+            
+            # EMPFÄNGER MARKIERE / AUSWÄHLEN (Deine neue Anforderung)
+            chat_partner_optionen = ["Alle"] + [leiter for leiter in alle_leiter if leiter != user['name']]
+            empfaenger = st.selectbox("An wen (optional):", options=chat_partner_optionen, help="Wählst du niemanden aus ('Alle'), bekommen die anderen Leiter das Pop-up.")
+            
             if st.form_submit_button("Senden", use_container_width=True) and neue_nachricht.strip():
-                st.session_state.leiter_chat.append({'von': user['name'], 'text': neue_nachricht, 'zeit': datetime.now().strftime("%H:%M")})
+                st.session_state.leiter_chat.append({
+                    'von': user['name'], 
+                    'text': neue_nachricht, 
+                    'zeit': datetime.now().strftime("%H:%M"),
+                    'an': empfaenger,
+                    'gelesen_von': []  # Liste der Personen, die es weggeklickt haben
+                })
                 st.rerun()
 
 # Admin-Verwaltung (Mitglied hinzufügen / löschen in Sidebar)
@@ -322,9 +336,42 @@ if st.sidebar.button("🚪 Abmelden", use_container_width=True):
 
 
 # ====================================================
-# HAUPTSEITE (Kalender, Abfragen & Urlaub)
+# HAUPTSEITE (Mit automatischem Pop-up System)
 # ====================================================
 
+# ----------------------------------------------------
+# NEU: POP-UP SYSTEM FÜR UNGELESENE CHAT-NACHRICHTEN
+# ----------------------------------------------------
+if user['rolle'] in ["Chef", "Teamleiter"]:
+    ungelesene_nachrichten = []
+    
+    for idx, msg in enumerate(st.session_state.leiter_chat):
+        if msg['zeit'] == 'Info' or msg['von'] == user['name']:
+            continue
+        
+        # Bedingung 1: Nachricht ging direkt an mich
+        # Bedingung 2: Nachricht ging an 'Alle' und ich habe sie noch nicht als gelesen markiert
+        if (msg['an'] == user['name'] or msg['an'] == "Alle") and user['name'] not in msg.get('gelesen_von', []):
+            ungelesene_nachrichten.append((idx, msg))
+            
+    if ungelesene_nachrichten:
+        st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
+        st.error(f"🔔 **WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!**")
+        
+        # Zeige die ungelesenen Nachrichten im Pop-up-Fenster an
+        for idx, msg in ungelesene_nachrichten:
+            st.write(f"**Von {msg['von']}** ({msg['zeit']}): {msg['text']}")
+            if st.button("👁️ Als gelesen markieren & schließen", key=f"read_{idx}"):
+                if 'gelesen_von' not in st.session_state.leiter_chat[idx]:
+                    st.session_state.leiter_chat[idx]['gelesen_von'] = []
+                st.session_state.leiter_chat[idx]['gelesen_von'].append(user['name'])
+                st.rerun()
+                
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ----------------------------------------------------
+# 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
+# ----------------------------------------------------
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()
 aktueller_sonntag = heute - timedelta(days=(heute.weekday() + 1) % 7)
@@ -410,7 +457,7 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
         "allDay": True
     })
 
-# Kalender rendern (Fehlerfrei gelöst)
+# Kalender rendern
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
 st.write("---")
 
@@ -472,9 +519,6 @@ with col_box1:
         st.write("Nur für Gruppenleiter verfügbar.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ----------------------------------------------------
-# 3. URLAUBSVERWALTUNG
-# ----------------------------------------------------
 with col_box2:
     st.markdown("<div class='card-box'>", unsafe_allow_html=True)
     st.subheader("🌴 Urlaubsverwaltung")

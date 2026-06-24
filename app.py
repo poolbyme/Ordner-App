@@ -3,9 +3,21 @@ from datetime import datetime, timedelta
 from streamlit_calendar import calendar
 import os
 import json
+import subprocess
+import sys
+
+# AUTOMATISCHE INSTALLATION DES COOKIE-PAKETS (Falls nicht vorhanden)
+try:
+    from streamlit_cookies_controller import CookieController
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "streamlit-cookies-controller"])
+    from streamlit_cookies_controller import CookieController
 
 # App-Konfiguration
 st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="⛪", layout="wide")
+
+# Cookie Controller initialisieren
+controller = CookieController()
 
 # CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)
 st.markdown("""
@@ -101,7 +113,6 @@ else:
 # Speicherstrukturen initialisieren
 if "urlaube" not in st.session_state: st.session_state.urlaube = []
 if "gruppen_abfragen" not in st.session_state: st.session_state.gruppen_abfragen = {}
-if "eingeloggt_als" not in st.session_state: st.session_state.eingeloggt_als = None
 if "passwort_aendern_fuer" not in st.session_state: st.session_state.passwort_aendern_fuer = None
 if "show_abfrage_form" not in st.session_state: st.session_state.show_abfrage_form = False
 if "abfrage_typ" not in st.session_state: st.session_state.abfrage_typ = None
@@ -119,10 +130,15 @@ def get_dienst_gruppe(datum):
 
 alle_leiter = sorted([m['name'] for m in st.session_state.mitglieder if m['rolle'] in ["Chef", "Teamleiter"]])
 
+# AUTOMATISCHER LOGIN ÜBER COOKIES PRÜFEN
+saved_user = controller.get('eingeloggt_als')
+if saved_user and "eingeloggt_als" not in st.session_state:
+    st.session_state.eingeloggt_als = saved_user
+
 # ----------------------------------------------------
 # LOGIN-SYSTEM
 # ----------------------------------------------------
-if st.session_state.eingeloggt_als is None:
+if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als is None:
     st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner App Login</h1>", unsafe_allow_html=True)
     
     if st.session_state.passwort_aendern_fuer is not None:
@@ -141,6 +157,7 @@ if st.session_state.eingeloggt_als is None:
                     if m['name'] == u_name: m['passwort'] = neues_pw
                 speichere_mitglieder(st.session_state.mitglieder)
                 st.session_state.eingeloggt_als = u_name
+                controller.set('eingeloggt_als', u_name) # Cookie setzen!
                 st.session_state.passwort_aendern_fuer = None
                 st.rerun()
         st.stop()
@@ -160,6 +177,7 @@ if st.session_state.eingeloggt_als is None:
                         st.rerun()
                     else:
                         st.session_state.eingeloggt_als = login_name
+                        controller.set('eingeloggt_als', login_name) # Cookie setzen!
                         st.rerun()
                 else:
                     st.error("Falsches Passwort!")
@@ -217,7 +235,7 @@ with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
         st.sidebar.success("Daten aktualisiert!")
         st.rerun()
 
-# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN"
+# UNTERMENÜ: "TEAMVERWAUTUNG & STAMMDATEN"
 st.sidebar.write("---")
 with st.sidebar.expander("👥 Teamverwaltung & Stammdaten", expanded=True):
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
@@ -328,6 +346,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
 
 st.sidebar.write("---")
 if st.sidebar.button("🚪 Abmelden", use_container_width=True):
+    controller.remove('eingeloggt_als') # Cookie beim Abmelden löschen!
     st.session_state.eingeloggt_als = None
     st.rerun()
 

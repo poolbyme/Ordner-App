@@ -274,30 +274,31 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
             
 # --- KORREKTER SCHLEIFEN-BLOCK ---
 # --- HIER EINFÜGEN ---
+# --- HIER IST DER FEHLENDE TEIL ---
 if 'ungelesene_nachrichten' in locals() and ungelesene_nachrichten:
-    for eintrag in ungelesene_nachrichten:
-        # Extrahiert das Dictionary aus dem Tupel, falls nötig
-        nachricht = eintrag[1] if isinstance(eintrag, tuple) else eintrag
+    for nachricht in ungelesene_nachrichten:
+        # Falls die Nachricht ein Tupel ist (wie in deinem Screenshot zu sehen)
+        aktuelle_nachricht = nachricht[1] if isinstance(nachricht, tuple) else nachricht
         
-        if isinstance(nachricht, dict):
+        if isinstance(aktuelle_nachricht, dict):
             st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
             st.warning("🔔 WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!")
             
-            sender = nachricht.get('von', 'Unbekannt')
-            zeit = nachricht.get('zeit', 'Keine Zeit')
-            text = nachricht.get('text', 'Kein Inhalt')
+            sender = aktuelle_nachricht.get('von', 'Unbekannt')
+            zeit = aktuelle_nachricht.get('zeit', 'Keine Zeit')
+            text = aktuelle_nachricht.get('text', 'Kein Inhalt')
             
             st.write(f"**Von {sender} ({zeit}):** {text}")
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("👁️ Als gelesen markieren", key=f"read_{zeit}_{sender}"):
-                    if 'gelesen_von' not in nachricht: nachricht['gelesen_von'] = []
-                    nachricht['gelesen_von'].append(user['name'])
+                    if 'gelesen_von' not in aktuelle_nachricht: aktuelle_nachricht['gelesen_von'] = []
+                    aktuelle_nachricht['gelesen_von'].append(user['name'])
                     speichere_chat(st.session_state.leiter_chat)
                     st.rerun()
             with col2:
-                if st.button("💬 Antworten", key=f"reply_{zeit}_{sender}"):
+                if st.button("💬 Antworten & zum Chat", key=f"reply_{zeit}_{sender}"):
                     st.session_state.seite = "Chat"
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
@@ -310,20 +311,29 @@ if "seite" not in st.session_state:
     st.session_state.seite = "Start" # Standard-Seite
 
 if st.session_state.seite == "Chat":
-    # HIER KOMMT DEIN GESAMTER CHAT-CODE HIN
     st.title("💬 Leiter-Chat")
-    # ... hier steht dein Code für die Chat-Anzeige ...
+    
+    # Der echte Chat-Bereich mit Eingabefeld
+    with st.form("chat_form", clear_on_submit=True):
+        chat_text = st.text_input("Deine Nachricht:")
+        submit_chat = st.form_submit_button("Senden")
+        if submit_chat and chat_text:
+            neue_nachricht = {'von': user['name'], 'text': chat_text, 'zeit': datetime.now().strftime("%H:%M"), 'an': 'Alle', 'gelesen_von': []}
+            st.session_state.leiter_chat.append(neue_nachricht)
+            speichere_chat(st.session_state.leiter_chat)
+            st.rerun()
+
+    for nachricht in reversed(st.session_state.leiter_chat):
+        if nachricht.get('von') == user['name']:
+            st.markdown(f"<div class='chat-bubble-user'>{nachricht.get('text')} <br><small>{nachricht.get('zeit')}</small></div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='chat-bubble-other'><b>{nachricht.get('von')}</b>: {nachricht.get('text')} <br><small>{nachricht.get('zeit')}</small></div>", unsafe_allow_html=True)
+
     if st.button("⬅️ Zurück zur Zentrale"):
         st.session_state.seite = "Start"
         st.rerun()
 
-else:
-    # HIER KOMMT ALLES ANDERE HIN (KALENDER, ABFRAGEN, ETC.)
-    # Dein bisheriger Code, der den Kalender und die Anwesenheiten anzeigt
-    st.write("### ⛪ FECG Ordner-Zentrale")
-    # ... dein Kalender-Code ...
-    # ... deine Abfragen ...
-
+        
 # 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()

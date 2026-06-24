@@ -6,41 +6,24 @@ from datetime import datetime, timedelta
 from streamlit_calendar import calendar
 from streamlit_cookies_controller import CookieController
 
-# App-Konfiguration
+# 1. KONFIGURATION
 st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="⛪", layout="wide")
 
-# Cookie Controller initialisieren
+# 2. CONTROLLER INITIALISIEREN
 controller = CookieController()
 
-# --- COOKIE-WIEDERERKENNUNG ---
-# ... (deine Importe)
-
-# --- HIER DEN CODE EINFÜGEN ---
+# 3. SESSION-STATE INITIALISIERUNG (Ganz wichtig!)
 if "eingeloggt_als" not in st.session_state:
+    st.session_state.eingeloggt_als = None
+
+# 4. ROBUSTE COOKIE-WIEDERHERSTELLUNG
+# Wir prüfen den Cookie sofort beim Start
+if st.session_state.eingeloggt_als is None:
     saved_user = controller.get('eingeloggt_als')
     if saved_user:
         st.session_state.eingeloggt_als = saved_user
-        st.rerun()
-# ------------------------------
 
-# Also ab hier kommen deine Datenbank-Definitionen (DB_FILE = ...)
-
-# CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)
-st.markdown("""
-<style>
-    .stApp { background-color: #f4f6f9; }
-    .main-title { color: #1e3a8a; font-family: 'Arial', sans-serif; font-weight: bold; text-align: center; margin-bottom: 20px; }
-    .chat-bubble-user { background-color: #dcf8c6; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-right: 4px solid #25d366; max-width: 85%; margin-left: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
-    .chat-bubble-other { background-color: #ffffff; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid #3b82f6; max-width: 85%; margin-right: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
-    .chat-system { background-color: #e5e7eb; padding: 6px; border-radius: 20px; text-align: center; font-size: 0.85em; color: #4b5563; margin-bottom: 15px; }
-    .card-box { background-color: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05); border-top: 5px solid #1e3a8a; margin-bottom: 20px; }
-    .popup-box { background-color: #ffe4e6; padding: 15px; border-left: 6px solid #f43f5e; border-radius: 8px; margin-bottom: 20px; }
-</style>
-""", unsafe_allow_html=True)
-
-# ----------------------------------------------------
-# MITGLIEDER & CHAT DATENBANK
-# ----------------------------------------------------
+# 5. INITIALISIERUNGEN (Datenbanken, etc.)
 DB_FILE = "mitglieder_data.json"
 CHAT_FILE = "chat_data.json"
 

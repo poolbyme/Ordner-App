@@ -327,9 +327,9 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
             st.session_state.leiter_chat.append({'von': user['name'], 'text': neue_nachricht, 'zeit': datetime.now().strftime("%H:%M")})
             st.rerun()
     st.write("---")
-
+    
 # ----------------------------------------------------
-# KALENDER-GENERIERUNG INKLUSIVE GEBURTSTAGE
+# KALENDER-GENERIERUNG INKLUSIVE GEBURTSTAGE (Zukunftssicher)
 # ----------------------------------------------------
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()
@@ -347,23 +347,63 @@ for i in range(-4, 150):
     farbe = "#1e3a8a" if "Andreas K." in grp else "#8b5cf6" if "Slawik V." in grp else "#f97316"
     kalender_events.append({"title": f"🛠️ {grp}", "start": w_sonntag.isoformat(), "end": (w_samstag + timedelta(days=1)).isoformat(), "backgroundColor": farbe, "borderColor": farbe, "allDay": True})
 
-# 2. NEU: Geburtstage des EIGENEN Teams einbetten (Sichtbar für alle Gruppenmitglieder)
+# 2. NEU & UNENDLICH: Geburtstage des EIGENEN Teams einbetten
+aktuelles_jahr = datetime.now().year
+
 for m in st.session_state.mitglieder:
     # Bedingung: Muss in der gleichen Gruppe sein. Wenn der User 'Chef' ist, sieht er alle Geburtstage.
     if user['rolle'] == "Chef" or m['gruppe'] == user['gruppe']:
         if m.get('geburtstag') and m['geburtstag'].strip() != "":
             geb_date = datetime.strptime(m['geburtstag'], "%Y-%m-%d").date()
-            # Geburtstag auf das aktuelle Planungsjahr (2026) übertragen
-            geb_2026 = datetime(2026, geb_date.month, geb_date.day).date()
             
-            kalender_events.append({
-                "title": f"🎉 Geb.: {m['name']}",
-                "start": geb_2026.isoformat(),
-                "end": (geb_2026 + timedelta(days=1)).isoformat(),
-                "backgroundColor": "#eab308", # Gold-Gelb für gute Sichtbarkeit
-                "borderColor": "#ca8a04",
-                "allDay": True
-            })
+            # Generiert den Geburtstag ab dem aktuellen Jahr für die nächsten 100 Jahre im Voraus
+            for jahr in range(aktuelles_jahr, aktuelles_jahr + 100):
+                try:
+                    geb_aktuell = datetime(jahr, geb_date.month, geb_date.day).date()
+                    
+                    kalender_events.append({
+                        "title": f"🎉 Geb.: {m['name']}",
+                        "start": geb_aktuell.isoformat(),
+                        "end": (geb_aktuell + timedelta(days=1)).isoformat(),
+                        "backgroundColor": "#eab308", # Gold-Gelb für gute Sichtbarkeit
+                        "borderColor": "#ca8a04",
+                        "allDay": True
+                    })
+                except ValueError:
+                    # Schaltjahr-Schutz: Wenn der 29. Feb in diesem Jahr nicht existiert -> auf den 28. Feb legen
+                    geb_aktuell = datetime(jahr, 2, 28).date()
+                    kalender_events.append({
+                        "title": f"🎉 Geb.: {m['name']}",
+                        "start": geb_aktuell.isoformat(),
+                        "end": (geb_aktuell + timedelta(days=1)).isoformat(),
+                        "backgroundColor": "#eab308", 
+                        "borderColor": "#ca8a04",
+                        "allDay": True
+                    })
+
+# 3. Urlaube & Engpässe
+urlaubs_tage_zaehler = {}
+for u in st.session_state.urlaube:
+    u_mitglied = next((m for m in st.session_state.mitglieder if m['name'] == u['name']), None)
+    if u_mitglied:
+        akt_tag = u['von']
+        if isinstance(akt_tag, str): akt_tag = datetime.strptime(akt_tag, "%Y-%m-%d").date()
+        u_bis_date = u['bis']
+        if isinstance(u_bis_date, str): u_bis_date = datetime.strptime(u_bis_date, "%Y-%m-%d").date()
+        
+        while akt_tag <= u_bis_date:
+            if u_mitglied['gruppe'] == get_dienst_gruppe(akt_tag):
+                if akt_tag not in urlaubs_tage_zaehler: urlaubs_tage_zaehler[akt_tag] = []
+                if u['name'] not in urlaubs_tage_zaehler[akt_tag]: urlaubs_tage_zaehler[akt_tag].append(u['name'])
+            akt_tag += timedelta(days=1)
+
+for tag, namen_liste in urlaubs_tage_zaehler.items():
+    anzahl_fehlende = len(namen_liste)
+    u_farbe = "#eab308" if anzahl_fehlende == 1 else "#ef4444"
+    kalender_events.append({"title": f"⚠️ Urlaub: {', '.join(namen_liste)}", "start": tag.isoformat(), "end": (tag + timedelta(days=1)).isoformat(), "backgroundColor": u_farbe, "borderColor": u_farbe, "allDay": True})
+
+calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
+st.write("---")
 
 # 3. Urlaube & Engpässe
 urlaubs_tage_zaehler = {}

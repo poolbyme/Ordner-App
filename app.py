@@ -327,7 +327,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
 st.sidebar.write("---")
 if st.sidebar.button("🚪 Abmelden", use_container_width=True):
     controller.remove('eingeloggt_als')
-    st.session_state.clear()  # Session komplett leeren
+    st.session_state.eingeloggt_als = None # Setze den Status explizit auf None
     st.rerun()
 
 

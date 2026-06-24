@@ -103,9 +103,12 @@ if "eingeloggt_als" not in st.session_state:
 if "passwort_aendern_fuer" not in st.session_state:
     st.session_state.passwort_aendern_fuer = None
 
-# ZUSTÄNDE FÜR DIE KALENDER-POP-UPS
+# ZUSTÄNDE FÜR DIE POP-UPS
 if "show_abfrage_form" not in st.session_state:
     st.session_state.show_abfrage_form = False
+
+if "abfrage_typ" not in st.session_state:
+    st.session_state.abfrage_typ = None  # "gruppe" oder "alle"
 
 if "show_urlaub_form" not in st.session_state:
     st.session_state.show_urlaub_form = False
@@ -252,7 +255,6 @@ for u in st.session_state.urlaube:
         akt_tag = u['von']
         while akt_tag <= u['bis']:
             dienst_gruppe_an_dem_tag = get_dienst_gruppe(akt_tag)
-            # WICHTIG: Nur zählen, wenn der Urlaubstag in die eigene Dienstwoche fällt!
             if u_mitglied['gruppe'] == dienst_gruppe_an_dem_tag:
                 if akt_tag not in urlaubs_tage_zaehler:
                     urlaubs_tage_zaehler[akt_tag] = []
@@ -284,20 +286,28 @@ calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale
 st.write("---")
 
 # ----------------------------------------------------
-# 2. EINMALIGES ANWESENHEITS-RÜCKMELDE-SYSTEM
+# 2. ANWESENHEITS-RÜCKMELDE-SYSTEM (GRUPPE & GESAMT)
 # ----------------------------------------------------
-st.write("### 📋 Aktuelle Anwesenheits-Abfragen deiner Gruppe")
+st.write("### 📋 Aktuelle Anwesenheits-Abfragen für dich")
 abfragen_gefunden = False
+
 for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
-    if k_abfrage.startswith(user['gruppe']):
+    # Prüfen ob der Nutzer berechtigt ist die Abfrage zu sehen:
+    # Entweder es ist eine 'alle' Abfrage ODER es betrifft exakt seine eigene Gruppe
+    is_fuer_alle = v_abfrage.get('typ', 'gruppe') == 'alle'
+    is_fuer_meine_gruppe = k_abfrage.startswith(user['gruppe'])
+    
+    if is_fuer_alle or is_fuer_meine_gruppe:
         if user['name'] in v_abfrage['rueckmeldungen']:
-            continue
+            continue  # Hat schon abgestimmt
         
         abfragen_gefunden = True
         datum_str = k_abfrage.split("_")[1]
         ziel_datum = datetime.strptime(datum_str, "%Y-%m-%d").date()
         
-        st.info(f"➔ *Offene Abfrage:* Wer ist am Sonntag, den {ziel_datum.strftime('%d.%m.%Y')} einsatzbereit?")
+        prefix = "📢 [WICHTIG - ALLE GRUPPEN]" if is_fuer_alle else "➔ [Deine Gruppe]"
+        st.info(f"{prefix} *Offene Abfrage:* Wer ist am Sonntag, den {ziel_datum.strftime('%d.%m.%Y')} einsatzbereit?")
+        
         col_da, col_weg = st.columns(2)
         with col_da:
             if st.button("🟢 Ich bin verbindlich DA", key=f"da_{k_abfrage}"):
@@ -326,40 +336,70 @@ with col_box1:
     
     if user['rolle'] in ["Chef", "Teamleiter"]:
         if not st.session_state.show_abfrage_form:
-            if st.button("📢 Neue Abfrage starten", use_container_width=True):
-                st.session_state.show_abfrage_form = True
-                st.rerun()
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("👥 Eigene Gruppenabfrage", use_container_width=True, help="Nur für dein eigenes Team sichtbar"):
+                    st.session_state.show_abfrage_form = True
+                    st.session_state.abfrage_typ = "gruppe"
+                    st.rerun()
+            with col_b2:
+                if st.button("🌍 Gesamtabfrage (ALLE)", use_container_width=True, help="Für alle Ordner aller Gruppen sichtbar"):
+                    st.session_state.show_abfrage_form = True
+                    st.session_state.abfrage_typ = "alle"
+                    st.rerun()
         else:
+            typ_text = "NUR DEINE GRUPPE" if st.session_state.abfrage_typ == "gruppe" else "ALLE ORDNER (Gesamtabfrage)"
+            st.warning(f"Typ der Abfrage: *{typ_text}*")
             st.info("📅 Wähle jetzt das gewünschte Datum aus dem Kalender:")
             gewaehltes_datum = st.date_input("Datum für die Abfrage:", value=aktueller_sonntag, key="abfrage_picker")
             
             col_send, col_cancel = st.columns(2)
             with col_send:
                 if st.button("✅ Verbindlich starten", use_container_width=True):
-                    neuer_abfrage_key = f"{user['gruppe']}_{gewaehltes_datum.strftime('%Y-%m-%d')}"
-                    st.session_state.gruppen_abfragen[neuer_abfrage_key] = {'status': 'offen', 'rueckmeldungen': {}}
+                    # Einzigartiger Key basierend auf Typ und Datum
+                    if st.session_state.abfrage_typ == "gruppe":
+                        neuer_abfrage_key = f"{user['gruppe']}_{gewaehltes_datum.strftime('%Y-%m-%d')}"
+                        msg_text = f"📢 FECG Bruchmühlbach Ordner-App\n\nHallo {user['gruppe']}! {user['name']} hat soeben eine neue Anwesenheits-Abfrage für Sonntag, den {gewaehltes_datum.strftime('%d.%m.%Y')} gestartet. Bitte stimmt ab:\n🔗 https://fecg-ordner.streamlit.app"
+                    else:
+                        neuer_abfrage_key = f"ALLE_{gewaehltes_datum.strftime('%Y-%m-%d')}"
+                        msg_text = f"🚨 FECG Bruchmühlbach Ordner-App — GESAMTABFRAGE\n\nHallo an alle Ordner! {user['name']} hat eine gruppenübergreifende Gesamtabfrage für Sonntag, den {gewaehltes_datum.strftime('%d.%m.%Y')} gestartet. Bitte loggt euch ALLE kurz ein und gebt Rückmeldung:\n🔗 https://fecg-ordner.streamlit.app"
                     
-                    link_zur_app = "https://fecg-ordner.streamlit.app"
-                    msg_text = f"📢 FECG Bruchmühlbach Ordner-App\n\nHallo {user['gruppe']}! {user['name']} hat soeben eine neue Anwesenheits-Abfrage für Sonntag, den {gewaehltes_datum.strftime('%d.%m.%Y')} gestartet. Bitte loggt euch kurz ein und stimmt verbindlich ab:\n🔗 {link_zur_app}"
+                    st.session_state.gruppen_abfragen[neuer_abfrage_key] = {
+                        'status': 'offen', 
+                        'typ': st.session_state.abfrage_typ,
+                        'gestartet_von': user['name'],
+                        'rueckmeldungen': {}
+                    }
                     
                     sende_whatsapp_benachrichtigung(msg_text)
                     st.session_state.show_abfrage_form = False
-                    st.success("Abfrage gestartet und per WhatsApp gemeldet!")
+                    st.session_state.abfrage_typ = None
+                    st.success("Abfrage erfolgreich gestartet!")
                     st.rerun()
             with col_cancel:
                 if st.button("❌ Abbrechen", key="cancel_abfrage", use_container_width=True):
                     st.session_state.show_abfrage_form = False
+                    st.session_state.abfrage_typ = None
                     st.rerun()
                     
-        # Auswertung (Immer sichtbar für Leiter)
-        st.write("#### 📊 Status deiner Abfragen:")
+        # Auswertung (Sichtbar für Leiter)
+        st.write("#### 📊 Status deiner gestarteten Abfragen:")
         for k_abfrage, v_abfrage in st.session_state.gruppen_abfragen.items():
-            if k_abfrage.startswith(user['gruppe']):
-                st.write(f"*Sonntag, {k_abfrage.split('_')[1]}:*")
-                team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
-                for t_mitglied in team:
+            # Zeige Leiter seine eigenen Gruppenabfragen ODER alle Gesamtabfragen an
+            if k_abfrage.startswith(user['gruppe']) or v_abfrage.get('typ') == 'alle':
+                d_str = k_abfrage.split("_")[1]
+                t_str = "Eigene Gruppe" if v_abfrage.get('typ') == 'gruppe' else "Gesamtabfrage (Alle)"
+                st.write(f"*Sonntag, {d_str} ({t_str}):*")
+                
+                # Bei Gesamtabfragen zeigen wir alle an, sonst nur das eigene Team
+                if v_abfrage.get('typ') == 'alle':
+                    ziel_liste = st.session_state.mitglieder
+                else:
+                    ziel_liste = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
+                    
+                for t_mitglied in ziel_liste:
                     status = v_abfrage['rueckmeldungen'].get(t_mitglied['name'], "⏳ Keine Rückmeldung")
-                    st.text(f" • {t_mitglied['name']}: {status}")
+                    st.text(f" • [{t_mitglied['gruppe']}] {t_mitglied['name']}: {status}")
     else:
         st.info("Nur Gruppenleiter können Abfragen starten.")
     st.markdown("</div>", unsafe_allow_html=True)

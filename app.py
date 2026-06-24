@@ -404,4 +404,54 @@ for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
             helfer_liste = v_abfrage.get('helfer', [])
             max_benoetigt = v_abfrage.get('bedarf', 1)
             if user['name'] in helfer_liste:
-                abfragen_gefunden = True; st.success(f"✅ Du hast für den {ziel_datum.strftime('%
+                abfragen_gefunden = True; st.success(f"✅ Du hast für den {ziel_datum.strftime('%d.%m.%Y')} verbindlich zugesagt!"); continue
+            if len(helfer_liste) >= max_benoetigt: continue
+            abfragen_gefunden = True
+            st.error(f"🚨 **HILFERUF AN ALLE:** Für den {ziel_datum.strftime('%d.%m.%Y')} werden noch Helfer gesucht!")
+            if st.button(f"🤝 Als {user['name']} einspringen", key=f"gesamt_zusage_{k_abfrage}", use_container_width=True):
+                v_abfrage['helfer'].append(user['name'])
+                v_abfrage['rueckmeldungen'][user['name']] = "🟢 Eingesprungen"; st.rerun()
+        elif is_fuer_meine_gruppe:
+            if user['name'] in v_abfrage['rueckmeldungen']: continue
+            abfragen_gefunden = True
+            st.info(f"➔ [Deine Gruppe] **Offene Abfrage:** {ziel_datum.strftime('%d.%m.%Y')}")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("🟢 Ich bin DA", key=f"da_{k_abfrage}"): v_abfrage['rueckmeldungen'][user['name']] = "🟢 Bin da"; st.rerun()
+            with c2:
+                if st.button("🔴 Ich bin NICHT da", key=f"weg_{k_abfrage}"): v_abfrage['rueckmeldungen'][user['name']] = "🔴 Nicht da"; st.rerun()
+if not abfragen_gefunden: st.write("✅ Keine offenen Abfragen ausstehend.")
+st.write("---")
+
+col_box1, col_box2 = st.columns(2)
+with col_box1:
+    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+    st.subheader("🚀 Anwesenheits-Abfrage")
+    if user['rolle'] in ["Chef", "Teamleiter"]:
+        if not st.session_state.show_abfrage_form:
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("👥 Eigene Gruppenabfrage", use_container_width=True): st.session_state.show_abfrage_form = True; st.session_state.abfrage_typ = "gruppe"; st.rerun()
+            with c2:
+                if st.button("🌍 Gesamtabfrage (ALLE)", use_container_width=True): st.session_state.show_abfrage_form = True; st.session_state.abfrage_typ = "alle"; st.rerun()
+        else:
+            gewaehltes_datum = st.date_input("Für welchen Tag:", value=aktueller_sonntag)
+            bedarf_personen = st.number_input("Benötigte Personen:", min_value=1, value=2) if st.session_state.abfrage_typ == "alle" else 0
+            if st.button("✅ Starten", use_container_width=True):
+                key = f"{user['gruppe'] if st.session_state.abfrage_typ=='gruppe' else 'ALLE'}_{gewaehltes_datum.strftime('%Y-%m-%d')}"
+                st.session_state.gruppen_abfragen[key] = {'status': 'offen', 'typ': st.session_state.abfrage_typ, 'bedarf': bedarf_personen, 'helfer': [], 'rueckmeldungen': {}}
+                st.session_state.show_abfrage_form = False; st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with col_box2:
+    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+    st.subheader("🌴 Urlaubsverwaltung")
+    if not st.session_state.show_urlaub_form:
+        if st.button("📅 Urlaub eintragen", use_container_width=True): st.session_state.show_urlaub_form = True; st.rerun()
+    else:
+        u_von = st.date_input("Urlaub von:", value=heute)
+        u_bis = st.date_input("Urlaub bis:", value=heute + timedelta(days=7))
+        if st.button("✅ Speichern", use_container_width=True):
+            st.session_state.urlaube.append({'name': user['name'], 'von': u_von, 'bis': u_bis})
+            st.session_state.show_urlaub_form = False; st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)

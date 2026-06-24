@@ -273,9 +273,10 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
             ungelesene_nachrichten.append((idx, msg))
             
 # --- KORREKTER SCHLEIFEN-BLOCK ---
+# --- HIER EINFÜGEN ---
 if 'ungelesene_nachrichten' in locals() and ungelesene_nachrichten:
     for eintrag in ungelesene_nachrichten:
-        # Hier holen wir das Dictionary aus dem Tupel (eintrag[1] ist das Dictionary)
+        # Extrahiert das Dictionary aus dem Tupel, falls nötig
         nachricht = eintrag[1] if isinstance(eintrag, tuple) else eintrag
         
         if isinstance(nachricht, dict):
@@ -288,10 +289,8 @@ if 'ungelesene_nachrichten' in locals() and ungelesene_nachrichten:
             
             st.write(f"**Von {sender} ({zeit}):** {text}")
 
-            # Buttons für Aktion
             col1, col2 = st.columns(2)
             with col1:
-                # Eindeutiger Key durch Index + Zeit
                 if st.button("👁️ Als gelesen markieren", key=f"read_{zeit}_{sender}"):
                     if 'gelesen_von' not in nachricht: nachricht['gelesen_von'] = []
                     nachricht['gelesen_von'].append(user['name'])

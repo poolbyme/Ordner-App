@@ -5,32 +5,26 @@ import json
 from google.oauth2.service_account import Credentials
 
 def connect_to_sheet():
-    # Wir laden die Daten explizit als Dictionary aus den Secrets
-    creds_dict = dict(st.secrets["gcp"])
-    
-    # Damit der private_key korrekt mit Zeilenumbrüchen interpretiert wird,
-    # falls er im Secret-Feld "zerstückelt" wurde:
-    if "\\n" in creds_dict["private_key"]:
-        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    # Holt den JSON-String aus dem Secret
+    json_creds = st.secrets["gcp_json"]
+    # Wandelt den String in ein echtes Dictionary um
+    creds_dict = json.loads(json_creds)
     
     creds = Credentials.from_service_account_info(creds_dict)
-    
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds_with_scope = creds.with_scopes(scope)
+    creds = creds.with_scopes(scope)
     
-    client = gspread.authorize(creds_with_scope)
-    # Nutze hier deine exakte URL
-  # Korrekte Verbindung zum Tabellenblatt
-    sheet_connection = client.open_by_url("https://docs.google.com/spreadsheets/d/1UzSiHPDQTv5tW686r5d5zutkmWCa5ZiESYWABa-GawU/edit")
-    sheet = sheet_connection.sheet1
+    client = gspread.authorize(creds)
+    sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1UzSiHPDQTv5tW686r5d5zutkmWCa5ZiESYWABa-GawU/edit").sheet1
     return sheet
-# Verbindung testen
+
+# Verbindung global herstellen
 try:
     sheet = connect_to_sheet()
-    st.success("Verbindung zum Google Sheet steht!")
+    alle_mitglieder = sheet.get_all_records()
+    st.success("Verbindung steht!")
 except Exception as e:
-    st.error(f"Fehler bei der Verbindung: {e}")
-alle_mitglieder = sheet.get_all_records()
+    st.error(f"Fehler: {e}")
 from streamlit_calendar import calendar
 
 # 1. KONFIGURATION

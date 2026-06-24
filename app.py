@@ -272,28 +272,27 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
         if (an_ziel == aktueller_user or an_ziel == "alle") and user['name'] not in msg.get('gelesen_von', []):
             ungelesene_nachrichten.append((idx, msg))
             
-    if ungelesene_nachrichten:
-        st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
-        st.warning("🔔 WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!")
-st.write(f"Von {nachricht['von']} ({nachricht['zeit']}): {nachricht['text']}")
+# --- KORREKTER SCHLEIFEN-BLOCK ---
+for nachricht in ungelesene_nachrichten:
+    st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
+    st.warning("🔔 WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!")
+    
+    # Jetzt ist 'nachricht' innerhalb dieser Schleife bekannt!
+    st.write(f"**Von {nachricht['von']} ({nachricht['zeit']}):** {nachricht['text']}")
 
-# Buttons nebeneinander setzen
-col1, col2 = st.columns(2)
-
-with col1:
-    if st.button("👁️ Als gelesen markieren"):
-        # Logik zum Markieren als gelesen (dein bestehender Code hier)
-        st.rerun()
-
-with col2:
-    if st.button("💬 Antworten & zum Chat"):
-        # Logik: Wechsel in den Chat-Bereich
-        st.session_state.seite = "Chat" # Oder wie auch immer dein Chat-Bereich heißt
-        # Optional: Hier könnte man auch st.session_state.chat_antwort_an = nachricht['von'] setzen
-        st.rerun()
-                
-        st.markdown("</div>", unsafe_allow_html=True)
-
+    # Buttons nebeneinander
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("👁️ Als gelesen markieren", key=f"read_{nachricht.get('zeit', '')}"):
+            # Hier deine Logik zum Markieren als gelesen einfügen
+            nachricht['gelesen_von'].append(user['name'])
+            speichere_chat(st.session_state.leiter_chat)
+            st.rerun()
+    with col2:
+        if st.button("💬 Antworten", key=f"reply_{nachricht.get('zeit', '')}"):
+            st.session_state.seite = "Chat" # Stelle sicher, dass deine App das 'seite'-Attribut verarbeitet
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 # 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()

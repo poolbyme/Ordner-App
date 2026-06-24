@@ -112,6 +112,10 @@ if "show_abfrage_form" not in st.session_state: st.session_state.show_abfrage_fo
 if "abfrage_typ" not in st.session_state: st.session_state.abfrage_typ = None
 if "show_urlaub_form" not in st.session_state: st.session_state.show_urlaub_form = False
 
+# Session State Indizes für gegenseitiges Zurücksetzen der Selectboxen
+if "index_mein_team" not in st.session_state: st.session_state.index_mein_team = 0
+if "index_andere" not in st.session_state: st.session_state.index_andere = 0
+
 def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
     wochen = (datum - basis_datum).days // 7
@@ -216,26 +220,56 @@ with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
         st.sidebar.success("Daten aktualisiert!")
         st.rerun()
 
-# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN" (In die Sidebar verschoben!)
+# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN" (Mit gegenseitigem Ausblenden)
 st.sidebar.write("---")
-with st.sidebar.expander("👥 Teamverwaltung & Stammdaten"):
+with st.sidebar.expander("👥 Teamverwaltung & Stammdaten", expanded=True):
     person_ausgewaehlt = None
-    st.write(f"**🛡️ Mein Team ({user['gruppe']})**")
-    eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
-    namen_eigenes_team = sorted([m['name'] for m in eigenes_team])
     
-    wahl_eigenes_team = st.selectbox("Mitglied aus deinem Team wählen:", options=["-- Bitte wählen --"] + namen_eigenes_team, key="sel_my_team")
-    if wahl_eigenes_team != "-- Bitte wählen --":
-        person_ausgewaehlt = wahl_eigenes_team
+    # Listen generieren
+    eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
+    namen_eigenes_team = ["-- Bitte wählen --"] + sorted([m['name'] for m in eigenes_team])
+    
+    andere_mitglieder = [m for m in st.session_state.mitglieder if m['gruppe'] != user['gruppe']]
+    namen_andere = ["-- Bitte wählen --"] + sorted([m['name'] for m in andere_mitglieder])
+
+    st.write(f"**🛡️ Mein Team ({user['gruppe']})**")
+    
+    # Funktion für Änderung bei "Mein Team"
+    def change_mein_team():
+        if st.session_state.sel_my_team != "-- Bitte wählen --":
+            st.session_state.index_andere = 0 # Setzt die andere Selectbox zurück
+
+    wahl_eigenes_team = st.selectbox(
+        "Mitglied aus deinem Team wählen:", 
+        options=namen_eigenes_team, 
+        index=st.session_state.index_mein_team,
+        key="sel_my_team",
+        on_change=change_mein_team
+    )
 
     if user['rolle'] == "Chef":
         st.write("**🌍 Alle anderen Ordner-Mitglieder**")
-        andere_mitglieder = [m for m in st.session_state.mitglieder if m['gruppe'] != user['gruppe']]
-        namen_andere = sorted([m['name'] for m in andere_mitglieder])
         
-        wahl_andere = st.selectbox("Anderes Mitglied wählen:", options=["-- Bitte wählen --"] + namen_andere, key="sel_all_members")
-        if wahl_andere != "-- Bitte wählen --":
-            person_ausgewaehlt = wahl_andere
+        # Funktion für Änderung bei "Alle anderen"
+        def change_andere():
+            if st.session_state.sel_all_members != "-- Bitte wählen --":
+                st.session_state.index_mein_team = 0 # Setzt die Team-Selectbox zurück
+
+        wahl_andere = st.selectbox(
+            "Anderes Mitglied wählen:", 
+            options=namen_andere, 
+            index=st.session_state.index_andere,
+            key="sel_all_members",
+            on_change=change_andere
+        )
+    else:
+        wahl_andere = "-- Bitte wählen --"
+
+    # Bestimmen, wer schlussendlich angezeigt werden soll
+    if wahl_eigenes_team != "-- Bitte wählen --":
+        person_ausgewaehlt = wahl_eigenes_team
+    elif wahl_andere != "-- Bitte wählen --":
+        person_ausgewaehlt = wahl_andere
 
     if person_ausgewaehlt:
         person_daten = next((m for m in st.session_state.mitglieder if m['name'] == person_ausgewaehlt), None)
@@ -257,7 +291,7 @@ with st.sidebar.expander("👥 Teamverwaltung & Stammdaten"):
                 st.success("Aktualisiert!")
                 st.rerun()
 
-# UNTERMENÜ: "INTERNER CHAT" (In die Sidebar verschoben!)
+# UNTERMENÜ: "INTERNER CHAT" (Sidebar)
 if user['rolle'] in ["Chef", "Teamleiter"]:
     with st.sidebar.expander("💬 Interner Leiter-Chat"):
         for msg in st.session_state.leiter_chat:
@@ -341,7 +375,7 @@ for i in range(-4, 150):
     grp = get_dienst_gruppe(w_sonntag)
     
     # Farblogik basierend auf der Dienstgruppe
-    farbe = "#1e3a8a" if "Andreas K." in grp else "#8b5cf6" if "Slawik V." in grp else "#f97316"
+    farbe = "#1e3a8a" if "Gruppe 1" in grp else "#8b5cf6" if "Gruppe 2" in grp else "#f97316"
     kalender_events.append({
         "title": f"🛠️ {grp}", 
         "start": w_sonntag.isoformat(), 
@@ -356,7 +390,10 @@ aktuelles_jahr = datetime.now().year
 for m in st.session_state.mitglieder:
     if user['rolle'] == "Chef" or m['gruppe'] == user['gruppe']:
         if m.get('geburtstag') and m['geburtstag'].strip() != "":
-            geb_date = datetime.strptime(m['geburtstag'], "%Y-%m-%d").date()
+            try:
+                geb_date = datetime.strptime(m['geburtstag'], "%Y-%m-%d").date()
+            except ValueError:
+                continue
             
             for jahr in range(aktuelles_jahr, aktuelles_jahr + 100):
                 try:
@@ -409,7 +446,7 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
         "allDay": True
     })
 
-# Kalender rendern
+# Kalender rendern - Einmalig am Ende aufgerufen, um Duplicate Keys zu verhindern
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
 st.write("---")
 
@@ -465,7 +502,7 @@ with col_box1:
             bedarf_personen = st.number_input("Benötigte Personen:", min_value=1, value=2) if st.session_state.abfrage_typ == "alle" else 0
             if st.button("✅ Starten", use_container_width=True):
                 key = f"{user['gruppe'] if st.session_state.abfrage_typ=='gruppe' else 'ALLE'}_{gewaehltes_datum.strftime('%Y-%m-%d')}"
-                st.session_state.gruppen_abfragen[key] = {'status': 'offen', 'typ': st.session_state.abfrage_typ, 'bedarf': bedarby_personen, 'helfer': [], 'rueckmeldungen': {}}
+                st.session_state.gruppen_abfragen[key] = {'status': 'offen', 'typ': st.session_state.abfrage_typ, 'bedarf': bedarf_personen, 'helfer': [], 'rueckmeldungen': {}}
                 st.session_state.show_abfrage_form = False; st.rerun()
     else:
         st.write("Nur für Gruppenleiter verfügbar.")

@@ -305,6 +305,25 @@ if 'ungelesene_nachrichten' in locals() and ungelesene_nachrichten:
             # Falls es doch ein String ist, zeigen wir ihn einfach so an
             st.warning(f"🔔 Nachricht: {nachricht}")
 
+# Prüfe, welche Seite angezeigt werden soll
+if "seite" not in st.session_state:
+    st.session_state.seite = "Start" # Standard-Seite
+
+if st.session_state.seite == "Chat":
+    # HIER KOMMT DEIN GESAMTER CHAT-CODE HIN
+    st.title("💬 Leiter-Chat")
+    # ... hier steht dein Code für die Chat-Anzeige ...
+    if st.button("⬅️ Zurück zur Zentrale"):
+        st.session_state.seite = "Start"
+        st.rerun()
+
+else:
+    # HIER KOMMT ALLES ANDERE HIN (KALENDER, ABFRAGEN, ETC.)
+    # Dein bisheriger Code, der den Kalender und die Anwesenheiten anzeigt
+    st.write("### ⛪ FECG Ordner-Zentrale")
+    # ... dein Kalender-Code ...
+    # ... deine Abfragen ...
+
 # 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()

@@ -62,26 +62,25 @@ st.markdown("""
 # AUTOMATISCHE WHATSAPP-FUNKTION
 # ----------------------------------------------------
 def sende_whatsapp_benachrichtigung(nachrichtstext):
-    # Hier wird später eure Gruppen-API verknüpft!
     try:
         pass
     except Exception as e:
         print(f"WhatsApp-Fehler: {e}")
 
-# 1. LIVE-SPEICHER INITIALISIEREN
+# 1. LIVE-SPEICHER INITIALISIEREN (INKLUSIVE PASSWORT-DATENBANK)
 if "mitglieder" not in st.session_state:
     st.session_state.mitglieder = [
-        {'name': 'Komjagin Andreas', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Chef'},
-        {'name': 'Hauf Valintin', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Geier Enriko', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Ilchuk Vasyl', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Volkov Slawik', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Teamleiter'},
-        {'name': 'Tissen Eduard', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Eberhart Wili', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Paul Steffen', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Schäfer Peter', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Teamleiter'},
-        {'name': 'Akulenko Wili', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Hermann Bogdan', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter'}
+        {'name': 'Komjagin Andreas', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Chef', 'passwort': 'Ordner'},
+        {'name': 'Hauf Valintin', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'},
+        {'name': 'Geier Enriko', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'},
+        {'name': 'Ilchuk Vasyl', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'},
+        {'name': 'Volkov Slawik', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Teamleiter', 'passwort': 'Ordner'},
+        {'name': 'Tissen Eduard', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'},
+        {'name': 'Eberhart Wili', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'},
+        {'name': 'Paul Steffen', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'},
+        {'name': 'Schäfer Peter', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Teamleiter', 'passwort': 'Ordner'},
+        {'name': 'Akulenko Wili', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'},
+        {'name': 'Hermann Bogdan', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner'}
     ]
 
 if "urlaube" not in st.session_state:
@@ -101,6 +100,10 @@ if "leiter_chat" not in st.session_state:
 if "eingeloggt_als" not in st.session_state:
     st.session_state.eingeloggt_als = None
 
+# Temporärer Zwischenspeicher für den Prozess der Passwortänderung
+if "passwort_aendern_fuer" not in st.session_state:
+    st.session_state.passwort_aendern_fuer = None
+
 def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
     wochen = (datum - basis_datum).days // 7
@@ -108,32 +111,70 @@ def get_dienst_gruppe(datum):
 
 
 # ----------------------------------------------------
-# LOGIN-PRÜFUNG
+# NEUES ABSOLUT SICHERES LOGIN- & REGISTRIER-SYSTEM
 # ----------------------------------------------------
 if st.session_state.eingeloggt_als is None:
     st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner App Login</h1>", unsafe_allow_html=True)
     
-    col_login, _ = st.columns([1, 1])
-    with col_login:
-        st.write("Bitte wähle deinen Namen aus und gib das gemeinsame Passwort ein.")
-        alle_namen = [m['name'] for m in st.session_state.mitglieder]
-        login_name = st.selectbox("Dein Name:", options=alle_namen)
-        passwort_eingabe = st.text_input("Passwort (Zentrale):", type="password")
+    # FALL 1: Ein Nutzer muss sein Passwort von "Ordner" auf ein eigenes Passwort ändern
+    if st.session_state.passwort_aendern_fuer is not None:
+        u_name = st.session_state.passwort_aendern_fuer
+        st.warning(f"⚠️ Hallo *{u_name}*! Du nutzt aktuell noch das Standard-Passwort 'Ordner'.")
+        st.write("Aus Sicherheitsgründen musst du jetzt ein eigenes, persönliches Passwort vergeben, damit sich niemand in deinen Namen einloggen kann.")
         
-        if st.button("Einloggen", use_container_width=True):
-            if passwort_eingabe == "Ordner":
-                st.session_state.eingeloggt_als = login_name
-                st.success(f"Erfolgreich eingeloggt!")
-                st.rerun()
+        neues_pw = st.text_input("Dein neues persönliches Passwort:", type="password", key="new_pw_input")
+        neues_pw_wdhl = st.text_input("Passwort wiederholen:", type="password", key="new_pw_confirm")
+        
+        if st.button("Sichern & Einloggen", use_container_width=True):
+            if neues_pw == "Ordner" or neues_pw.strip() == "":
+                st.error("Das neue Passwort darf nicht leer sein oder wieder 'Ordner' heißen!")
+            elif neues_pw != neues_pw_wdhl:
+                st.error("Die Passwörter stimmen nicht überein!")
             else:
-                st.error("Falsches Passwort!")
-    st.stop()
+                # Passwort in der Live-Datenbank für diesen Nutzer überschreiben
+                for m in st.session_state.mitglieder:
+                    if m['name'] == u_name:
+                        m['passwort'] = neues_pw
+                
+                # Direkt einloggen
+                st.session_state.eingeloggt_als = u_name
+                st.session_state.passwort_aendern_fuer = None
+                st.success("Dein persönliches Passwort wurde erfolgreich gespeichert!")
+                st.rerun()
+        st.stop()
 
+    # FALL 2: Das ganz normale Login-Fenster
+    else:
+        col_login, _ = st.columns([1, 1])
+        with col_login:
+            st.write("Bitte wähle deinen Namen aus und gib dein Passwort ein.")
+            alle_namen = [m['name'] for m in st.session_state.mitglieder]
+            login_name = st.selectbox("Dein Name:", options=alle_namen)
+            passwort_eingabe = st.text_input("Dein Passwort (beim 1. Mal 'Ordner'):", type="password")
+            
+            if st.button("Einloggen", use_container_width=True):
+                # Suchen nach dem gewählten Mitarbeiter
+                user_check = next((m for m in st.session_state.mitglieder if m['name'] == login_name), None)
+                
+                if user_check and passwort_eingabe == user_check['passwort']:
+                    # Wenn es noch das Ur-Passwort ist, zwingend ändern lassen!
+                    if passwort_eingabe == "Ordner":
+                        st.session_state.passwort_aendern_fuer = login_name
+                        st.rerun()
+                    else:
+                        st.session_state.eingeloggt_als = login_name
+                        st.success(f"Erfolgreich eingeloggt!")
+                        st.rerun()
+                else:
+                    st.error("Falsches Passwort für diesen Namen!")
+        st.stop()
+
+# Aktuellen Benutzer laden
 user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
 
 
 # ----------------------------------------------------
-# APP OBERFLÄCHE (NACH LOGIN)
+# APP OBERFLÄCHE (NACH ERFOLGREICHEM LOGIN)
 # ----------------------------------------------------
 st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner-Zentrale</h1>", unsafe_allow_html=True)
 
@@ -251,18 +292,14 @@ calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale
 st.write("---")
 
 # ----------------------------------------------------
-# 2. CRITICAL UPDATE: EINMALIGES ANWESENHEITS-RÜCKMELDE-SYSTEM
+# 2. EINMALIGES ANWESENHEITS-RÜCKMELDE-SYSTEM
 # ----------------------------------------------------
 st.write("### 📋 Aktuelle Anwesenheits-Abfragen deiner Gruppe")
 
-# Wir suchen nach JEDER aktiven Abfrage, um zu sehen, ob der Nutzer antworten muss
 abfragen_gefunden = False
 for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
-    # Betrifft diese Abfrage die Gruppe des angemeldeten Nutzers?
     if k_abfrage.startswith(user['gruppe']):
-        # Hat dieser Nutzer bereits geantwortet?
         if user['name'] in v_abfrage['rueckmeldungen']:
-            # WICHTIG: Wenn er schon geantwortet hat, verschwindet die Abfrage für ihn komplett!
             continue
         
         abfragen_gefunden = True
@@ -274,4 +311,89 @@ for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
         col_da, col_weg = st.columns(2)
         with col_da:
             if st.button("🟢 Ich bin verbindlich DA", key=f"da_{k_abfrage}"):
-                v_ab
+                v_abfrage['rueckmeldungen'][user['name']] = "🟢 Bin da"
+                st.success("Erfolgreich eingetragen! Du hast verbindlich zugesagt.")
+                st.rerun()
+        with col_weg:
+            if st.button("🔴 Ich bin NICHT da", key=f"weg_{k_abfrage}"):
+                v_abfrage['rueckmeldungen'][user['name']] = "🔴 Nicht da"
+                st.warning("Abwesenheit eingetragen.")
+                st.rerun()
+
+if not abfragen_gefunden:
+    st.write("✅ Keine offenen Abfragen ausstehend oder du hast bereits verbindlich abgestimmt!")
+
+st.write("---")
+
+# ----------------------------------------------------
+# 3. KARTEN-LAYOUT FÜR LEITER-WERKZEUGE & URLAUB
+# ----------------------------------------------------
+col_box1, col_box2 = st.columns(2)
+
+with col_box1:
+    if user['rolle'] in ["Chef", "Teamleiter"]:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.subheader(f"🚀 Neue Abfrage starten ({user['gruppe']})")
+        
+        gewaehltes_datum = st.date_input("Für welchen Sonntag möchtest du die Abfrage starten?", value=aktueller_sonntag, key="abfrage_datum_picker")
+        
+        if st.button(f"Abfrage für den {gewaehltes_datum.strftime('%d.%m.%Y')} aktivieren"):
+            neuer_abfrage_key = f"{user['gruppe']}_{gewaehltes_datum.strftime('%Y-%m-%d')}"
+            st.session_state.gruppen_abfragen[neuer_abfrage_key] = {'status': 'offen', 'rueckmeldungen': {}}
+            
+            link_zur_app = "https://fecg-ordner.streamlit.app"
+            msg_text = f"📢 FECG Bruchmühlbach Ordner-App\n\nHallo {user['gruppe']}! {user['name']} hat soeben eine neue Anwesenheits-Abfrage für Sonntag, den {gewaehltes_datum.strftime('%d.%m.%Y')} gestartet. Bitte loggt euch kurz ein und stimmt verbindlich ab:\n🔗 {link_zur_app}"
+            
+            sende_whatsapp_benachrichtigung(msg_text)
+            st.success("Abfrage gestartet und WhatsApp-Benachrichtigung an die Gruppe versendet!")
+            st.rerun()
+            
+        st.write("#### 📊 Aktueller Rückmelde-Status deiner Abfragen:")
+        for k_abfrage, v_abfrage in st.session_state.gruppen_abfragen.items():
+            if k_abfrage.startswith(user['gruppe']):
+                d_str = k_abfrage.split("_")[1]
+                st.write(f"*Sonntag, {d_str}:*")
+                team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
+                
+                for t_mitglied in team:
+                    status = v_abfrage['rueckmeldungen'].get(t_mitglied['name'], "⏳ Keine Rückmeldung")
+                    st.text(f" • {t_mitglied['name']}: {status}")
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.info("Hier haben nur Gruppenleiter Zugriff auf die Auswertung.")
+
+with col_box2:
+    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+    st.subheader("🌴 Abwesenheit eintragen")
+    
+    u_von = st.date_input("Urlaub von (Erster Tag):", value=heute, key="u_von")
+    u_bis = st.date_input("Urlaub bis (Letzter Tag):", value=heute + timedelta(days=7), key="u_bis")
+    
+    if st.button("Urlaub verbindlich im System eintragen", use_container_width=True):
+        st.session_state.urlaube.append({'name': user['name'], 'von': u_von, 'bis': u_bis})
+        st.success("Urlaub erfolgreich eingetragen! Der Kalender wurde farblich angepasst.")
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.write("---")
+
+# ----------------------------------------------------
+# 4. GRUPPENÜBERGREIFENDE ERSATZSUCHE
+# ----------------------------------------------------
+st.write("### 📢 Gruppenübergreifende Notfall-Suchen")
+aktive_ersatz_suchen = [s for s in st.session_state.ersatz_suchen if user['gruppe'] != s['von_gruppe']]
+
+if not aktive_ersatz_suchen:
+    st.write("Keine offenen Ersatzsuchen aus anderen Gruppen vorhanden.")
+else:
+    for idx, suche in enumerate(st.session_state.ersatz_suchen):
+        if user['gruppe'] != suche['von_gruppe']:
+            st.warning(f"⚠️ *{suche['von_gruppe']}* sucht dringend {suche['anzahl']} Ersatz-Ordner für Sonntag!")
+            st.write(f"Bereits zugesagt: {', '.join(suche['helfer']) if suche['helfer'] else 'Niemand'}")
+            
+            if user['name'] in suche['helfer']:
+                st.success("✅ Du hast hier bereits verbindlich zugesagt!")
+            else:
+                if st.button(f"🤝 Als {user['name']} verbindlich einspringen", key=f"ersatz_{idx}"):
+                    suche['helfer'].append(user['name'])
+                    st.rerun()

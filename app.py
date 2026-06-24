@@ -272,10 +272,12 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
         if (an_ziel == aktueller_user or an_ziel == "alle") and user['name'] not in msg.get('gelesen_von', []):
             ungelesene_nachrichten.append((idx, msg))
             
-# --- ABSOLUT SICHERER SCHLEIFEN-BLOCK ---
+# --- KORREKTER SCHLEIFEN-BLOCK ---
 if 'ungelesene_nachrichten' in locals() and ungelesene_nachrichten:
-    for nachricht in ungelesene_nachrichten:
-        # Prüfen, ob nachricht ein Dictionary ist
+    for eintrag in ungelesene_nachrichten:
+        # Hier holen wir das Dictionary aus dem Tupel (eintrag[1] ist das Dictionary)
+        nachricht = eintrag[1] if isinstance(eintrag, tuple) else eintrag
+        
         if isinstance(nachricht, dict):
             st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
             st.warning("🔔 WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!")
@@ -286,9 +288,12 @@ if 'ungelesene_nachrichten' in locals() and ungelesene_nachrichten:
             
             st.write(f"**Von {sender} ({zeit}):** {text}")
 
+            # Buttons für Aktion
             col1, col2 = st.columns(2)
             with col1:
+                # Eindeutiger Key durch Index + Zeit
                 if st.button("👁️ Als gelesen markieren", key=f"read_{zeit}_{sender}"):
+                    if 'gelesen_von' not in nachricht: nachricht['gelesen_von'] = []
                     nachricht['gelesen_von'].append(user['name'])
                     speichere_chat(st.session_state.leiter_chat)
                     st.rerun()

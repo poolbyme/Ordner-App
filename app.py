@@ -23,7 +23,6 @@ if "eingeloggt_als" not in st.session_state:
         st.session_state.eingeloggt_als = saved_user
 # ------------------------------
 
-# Hier geht dein restlicher Code weiter, wie er schon immer war!
 # Also ab hier kommen deine Datenbank-Definitionen (DB_FILE = ...)
 
 # CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)

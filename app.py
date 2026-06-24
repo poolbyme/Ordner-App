@@ -4,6 +4,48 @@ from streamlit_calendar import calendar
 
 st.set_page_config(page_title="Ordner Team App", page_icon="⛪", layout="wide")
 
+# CSS FÜR SCHÖNERE FARBEN & CHAT-SPRECHBLASEN
+st.markdown("""
+<style>
+    /* Hintergrundfarbe für die ganze App (Optional, falls kein Cloud-Theme aktiv) */
+    .stApp {
+        background-color: #f8f9fa;
+    }
+    /* WhatsApp-Style für den Chat */
+    .chat-bubble-user {
+        background-color: #e1ffc7;
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 8px;
+        border-left: 5px solid #28a745;
+    }
+    .chat-bubble-other {
+        background-color: #ffffff;
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 8px;
+        border-left: 5px solid #007bff;
+        box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+    }
+    .chat-system {
+        background-color: #eee;
+        padding: 5px;
+        border-radius: 5px;
+        text-align: center;
+        font-size: 0.9em;
+        color: #555;
+    }
+    /* Farbige Rahmen für Bereiche */
+    .card-box {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.05);
+        border-top: 4px solid #17a2b8;
+    }
+</style>
+""", unsafe_safe_html=True)
+
 # 1. LIVE-SPEICHER INITIALISIEREN
 if "mitglieder" not in st.session_state:
     st.session_state.mitglieder = [
@@ -29,7 +71,6 @@ if "gruppen_abfragen" not in st.session_state:
 if "ersatz_suchen" not in st.session_state:
     st.session_state.ersatz_suchen = []
 
-# NEU: Gemeinsamer Chat-Verlauf für alle Gruppenleiter & Chef
 if "leiter_chat" not in st.session_state:
     st.session_state.leiter_chat = [
         {'von': 'System', 'text': 'Willkommen im internen Chat der Gruppenleiter!', 'zeit': 'Info'}
@@ -39,6 +80,14 @@ def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
     wochen = (datum - basis_datum).days // 7
     return ["Gruppe 1", "Gruppe 2", "Gruppe 3"][wochen % 3]
+
+# ----------------------------------------------------
+# HEADER MIT LOGO / BILD
+# ----------------------------------------------------
+# Hier kannst du später eine echte Bild-URL von eurer Kirchen-Webseite einfügen!
+# Aktuell nutzen wir ein schönes, neutrales Banner-Bild aus dem Internet.
+STREAMPAGE_BANNER = "https://images.unsplash.com/photo-1438032005730-c779502df39b?q=80&w=1200&auto=format&fit=crop"
+st.image(STREAMPAGE_BANNER, use_container_width=True)
 
 st.title("⛪ Ordner-Team Planer & Leiter-Zentrale")
 
@@ -51,36 +100,37 @@ user = next((m for m in st.session_state.mitglieder if m['name'] == ausgewaehlte
 st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}")
 
 # ----------------------------------------------------
-# NEU: DER INTERNE LEITER-CHAT (NUR FÜR CHEF & TEAMLEITER)
+# INTERNER LEITER-CHAT (JETZT IM WHATSAPP-STYLE)
 # ----------------------------------------------------
 if user['rolle'] in ["Chef", "Teamleiter"]:
-    st.write("### 💬 Interner Chat (Nur für Gruppenleiter sichtbar)")
+    st.write("### 💬 Interner Gruppenleiter-Chat")
     
-    # Chat-Box mit Scrollfunktion simulieren
-    chat_box = ""
+    # Nachrichten in schicken Boxen rendern
     for msg in st.session_state.leiter_chat:
         if msg['zeit'] == 'Info':
-            chat_box += f"ℹ️ {msg['text']}\n\n"
+            st.markdown(f"<div class='chat-system'>ℹ️ {msg['text']}</div>", unsafe_allow_html=True)
+        elif msg['von'] == user['name']:
+            st.markdown(f"<div class='chat-bubble-user'><b>Du</b> ({msg['zeit']})<br>➔ {msg['text']}</div>", unsafe_allow_html=True)
         else:
-            chat_box += f"👤 {msg['von']} ({msg['zeit']}):\n➔ {msg['text']}\n\n"
-    
-    st.text_area("Nachrichtenverlauf:", value=chat_box, height=200, disabled=True)
-    
-    # Eingabe für neue Nachrichten
-    col_msg, col_btn = st.columns([4, 1])
-    with col_msg:
-        neue_nachricht = st.text_input("Nachricht schreiben...", placeholder="Schreib etwas wie in WhatsApp...", key="chat_input")
-    with col_btn:
-        st.write("##") # Abstandshalter für den Button
-        if st.button("Senden", use_container_width=True):
-            if neue_nachricht.strip():
-                jetzt_zeit = datetime.now().strftime("%H:%M")
-                st.session_state.leiter_chat.append({
-                    'von': user['name'],
-                    'text': neue_nachricht,
-                    'zeit': jetzt_zeit
-                })
-                st.rerun()
+            st.markdown(f"<div class='chat-bubble-other'><b>{msg['von']}</b> ({msg['zeit']})<br>➔ {msg['text']}</div>", unsafe_allow_html=True)
+            
+    # Eingabe-Formular
+    with st.form(key="chat_form", clear_on_submit=True):
+        col_msg, col_btn = st.columns([4, 1])
+        with col_msg:
+            neue_nachricht = st.text_input("Nachricht schreiben...", placeholder="Schreiben und Enter drücken...")
+        with col_btn:
+            submit_button = st.form_submit_button("Senden", use_container_width=True)
+            
+        if submit_button and neue_nachricht.strip():
+            jetzt_zeit = datetime.now().strftime("%H:%M")
+            st.session_state.leiter_chat.append({
+                'von': user['name'],
+                'text': neue_nachricht,
+                'zeit': jetzt_zeit
+            })
+            st.rerun()
+
     st.write("---")
 
 # ----------------------------------------------------
@@ -148,39 +198,60 @@ else:
 st.write("---")
 
 # ----------------------------------------------------
-# 3. INTERNES GRUPPENLEITER-WERKZEUG
+# 3. KARTEN-LAYOUT FÜR AKTIONEN (SCHICKER DESIGNT)
 # ----------------------------------------------------
-if user['rolle'] in ["Chef", "Teamleiter"]:
-    st.subheader(f"🛠️ Leiter-Werkzeuge ({user['gruppe']})")
-    
-    if st.button(f"🚀 Abfrage starten für Sonntag, {aktueller_sonntag.strftime('%d.%m.%Y')}"):
-        st.session_state.gruppen_abfragen[abfrage_key] = {'status': 'offen', 'rueckmeldungen': {}}
-        st.success("Abfrage wurde für deine Gruppenmitglieder freigeschaltet!")
+col_box1, col_box2 = st.columns(2)
+
+with col_box1:
+    # Wir packen das Leiter-Werkzeug in eine weiße Design-Karte
+    if user['rolle'] in ["Chef", "Teamleiter"]:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.subheader(f"🛠️ Leiter-Werkzeuge ({user['gruppe']})")
+        
+        if st.button(f"🚀 Abfrage starten für Sonntag, {aktueller_sonntag.strftime('%d.%m.%Y')}"):
+            st.session_state.gruppen_abfragen[abfrage_key] = {'status': 'offen', 'rueckmeldungen': {}}
+            st.success("Abfrage freigeschaltet!")
+            st.rerun()
+            
+        if abfrage_key in st.session_state.gruppen_abfragen:
+            st.write("#### 📊 Rückmeldungen deines Teams:")
+            team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
+            
+            fehlende_leute = 0
+            for t_mitglied in team:
+                status = st.session_state.gruppen_abfragen[abfrage_key]['rueckmeldungen'].get(t_mitglied['name'], "⏳ Keine Rückmeldung")
+                st.text(f"• {t_mitglied['name']}: {status}")
+                if "Nicht da" in status:
+                    fehlende_leute += 1
+                    
+            if fehlende_leute > 0:
+                st.error(f"Es fehlen {fehlende_leute} Person(en)!")
+                if st.button("🚨 Hilfe anfordern: Ersatz suchen"):
+                    st.session_state.ersatz_suchen.append({
+                        'von_gruppe': user['gruppe'],
+                        'datum': aktueller_sonntag,
+                        'anzahl': fehlende_leute,
+                        'helfer': []
+                    })
+                    st.success("Hilferuf gestartet!")
+                    st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.info("Hier haben nur Gruppenleiter Zugriff auf die Auswertung.")
+
+with col_box2:
+    # Die Urlaubs-Box als schicke Design-Karte
+    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+    st.subheader("🌴 Abwesenheit eintragen")
+    u_von = st.date_input("Urlaub von:", value=heute, key="u_von")
+    u_bis = st.date_input("Urlaub bis:", value=heute + timedelta(days=7), key="u_bis")
+    if st.button("Urlaub im Kalender eintragen"):
+        st.session_state.urlaube.append({'name': user['name'], 'email': user['email'], 'von': u_von, 'bis': u_bis})
+        st.success("Urlaub erfolgreich eingetragen!")
         st.rerun()
-        
-    if abfrage_key in st.session_state.gruppen_abfragen:
-        st.write("#### 📊 Aktuelle Rückmeldungen deines Teams:")
-        team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
-        
-        fehlende_leute = 0
-        for t_mitglied in team:
-            status = st.session_state.gruppen_abfragen[abfrage_key]['rueckmeldungen'].get(t_mitglied['name'], "⏳ Keine Rückmeldung")
-            st.text(f"• {t_mitglied['name']}: {status}")
-            if "Nicht da" in status:
-                fehlende_leute += 1
-                
-        if fehlende_leute > 0:
-            st.error(f"Achtung: Es fehlen {fehlende_leute} Person(en)!")
-            if st.button("🚨 Hilfe anfordern: Ersatz in anderen Gruppen suchen"):
-                st.session_state.ersatz_suchen.append({
-                    'von_gruppe': user['gruppe'],
-                    'datum': aktueller_sonntag,
-                    'anzahl': fehlende_leute,
-                    'helfer': []
-                })
-                st.success("Hilferuf wurde gestartet!")
-                st.rerun()
-    st.write("---")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.write("---")
 
 # ----------------------------------------------------
 # 4. GRUPPENÜBERGREIFENDE ERSATZSUCHE
@@ -191,26 +262,4 @@ aktive_ersatz_suchen = [s for s in st.session_state.ersatz_suchen if user['grupp
 if not aktive_ersatz_suchen:
     st.write("Keine offenen Ersatzsuchen aus anderen Gruppen vorhanden.")
 else:
-    for idx, suche in enumerate(st.session_state.ersatz_suchen):
-        if user['gruppe'] != suche['von_gruppe']:
-            st.warning(f"⚠️ *{suche['von_gruppe']}* sucht dringend {suche['anzahl']} Ersatz-Ordner für Sonntag, {suche['datum'].strftime('%d.%m.%Y')}!")
-            st.write(f"Bereits zugesagt: {', '.join(suche['helfer']) if suche['helfer'] else 'Niemand'}")
-            
-            if user['name'] in suche['helfer']:
-                st.success("✅ Du hast hier bereits verbindlich zugesagt!")
-            else:
-                if st.button(f"🤝 Als {user['name']} verbindlich einspringen", key=f"ersatz_{idx}"):
-                    suche['helfer'].append(user['name'])
-                    st.rerun()
-
-# ----------------------------------------------------
-# 5. LANGFRISTIGER URLAUB
-# ----------------------------------------------------
-st.write("---")
-st.subheader("🌴 Sommerurlaub / Langfristige Abwesenheit eintragen")
-u_von = st.date_input("Urlaub von:", value=heute, key="u_von")
-u_bis = st.date_input("Urlaub bis:", value=heute + timedelta(days=7), key="u_bis")
-if st.button("Urlaub im Kalender eintragen"):
-    st.session_state.urlaube.append({'name': user['name'], 'email': user['email'], 'von': u_von, 'bis': u_bis})
-    st.success("Urlaub erfolgreich eingetragen!")
-    st.rerun()
+    for idx, suche in enumerate(st

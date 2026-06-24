@@ -1,29 +1,31 @@
 import os
 import streamlit as st
 import json
-import time
 from datetime import datetime, timedelta
 from streamlit_calendar import calendar
-from streamlit_cookies_controller import CookieController
 
 # 1. KONFIGURATION
 st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="⛪", layout="wide")
 
-# 2. CONTROLLER INITIALISIEREN
-controller = CookieController()
+# 2. URL-PARAMETER-RETTUNG (Damit man beim F5-Refresh eingeloggt bleibt)
+params = st.query_params
+if "user" in params and "eingeloggt_als" not in st.session_state:
+    st.session_state.eingeloggt_als = params["user"]
 
-# 3. SESSION-STATE INITIALISIERUNG (Ganz wichtig!)
-if "eingeloggt_als" not in st.session_state:
-    st.session_state.eingeloggt_als = None
+# 3. CSS DESIGN
+st.markdown("""
+<style>
+    .stApp { background-color: #f4f6f9; }
+    .main-title { color: #1e3a8a; font-family: 'Arial', sans-serif; font-weight: bold; text-align: center; margin-bottom: 20px; }
+    .chat-bubble-user { background-color: #dcf8c6; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-right: 4px solid #25d366; max-width: 85%; margin-left: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+    .chat-bubble-other { background-color: #ffffff; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid #3b82f6; max-width: 85%; margin-right: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+    .chat-system { background-color: #e5e7eb; padding: 6px; border-radius: 20px; text-align: center; font-size: 0.85em; color: #4b5563; margin-bottom: 15px; }
+    .card-box { background-color: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05); border-top: 5px solid #1e3a8a; margin-bottom: 20px; }
+    .popup-box { background-color: #ffe4e6; padding: 15px; border-left: 6px solid #f43f5e; border-radius: 8px; margin-bottom: 20px; }
+</style>
+""", unsafe_allow_html=True)
 
-# 4. ROBUSTE COOKIE-WIEDERHERSTELLUNG
-# Wir prüfen den Cookie sofort beim Start
-if st.session_state.eingeloggt_als is None:
-    saved_user = controller.get('eingeloggt_als')
-    if saved_user:
-        st.session_state.eingeloggt_als = saved_user
-
-# 5. INITIALISIERUNGEN (Datenbanken, etc.)
+# 4. DATENBANKEN
 DB_FILE = "mitglieder_data.json"
 CHAT_FILE = "chat_data.json"
 
@@ -56,7 +58,6 @@ def speichere_chat(chat_liste):
     with open(CHAT_FILE, "w", encoding="utf-8") as f:
         json.dump(chat_liste, f, ensure_ascii=False, indent=4)
 
-# Laden der Daten
 if os.path.exists(DB_FILE):
     with open(DB_FILE, "r", encoding="utf-8") as f:
         st.session_state.mitglieder = json.load(f)
@@ -66,14 +67,10 @@ else:
 
 st.session_state.leiter_chat = lade_chat()
 
-# Speicherstrukturen initialisieren
-if "urlaube" not in st.session_state: st.session_state.urlaube = []
-if "gruppen_abfragen" not in st.session_state: st.session_state.gruppen_abfragen = {}
-if "passwort_aendern_fuer" not in st.session_state: st.session_state.passwort_aendern_fuer = None
-if "show_abfrage_form" not in st.session_state: st.session_state.show_abfrage_form = False
-if "abfrage_typ" not in st.session_state: st.session_state.abfrage_typ = None
-if "show_urlaub_form" not in st.session_state: st.session_state.show_urlaub_form = False
-if "gewaehltes_mitglied" not in st.session_state: st.session_state.gewaehltes_mitglied = None
+# INITIALISIERUNG SESSION STATE
+defaults = {"urlaube":[], "gruppen_abfragen":{}, "passwort_aendern_fuer":None, "show_abfrage_form":False, "abfrage_typ":None, "show_urlaub_form":False, "gewaehltes_mitglied":None}
+for key, value in defaults.items():
+    if key not in st.session_state: st.session_state[key] = value
 
 def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
@@ -82,100 +79,34 @@ def get_dienst_gruppe(datum):
 
 alle_leiter = sorted([m['name'] for m in st.session_state.mitglieder if m['rolle'] in ["Chef", "Teamleiter"]])
 
-# ----------------------------------------------------
-# ROBUSTE COOKIE-Wiederherstellung
-# ----------------------------------------------------
-def get_user_from_cookie():
-    # Wir lesen den Cookie. Wenn er existiert, geben wir ihn zurück.
-    return controller.get('eingeloggt_als')
-
-# Wenn wir noch nicht eingeloggt sind, aber ein Cookie existiert, 
-# setzen wir den Status direkt.
-if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als is None:
-    cookie_user = get_user_from_cookie()
-    if cookie_user:
-        st.session_state.eingeloggt_als = cookie_user
-        # Wir machen kein st.rerun() mehr, sondern lassen den Code einfach weiterlaufen, 
-        # da die Variable jetzt gesetzt ist.
-
-# ----------------------------------------------------
-# LOGIN-CHECK (Verhindert das Anzeigen der Login-Maske)
-# ----------------------------------------------------
+# LOGIN CHECK
 if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als is None:
     st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner App Login</h1>", unsafe_allow_html=True)
-    
     if st.session_state.passwort_aendern_fuer is not None:
         u_name = st.session_state.passwort_aendern_fuer
-        st.warning(f"⚠️ Hallo **{u_name}**! Bitte vergebe jetzt dein persönliches Passwort.")
-        neues_pw = st.text_input("Neues Passwort:", type="password", key="new_pw_input")
-        neues_pw_wdhl = st.text_input("Passwort wiederholen:", type="password", key="new_pw_confirm")
-        
-        if st.button("Sichern & Einloggen", use_container_width=True):
-            if neues_pw == "Ordner" or neues_pw.strip() == "":
-                st.error("Ungültiges Passwort!")
-            elif neues_pw != neues_pw_wdhl:
-                st.error("Die Passwörter stimmen nicht überein!")
-            else:
-                for m in st.session_state.mitglieder:
-                    if m['name'] == u_name: m['passwort'] = neues_pw
-                speichere_mitglieder(st.session_state.mitglieder)
-                st.session_state.eingeloggt_als = u_name
-                controller.set('eingeloggt_als', u_name)
-                st.session_state.passwort_aendern_fuer = None
-                st.rerun()
-        st.stop()
-
+        st.warning(f"⚠️ Hallo **{u_name}**! Bitte vergebe dein Passwort.")
+        neues_pw = st.text_input("Neues Passwort:", type="password")
+        if st.button("Sichern & Einloggen"):
+            for m in st.session_state.mitglieder:
+                if m['name'] == u_name: m['passwort'] = neues_pw
+            speichere_mitglieder(st.session_state.mitglieder)
+            st.session_state.eingeloggt_als = u_name
+            st.query_params["user"] = u_name
+            st.rerun()
     else:
-        col_login, _ = st.columns([1, 1])
-        with col_login:
-            alle_namen = sorted([m['name'] for m in st.session_state.mitglieder])
-            login_name = st.selectbox("Dein Name:", options=alle_namen)
-            passwort_eingabe = st.text_input("Dein Passwort:", type="password")
-            
-            if st.button("Einloggen", use_container_width=True):
-                user_check = next((m for m in st.session_state.mitglieder if m['name'] == login_name), None)
-                if user_check and passwort_eingabe == user_check['passwort']:
-                    if passwort_eingabe == "Ordner":
-                        st.session_state.passwort_aendern_fuer = login_name
-                        st.rerun()
-                    else:
-                        st.session_state.eingeloggt_als = login_name
-                        controller.set('eingeloggt_als', login_name)
-                        st.rerun()
-                else:
-                    st.error("Falsches Passwort!")
-        st.stop()
-
-user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
-
-if not user:
-    controller.remove('eingeloggt_als')
-    st.session_state.eingeloggt_als = None
-    st.rerun()
-
-# ----------------------------------------------------
-# ERSTMALIGE DATENERFASSUNG
-# ----------------------------------------------------
-if user['telefon'].strip() == "" and user['anschrift'].strip() == "" and user['geburtstag'].strip() == "":
-    st.markdown("<h1 class='main-title'>📝 Kontaktdaten & Geburtstag vervollständigen</h1>", unsafe_allow_html=True)
-    st.info(f"Hallo **{user['name']}**, trage bitte deine Daten ein. Dein Geburtstag wird danach im Kalender angezeigt!")
-    
-    with st.form("erst_erfassung_form"):
-        init_tel = st.text_input("📱 Deine Telefonnummer:", placeholder="z.B. 0176 / 12345678")
-        init_adr = st.text_input("🏠 Deine Anschrift:", placeholder="Straße, Hausnummer, PLZ, Ort")
-        init_geb = st.date_input("📅 Dein Geburtsdatum:", value=datetime(1995, 1, 1).date(), min_value=datetime(1940, 1, 1).date(), max_value=datetime.now().date())
-        
-        if st.form_submit_button("Daten speichern & zur App", use_container_width=True):
-            if init_tel.strip() == "" or init_adr.strip() == "":
-                st.error("Bitte fülle alle Textfelder aus!")
-            else:
-                user['telefon'] = init_tel.strip()
-                user['anschrift'] = init_adr.strip()
-                user['geburtstag'] = init_geb.strftime("%Y-%m-%d")
-                speichere_mitglieder(st.session_state.mitglieder)
-                st.success("Erfolgreich eingetragen!")
+        login_name = st.selectbox("Dein Name:", options=sorted([m['name'] for m in st.session_state.mitglieder]))
+        pw = st.text_input("Passwort:", type="password")
+        if st.button("Einloggen"):
+            user_check = next((m for m in st.session_state.mitglieder if m['name'] == login_name), None)
+            if user_check and pw == user_check['passwort']:
+                if pw == "Ordner": st.session_state.passwort_aendern_fuer = login_name
+                else: 
+                    st.session_state.eingeloggt_als = login_name
+                    st.query_params["user"] = login_name
                 st.rerun()
     st.stop()
+
+user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state
 
 # ----------------------------------------------------
 # SIDEBAR NAVIGATION
@@ -312,10 +243,9 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                 speichere_mitglieder(st.session_state.mitglieder)
                 st.sidebar.warning(f"{loesch_name} wurde entfernt.")
                 st.rerun()
-
-st.sidebar.write("---")
-if st.sidebar.button("🚪 Abmelden", use_container_width=True):
-    controller.remove('eingeloggt_als')
+                
+if st.sidebar.button("🚪 Abmelden"):
+    st.query_params.clear()
     st.session_state.eingeloggt_als = None
     st.rerun()
 

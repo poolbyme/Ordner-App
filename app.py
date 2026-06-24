@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+from datetime import datetime  # <--- Das ist wichtig für deinen Fehler vorhin!
 import gspread
 import json
 from google.oauth2.service_account import Credentials

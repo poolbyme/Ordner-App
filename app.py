@@ -19,13 +19,23 @@ if "user" in params and "eingeloggt_als" not in st.session_state:
 # 3. CSS DESIGN
 st.markdown("""
 <style>
+    /* Handy-Optimierung */
     .stApp { background-color: #f4f6f9; }
-    .main-title { color: #1e3a8a; font-family: 'Arial', sans-serif; font-weight: bold; text-align: center; margin-bottom: 20px; }
-    .chat-bubble-user { background-color: #dcf8c6; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-right: 4px solid #25d366; max-width: 85%; margin-left: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
-    .chat-bubble-other { background-color: #ffffff; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid #3b82f6; max-width: 85%; margin-right: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
-    .chat-system { background-color: #e5e7eb; padding: 6px; border-radius: 20px; text-align: center; font-size: 0.85em; color: #4b5563; margin-bottom: 15px; }
-    .card-box { background-color: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05); border-top: 5px solid #1e3a8a; margin-bottom: 20px; }
-    .popup-box { background-color: #ffe4e6; padding: 15px; border-left: 6px solid #f43f5e; border-radius: 8px; margin-bottom: 20px; }
+    
+    /* Buttons in App-Optik */
+    div.stButton > button {
+        width: 100%;
+        border-radius: 20px;
+        height: 3em;
+        background-color: #3b82f6;
+        color: white;
+        font-weight: bold;
+    }
+    
+    /* Pop-ups und Chat-Blasen */
+    .popup-box { background-color: #fff3cd; padding: 15px; border-radius: 10px; border-left: 5px solid #ffc107; margin: 10px 0; }
+    .chat-bubble-user { background-color: #dcf8c6; padding: 10px; border-radius: 10px; margin: 5px 0; text-align: right; }
+    .chat-bubble-other { background-color: #ffffff; padding: 10px; border-radius: 10px; margin: 5px 0; text-align: left; }
 </style>
 """, unsafe_allow_html=True)
 

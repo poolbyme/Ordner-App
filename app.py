@@ -87,16 +87,15 @@ def get_dienst_gruppe(datum):
 alle_leiter = sorted([m['name'] for m in st.session_state.mitglieder if m['rolle'] in ["Chef", "Teamleiter"]])
 
 # ----------------------------------------------------
-# COOKIE GUSTAV - ASYNCHRONER RE-RUN MECHANISMUS (NEU!)
+# COOKIE-CHECK & SESSION-INIT (HIER WIRD DAS PROBLEM GELÖST)
 # ----------------------------------------------------
-if "eingeloggt_als" not in st.session_state:
-    # Gib dem Browser 0.1 Sekunden Zeit, die Cookies zu laden
-    time.sleep(0.1)
+if "init_done" not in st.session_state:
+    st.session_state.init_done = True
+    # Initiales Lesen der Cookies
     saved_user = controller.get('eingeloggt_als')
     if saved_user:
         st.session_state.eingeloggt_als = saved_user
-        st.rerun()
-
+        st.rerun()  # Einmal neu laden, damit die App weiß, wer du bist
 # ----------------------------------------------------
 # LOGIN-SYSTEM
 # ----------------------------------------------------

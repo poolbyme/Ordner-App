@@ -272,27 +272,33 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
         if (an_ziel == aktueller_user or an_ziel == "alle") and user['name'] not in msg.get('gelesen_von', []):
             ungelesene_nachrichten.append((idx, msg))
             
-# --- KORREKTER SCHLEIFEN-BLOCK ---
-for nachricht in ungelesene_nachrichten:
-    st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
-    st.warning("🔔 WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!")
-    
-    # Jetzt ist 'nachricht' innerhalb dieser Schleife bekannt!
-    st.write(f"**Von {nachricht['von']} ({nachricht['zeit']}):** {nachricht['text']}")
+# --- SICHERE ANZEIGE DER NACHRICHTEN ---
+if 'ungelesene_nachrichten' in locals() and ungelesene_nachrichten:
+    for nachricht in ungelesene_nachrichten:
+        st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
+        st.warning("🔔 WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!")
+        
+        # Sicherer Zugriff auf die Daten: .get('key', 'default') verhindert den Absturz
+        sender = nachricht.get('von', 'Unbekannt')
+        zeit = nachricht.get('zeit', 'Keine Zeit')
+        text = nachricht.get('text', 'Kein Inhalt')
+        
+        st.write(f"**Von {sender} ({zeit}):** {text}")
 
-    # Buttons nebeneinander
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("👁️ Als gelesen markieren", key=f"read_{nachricht.get('zeit', '')}"):
-            # Hier deine Logik zum Markieren als gelesen einfügen
-            nachricht['gelesen_von'].append(user['name'])
-            speichere_chat(st.session_state.leiter_chat)
-            st.rerun()
-    with col2:
-        if st.button("💬 Antworten", key=f"reply_{nachricht.get('zeit', '')}"):
-            st.session_state.seite = "Chat" # Stelle sicher, dass deine App das 'seite'-Attribut verarbeitet
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+        # Buttons nebeneinander
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("👁️ Als gelesen markieren", key=f"read_{zeit}_{sender}"):
+                if 'gelesen_von' not in nachricht: nachricht['gelesen_von'] = []
+                nachricht['gelesen_von'].append(user['name'])
+                speichere_chat(st.session_state.leiter_chat)
+                st.rerun()
+        with col2:
+            if st.button("💬 Antworten", key=f"reply_{zeit}_{sender}"):
+                st.session_state.seite = "Chat"
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
 # 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()

@@ -426,9 +426,6 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
     u_farbe = "#eab308" if anzahl_fehlende == 1 else "#ef4444"
     kalender_events.append({"title": f"⚠️ Urlaub: {', '.join(namen_liste)}", "start": tag.isoformat(), "end": (tag + timedelta(days=1)).isoformat(), "backgroundColor": u_farbe, "borderColor": u_farbe, "allDay": True})
 
-calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
-st.write("---")
-
 # ----------------------------------------------------
 # ABFRAGEN & INTERAKTIONEN
 # ----------------------------------------------------

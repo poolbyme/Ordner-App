@@ -94,22 +94,22 @@ if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als i
             st.query_params["user"] = u_name
             st.rerun()
     else:
-    with st.form("login_form"):
-        login_name = st.selectbox("Dein Name:", options=sorted([m['name'] for m in st.session_state.mitglieder]))
-        pw = st.text_input("Passwort:", type="password")
-        submit = st.form_submit_button("Einloggen")
+        with st.form("login_form"):
+            login_name = st.selectbox("Dein Name:", options=sorted([m['name'] for m in st.session_state.mitglieder]))
+            pw = st.text_input("Passwort:", type="password")
+            submit = st.form_submit_button("Einloggen")
         
-        if submit:
-            user_check = next((m for m in st.session_state.mitglieder if m['name'] == login_name), None)
-            if user_check and pw == user_check['passwort']:
-                if pw == "Ordner": 
-                    st.session_state.passwort_aendern_fuer = login_name
-                else: 
-                    st.session_state.eingeloggt_als = login_name
-                    st.query_params["user"] = login_name
-                st.rerun()
-            else:
-                st.error("Passwort falsch!")
+            if submit:
+                user_check = next((m for m in st.session_state.mitglieder if m['name'] == login_name), None)
+                if user_check and pw == user_check['passwort']:
+                    if pw == "Ordner": 
+                        st.session_state.passwort_aendern_fuer = login_name
+                    else: 
+                        st.session_state.eingeloggt_als = login_name
+                        st.query_params["user"] = login_name
+                    st.rerun()
+                else:
+                    st.error("Passwort falsch!")
     st.stop()
 
 user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)

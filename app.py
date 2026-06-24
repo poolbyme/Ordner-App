@@ -117,7 +117,7 @@ def get_dienst_gruppe(datum):
     return ["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"][wochen % 3]
 
 # ----------------------------------------------------
-# LOGIN-SYSTEM
+# LOGIN-SYSTEM UND ERST-ANMELDUNG
 # ----------------------------------------------------
 if st.session_state.eingeloggt_als is None:
     st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner App Login</h1>", unsafe_allow_html=True)
@@ -165,6 +165,28 @@ if st.session_state.eingeloggt_als is None:
 user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
 
 # ----------------------------------------------------
+# ERSTMALIGE DATENERFASSUNG (Zwingend nach PW-Wechsel)
+# ----------------------------------------------------
+if user['telefon'].strip() == "" and user['anschrift'].strip() == "":
+    st.markdown("<h1 class='main-title'>📝 Kontaktdaten vervollständigen</h1>", unsafe_allow_html=True)
+    st.info(f"Hallo **{user['name']}**, da du dich zum ersten Mal anmeldest, trage bitte kurz deine Kontaktdaten ein. Deine Teamleiter sehen diese Änderungen sofort automatisch.")
+    
+    with st.form("erst_erfassung_form"):
+        init_tel = st.text_input("📱 Deine Telefonnummer:", placeholder="z.B. 0176 / 12345678")
+        init_adr = st.text_input("🏠 Deine Anschrift:", placeholder="Straße, Hausnummer, PLZ, Ort")
+        
+        if st.form_submit_button("Daten speichern & zur App", use_container_width=True):
+            if init_tel.strip() == "" or init_adr.strip() == "":
+                st.error("Bitte fülle beide Felder aus, damit dein Team dich im Notfall erreichen kann!")
+            else:
+                user['telefon'] = init_tel.strip()
+                user['anschrift'] = init_adr.strip()
+                speichere_mitglieder(st.session_state.mitglieder)
+                st.success("Perfekt! Deine Daten wurden gespeichert.")
+                st.rerun()
+    st.stop()
+
+# ----------------------------------------------------
 # APP OBERFLÄCHE & SIDEBAR
 # ----------------------------------------------------
 st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner-Zentrale</h1>", unsafe_allow_html=True)
@@ -173,8 +195,19 @@ st.sidebar.header("👤 Dein Profil")
 st.sidebar.success(f"**{user['name']}**")
 st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}")
 
+# SELBSTSTÄNDIGE PROFILÄNDERUNG JEDERZEIT IN SIDEBAR
+with st.sidebar.expander("⚙️ Meine Kontaktdaten ändern"):
+    mein_neues_tel = st.text_input("📱 Telefonnummer:", value=user.get('telefon', ''), key="my_own_tel")
+    mein_neues_adr = st.text_input("🏠 Anschrift:", value=user.get('anschrift', ''), key="my_own_adr")
+    if st.button("💾 Profil aktualisieren", use_container_width=True, key="save_my_profile"):
+        user['telefon'] = mein_neues_tel
+        user['anschrift'] = mein_neues_adr
+        speichere_mitglieder(st.session_state.mitglieder)
+        st.sidebar.success("Daten aktualisiert!")
+        st.rerun()
+
 # ----------------------------------------------------
-# FEATURE: "MEIN TEAM" UND GESAMTMITGLIEDER (FÜR ANDREAS)
+# FEATURE: "MEIN TEAM" UND GESAMTMITGLIEDER (FÜR ANDREAS / LEITER)
 # ----------------------------------------------------
 st.sidebar.write("---")
 show_team_section = st.sidebar.checkbox("👥 Mein Team & Mitglieder-Infos", value=False)
@@ -187,9 +220,8 @@ if show_team_section:
     # BEREICH 1: EIGENES TEAM (Für jeden sichtbar, auch für Andreas)
     st.write(f"### 🛡️ Mein Team ({user['gruppe']})")
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
-    namen_eigenes_team = sorted([m['name'] for m in erstes_team_mitglied] if (erstes_team_mitglied := eigenes_team) else [])
+    namen_eigenes_team = sorted([m['name'] for m in eigenes_team])
     
-    # Einzigartiger Key für Selektion im eigenen Team
     wahl_eigenes_team = st.selectbox("Mitglied aus deinem Team wählen:", options=["-- Bitte wählen --"] + namen_eigenes_team, key="sel_my_team")
     if wahl_eigenes_team != "-- Bitte wählen --":
         person_ausgewaehlt = wahl_eigenes_team
@@ -206,7 +238,7 @@ if show_team_section:
         if wahl_andere != "-- Bitte wählen --":
             person_ausgewaehlt = wahl_andere
 
-    # FORMULAR ZUM BEARBEITEN (Falls eine Person selektiert wurde)
+    # FORMULAR ZUM BEARBEITEN (Falls eine Person selektiert wurde, können Leiter manuell eingreifen)
     if person_ausgewaehlt:
         person_daten = next((m for m in st.session_state.mitglieder if m['name'] == person_ausgewaehlt), None)
         if person_daten:
@@ -215,7 +247,7 @@ if show_team_section:
             
             p_telefon = st.text_input("📱 Telefonnummer:", value=person_daten.get('telefon', ''), key="edit_tel")
             p_anschrift = st.text_input("🏠 Anschrift (Straße, PLZ, Ort):", value=person_daten.get('anschrift', ''), key="edit_adr")
-            p_infos = st.text_area("ℹ️ Weitere Infos / Notizen:", value=person_daten.get('infos', ''), key="edit_inf")
+            p_infos = st.text_area("ℹ️ Weitere Infos / Notizen (Nur für Leiter sichtbar):", value=person_daten.get('infos', ''), key="edit_inf")
             
             if st.button("💾 Änderungen für diese Person speichern", use_container_width=True, key="save_person_btn"):
                 person_daten['telefon'] = p_telefon

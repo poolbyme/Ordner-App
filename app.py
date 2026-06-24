@@ -1,23 +1,35 @@
 import os
 import streamlit as st
 import gspread
+import json
 from google.oauth2.service_account import Credentials
 
 def connect_to_sheet():
-    # Holt die Daten aus den Streamlit Secrets
-    creds_dict = st.secrets["gcp"]
+    # Wir laden die Daten explizit als Dictionary aus den Secrets
+    creds_dict = dict(st.secrets["gcp"])
     
-    # Wandelt das Dictionary in Anmeldedaten um
+    # Damit der private_key korrekt mit Zeilenumbrüchen interpretiert wird,
+    # falls er im Secret-Feld "zerstückelt" wurde:
+    if "\\n" in creds_dict["private_key"]:
+        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    
     creds = Credentials.from_service_account_info(creds_dict)
     
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_with_scope = creds.with_scopes(scope)
     
     client = gspread.authorize(creds_with_scope)
-    sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1UzSiHPDQTv5tW686r5d5zutkmWCa5ZiESYWABa-GawU/edit").sheet1
+    # Nutze hier deine exakte URL
+  # Korrekte Verbindung zum Tabellenblatt
+    sheet_connection = client.open_by_url("https://docs.google.com/spreadsheets/d/1UzSiHPDQTv5tW686r5d5zutkmWCa5ZiESYWABa-GawU/edit")
+    sheet = sheet_connection.sheet1
     return sheet
-
-sheet = connect_to_sheet()
+# Verbindung testen
+try:
+    sheet = connect_to_sheet()
+    st.success("Verbindung zum Google Sheet steht!")
+except Exception as e:
+    st.error(f"Fehler bei der Verbindung: {e}")
 alle_mitglieder = sheet.get_all_records()
 from streamlit_calendar import calendar
 

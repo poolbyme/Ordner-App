@@ -71,7 +71,6 @@ st.markdown("""
 DB_FILE = "mitglieder_data.json"
 
 def hole_standard_liste():
-    # Neues Feld: 'geburtstag' (Format: YYYY-MM-DD oder leerer String)
     return [
         {'name': 'Komjagin Andreas', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Chef', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
         {'name': 'Hauf Valintin', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter', 'passwort': 'Ordner', 'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''},
@@ -167,7 +166,7 @@ if st.session_state.eingeloggt_als is None:
 user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
 
 # ----------------------------------------------------
-# ERSTMALIGE DATENERFASSUNG (Inklusive Geburtstag)
+# ERSTMALIGE DATENERFASSUNG (Zwingend nach PW-Wechsel)
 # ----------------------------------------------------
 if user['telefon'].strip() == "" and user['anschrift'].strip() == "" and user['geburtstag'].strip() == "":
     st.markdown("<h1 class='main-title'>📝 Kontaktdaten & Geburtstag vervollständigen</h1>", unsafe_allow_html=True)
@@ -197,7 +196,6 @@ st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner-Zentrale<
 
 st.sidebar.header("👤 Dein Profil")
 st.sidebar.success(f"**{user['name']}**")
-# Geburtstag im Profil anzeigen
 geb_formatiert = "Nicht eingetragen"
 if user.get('geburtstag'):
     geb_formatiert = datetime.strptime(user['geburtstag'], "%Y-%m-%d").strftime("%d.%m.%Y")
@@ -207,7 +205,6 @@ st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}\nGeburtstag: {g
 with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
     mein_neues_tel = st.text_input("📱 Telefonnummer:", value=user.get('telefon', ''), key="my_own_tel")
     mein_neues_adr = st.text_input("🏠 Anschrift:", value=user.get('anschrift', ''), key="my_own_adr")
-    
     aktueller_geb_date = datetime.strptime(user['geburtstag'], "%Y-%m-%d").date() if user.get('geburtstag') else datetime(1995, 1, 1).date()
     mein_neuer_geb = st.date_input("📅 Geburtstag:", value=aktueller_geb_date, key="my_own_geb", min_value=datetime(1940, 1, 1).date())
     
@@ -231,7 +228,7 @@ if show_team_section:
     
     st.write(f"### 🛡️ Mein Team ({user['gruppe']})")
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
-    namen_eigenes_team = sorted([m['name'] for m in erstes_team_mitglied] if (erstes_team_mitglied := eigenes_team) else [])
+    namen_eigenes_team = sorted([m['name'] for m in eigenes_team])
     
     wahl_eigenes_team = st.selectbox("Mitglied aus deinem Team wählen:", options=["-- Bitte wählen --"] + namen_eigenes_team, key="sel_my_team")
     if wahl_eigenes_team != "-- Bitte wählen --":
@@ -255,10 +252,8 @@ if show_team_section:
             
             p_telefon = st.text_input("📱 Telefonnummer:", value=person_daten.get('telefon', ''), key="edit_tel")
             p_anschrift = st.text_input("🏠 Anschrift (Straße, PLZ, Ort):", value=person_daten.get('anschrift', ''), key="edit_adr")
-            
             p_geb_date = datetime.strptime(person_daten['geburtstag'], "%Y-%m-%d").date() if person_daten.get('geburtstag') else datetime(1995, 1, 1).date()
             p_geb = st.date_input("📅 Geburtstag:", value=p_geb_date, key="edit_geb", min_value=datetime(1940, 1, 1).date())
-            
             p_infos = st.text_area("ℹ️ Weitere Infos / Notizen:", value=person_daten.get('infos', ''), key="edit_inf")
             
             if st.button("💾 Änderungen für diese Person speichern", use_container_width=True, key="save_person_btn"):
@@ -276,20 +271,29 @@ if show_team_section:
 if user['rolle'] in ["Chef", "Teamleiter"]:
     st.sidebar.subheader("⚙️ System-Verwaltung")
     with st.sidebar.expander("➕ Neues Mitglied anlegen"):
-        neu_name = st.text_input("Vollständiger Name:", placeholder="z.B. Müller Johann")
-        neu_gruppe_chef = user['gruppe']
-        if user['rolle'] == "Chef":
-            neu_gruppe_chef = st.selectbox("Gruppe zuweisen:", options=["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"])
-        neu_rolle = st.selectbox("Rolle:", options=["Mitarbeiter", "Teamleiter"])
-        if st.button("Hinzufügen", use_container_width=True):
-            if neu_name.strip() and not any(m['name'].lower() == neu_name.strip().lower() for m in st.session_state.mitglieder):
-                st.session_state.mitglieder.append({
-                    'name': neu_name.strip(), 'gruppe': neu_gruppe_chef, 'rolle': neu_rolle, 'passwort': 'Ordner',
-                    'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''
-                })
-                speichere_mitglieder(st.session_state.mitglieder)
-                st.sidebar.success(f"Erstellt!")
-                st.rerun()
+        # Hier ist das neue Formular mit Erfolgs-Meldung eingebaut!
+        with st.form("sidebar_add_member_form", clear_on_submit=True):
+            neu_name = st.text_input("Vollständiger Name:", placeholder="z.B. Müller Johann")
+            neu_gruppe_chef = user['gruppe']
+            if user['rolle'] == "Chef":
+                neu_gruppe_chef = st.selectbox("Gruppe zuweisen:", options=["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"])
+            neu_rolle = st.selectbox("Rolle:", options=["Mitarbeiter", "Teamleiter"])
+            
+            submit_neu = st.form_submit_button("Hinzufügen", use_container_width=True)
+            
+            if submit_neu:
+                if neu_name.strip() and not any(m['name'].lower() == neu_name.strip().lower() for m in st.session_state.mitglieder):
+                    st.session_state.mitglieder.append({
+                        'name': neu_name.strip(), 'gruppe': neu_gruppe_chef, 'rolle': neu_rolle, 'passwort': 'Ordner',
+                        'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''
+                    })
+                    speichere_mitglieder(st.session_state.mitglieder)
+                    st.success(f"🎉 **Erfolgreich hinzugefügt!** {neu_name} wurde registriert.")
+                    st.rerun()
+                elif not neu_name.strip():
+                    st.error("Bitte gib einen Namen ein.")
+                else:
+                    st.error("Mitglied existiert bereits.")
                 
     with st.sidebar.expander("🗑️ Mitglied entfernen"):
         if user['rolle'] == "Chef":
@@ -327,9 +331,9 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
             st.session_state.leiter_chat.append({'von': user['name'], 'text': neue_nachricht, 'zeit': datetime.now().strftime("%H:%M")})
             st.rerun()
     st.write("---")
-    
+
 # ----------------------------------------------------
-# KALENDER-GENERIERUNG INKLUSIVE GEBURTSTAGE (Zukunftssicher)
+# KALENDER-GENERIERUNG INKLUSIVE GEBURTSTAGE
 # ----------------------------------------------------
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()
@@ -347,30 +351,26 @@ for i in range(-4, 150):
     farbe = "#1e3a8a" if "Andreas K." in grp else "#8b5cf6" if "Slawik V." in grp else "#f97316"
     kalender_events.append({"title": f"🛠️ {grp}", "start": w_sonntag.isoformat(), "end": (w_samstag + timedelta(days=1)).isoformat(), "backgroundColor": farbe, "borderColor": farbe, "allDay": True})
 
-# 2. NEU & UNENDLICH: Geburtstage des EIGENEN Teams einbetten
+# 2. UNENDLICH: Geburtstage des EIGENEN Teams einbetten
 aktuelles_jahr = datetime.now().year
 
 for m in st.session_state.mitglieder:
-    # Bedingung: Muss in der gleichen Gruppe sein. Wenn der User 'Chef' ist, sieht er alle Geburtstage.
     if user['rolle'] == "Chef" or m['gruppe'] == user['gruppe']:
         if m.get('geburtstag') and m['geburtstag'].strip() != "":
             geb_date = datetime.strptime(m['geburtstag'], "%Y-%m-%d").date()
             
-            # Generiert den Geburtstag ab dem aktuellen Jahr für die nächsten 100 Jahre im Voraus
             for jahr in range(aktuelles_jahr, aktuelles_jahr + 100):
                 try:
                     geb_aktuell = datetime(jahr, geb_date.month, geb_date.day).date()
-                    
                     kalender_events.append({
                         "title": f"🎉 Geb.: {m['name']}",
                         "start": geb_aktuell.isoformat(),
                         "end": (geb_aktuell + timedelta(days=1)).isoformat(),
-                        "backgroundColor": "#eab308", # Gold-Gelb für gute Sichtbarkeit
+                        "backgroundColor": "#eab308", 
                         "borderColor": "#ca8a04",
                         "allDay": True
                     })
                 except ValueError:
-                    # Schaltjahr-Schutz: Wenn der 29. Feb in diesem Jahr nicht existiert -> auf den 28. Feb legen
                     geb_aktuell = datetime(jahr, 2, 28).date()
                     kalender_events.append({
                         "title": f"🎉 Geb.: {m['name']}",
@@ -402,29 +402,9 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
     u_farbe = "#eab308" if anzahl_fehlende == 1 else "#ef4444"
     kalender_events.append({"title": f"⚠️ Urlaub: {', '.join(namen_liste)}", "start": tag.isoformat(), "end": (tag + timedelta(days=1)).isoformat(), "backgroundColor": u_farbe, "borderColor": u_farbe, "allDay": True})
 
+# HIER IST NUR NOCH DER EINE, KORREKTE KALENDER-AUFRUF
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
 st.write("---")
-
-# 3. Urlaube & Engpässe
-urlaubs_tage_zaehler = {}
-for u in st.session_state.urlaube:
-    u_mitglied = next((m for m in st.session_state.mitglieder if m['name'] == u['name']), None)
-    if u_mitglied:
-        akt_tag = u['von']
-        if isinstance(akt_tag, str): akt_tag = datetime.strptime(akt_tag, "%Y-%m-%d").date()
-        u_bis_date = u['bis']
-        if isinstance(u_bis_date, str): u_bis_date = datetime.strptime(u_bis_date, "%Y-%m-%d").date()
-        
-        while akt_tag <= u_bis_date:
-            if u_mitglied['gruppe'] == get_dienst_gruppe(akt_tag):
-                if akt_tag not in urlaubs_tage_zaehler: urlaubs_tage_zaehler[akt_tag] = []
-                if u['name'] not in urlaubs_tage_zaehler[akt_tag]: urlaubs_tage_zaehler[akt_tag].append(u['name'])
-            akt_tag += timedelta(days=1)
-
-for tag, namen_liste in urlaubs_tage_zaehler.items():
-    anzahl_fehlende = len(namen_liste)
-    u_farbe = "#eab308" if anzahl_fehlende == 1 else "#ef4444"
-    kalender_events.append({"title": f"⚠️ Urlaub: {', '.join(namen_liste)}", "start": tag.isoformat(), "end": (tag + timedelta(days=1)).isoformat(), "backgroundColor": u_farbe, "borderColor": u_farbe, "allDay": True})
 
 # ----------------------------------------------------
 # ABFRAGEN & INTERAKTIONEN

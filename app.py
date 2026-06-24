@@ -17,7 +17,6 @@ if "eingeloggt_als" not in st.session_state:
         st.rerun() 
 # --------------------------------------------------
 
-# ... ab hier geht dein restlicher Code weiter (Datenbanken, Funktionen etc.)
 # CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)
 st.markdown("""
 <style>

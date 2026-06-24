@@ -14,67 +14,21 @@ controller = CookieController()
 # CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #f4f6f9;
-    }
-    .main-title {
-        color: #1e3a8a;
-        font-family: 'Arial', sans-serif;
-        font-weight: bold;
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    .chat-bubble-user {
-        background-color: #dcf8c6;
-        padding: 12px;
-        border-radius: 12px;
-        margin-bottom: 10px;
-        border-right: 4px solid #25d366;
-        max-width: 85%;
-        margin-left: auto;
-        box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-    }
-    .chat-bubble-other {
-        background-color: #ffffff;
-        padding: 12px;
-        border-radius: 12px;
-        margin-bottom: 10px;
-        border-left: 4px solid #3b82f6;
-        max-width: 85%;
-        margin-right: auto;
-        box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-    }
-    .chat-system {
-        background-color: #e5e7eb;
-        padding: 6px;
-        border-radius: 20px;
-        text-align: center;
-        font-size: 0.85em;
-        color: #4b5563;
-        margin-bottom: 15px;
-    }
-    .card-box {
-        background-color: #ffffff;
-        padding: 22px;
-        border-radius: 12px;
-        box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05);
-        border-top: 5px solid #1e3a8a;
-        margin-bottom: 20px;
-    }
-    .popup-box {
-        background-color: #ffe4e6;
-        padding: 15px;
-        border-left: 6px solid #f43f5e;
-        border-radius: 8px;
-        margin-bottom: 20px;
-    }
+    .stApp { background-color: #f4f6f9; }
+    .main-title { color: #1e3a8a; font-family: 'Arial', sans-serif; font-weight: bold; text-align: center; margin-bottom: 20px; }
+    .chat-bubble-user { background-color: #dcf8c6; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-right: 4px solid #25d366; max-width: 85%; margin-left: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+    .chat-bubble-other { background-color: #ffffff; padding: 12px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid #3b82f6; max-width: 85%; margin-right: auto; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+    .chat-system { background-color: #e5e7eb; padding: 6px; border-radius: 20px; text-align: center; font-size: 0.85em; color: #4b5563; margin-bottom: 15px; }
+    .card-box { background-color: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05); border-top: 5px solid #1e3a8a; margin-bottom: 20px; }
+    .popup-box { background-color: #ffe4e6; padding: 15px; border-left: 6px solid #f43f5e; border-radius: 8px; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# MITGLIEDER DATENBANK
+# MITGLIEDER & CHAT DATENBANK
 # ----------------------------------------------------
 DB_FILE = "mitglieder_data.json"
+CHAT_FILE = "chat_data.json"
 
 def hole_standard_liste():
     return [
@@ -95,12 +49,25 @@ def speichere_mitglieder(liste):
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(liste, f, ensure_ascii=False, indent=4)
 
+def lade_chat():
+    if os.path.exists(CHAT_FILE):
+        with open(CHAT_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return [{'von': 'System', 'text': 'Willkommen im internen Chat!', 'zeit': 'Info', 'an': 'Alle', 'gelesen_von': []}]
+
+def speichere_chat(chat_liste):
+    with open(CHAT_FILE, "w", encoding="utf-8") as f:
+        json.dump(chat_liste, f, ensure_ascii=False, indent=4)
+
+# Laden der Daten
 if os.path.exists(DB_FILE):
     with open(DB_FILE, "r", encoding="utf-8") as f:
         st.session_state.mitglieder = json.load(f)
 else:
     st.session_state.mitglieder = hole_standard_liste()
     speichere_mitglieder(st.session_state.mitglieder)
+
+st.session_state.leiter_chat = lade_chat()
 
 # Speicherstrukturen initialisieren
 if "urlaube" not in st.session_state: st.session_state.urlaube = []
@@ -110,10 +77,6 @@ if "show_abfrage_form" not in st.session_state: st.session_state.show_abfrage_fo
 if "abfrage_typ" not in st.session_state: st.session_state.abfrage_typ = None
 if "show_urlaub_form" not in st.session_state: st.session_state.show_urlaub_form = False
 if "gewaehltes_mitglied" not in st.session_state: st.session_state.gewaehltes_mitglied = None
-
-# CHAT DATENSTRUKTUR ERWEITERN
-if "leiter_chat" not in st.session_state: 
-    st.session_state.leiter_chat = [{'von': 'System', 'text': 'Willkommen im internen Chat!', 'zeit': 'Info', 'an': 'Alle', 'gelesen_von': []}]
 
 def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
@@ -149,7 +112,7 @@ if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als i
                     if m['name'] == u_name: m['passwort'] = neues_pw
                 speichere_mitglieder(st.session_state.mitglieder)
                 st.session_state.eingeloggt_als = u_name
-                controller.set('eingeloggt_als', u_name) # Cookie setzen!
+                controller.set('eingeloggt_als', u_name)
                 st.session_state.passwort_aendern_fuer = None
                 st.rerun()
         st.stop()
@@ -169,7 +132,7 @@ if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als i
                         st.rerun()
                     else:
                         st.session_state.eingeloggt_als = login_name
-                        controller.set('eingeloggt_als', login_name) # Cookie setzen!
+                        controller.set('eingeloggt_als', login_name)
                         st.rerun()
                 else:
                     st.error("Falsches Passwort!")
@@ -300,6 +263,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                     'an': empfaenger,
                     'gelesen_von': []
                 })
+                speichere_chat(st.session_state.leiter_chat)
                 st.rerun()
 
 # System-Verwaltung
@@ -338,7 +302,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
 
 st.sidebar.write("---")
 if st.sidebar.button("🚪 Abmelden", use_container_width=True):
-    controller.remove('eingeloggt_als') # Cookie beim Abmelden löschen!
+    controller.remove('eingeloggt_als')
     st.session_state.eingeloggt_als = None
     st.rerun()
 
@@ -354,7 +318,11 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
         if msg['zeit'] == 'Info' or msg['von'] == user['name']:
             continue
         
-        if (msg['an'] == user['name'] or msg['an'] == "Alle") and user['name'] not in msg.get('gelesen_von', []):
+        # Sicherer Abgleich ohne versteckte Leerzeichenprobleme
+        an_ziel = str(msg.get('an', '')).strip().lower()
+        aktueller_user = str(user['name']).strip().lower()
+        
+        if (an_ziel == aktueller_user or an_ziel == "alle") and user['name'] not in msg.get('gelesen_von', []):
             ungelesene_nachrichten.append((idx, msg))
             
     if ungelesene_nachrichten:
@@ -367,6 +335,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                 if 'gelesen_von' not in st.session_state.leiter_chat[idx]:
                     st.session_state.leiter_chat[idx]['gelesen_von'] = []
                 st.session_state.leiter_chat[idx]['gelesen_von'].append(user['name'])
+                speichere_chat(st.session_state.leiter_chat)
                 st.rerun()
                 
         st.markdown("</div>", unsafe_allow_html=True)

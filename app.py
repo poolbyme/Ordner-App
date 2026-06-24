@@ -14,13 +14,13 @@ controller = CookieController()
 
 # --- COOKIE-WIEDERERKENNUNG ---
 # ... (deine Importe)
-controller = CookieController()
 
 # --- HIER DEN CODE EINFÜGEN ---
 if "eingeloggt_als" not in st.session_state:
     saved_user = controller.get('eingeloggt_als')
     if saved_user:
         st.session_state.eingeloggt_als = saved_user
+        st.rerun()
 # ------------------------------
 
 # Also ab hier kommen deine Datenbank-Definitionen (DB_FILE = ...)

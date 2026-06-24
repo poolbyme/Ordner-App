@@ -26,7 +26,7 @@ st.markdown("""
         border-radius: 12px;
         margin-bottom: 10px;
         border-right: 4px solid #25d366;
-        max-width: 80%;
+        max-width: 85%;
         margin-left: auto;
         box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
     }
@@ -36,7 +36,7 @@ st.markdown("""
         border-radius: 12px;
         margin-bottom: 10px;
         border-left: 4px solid #3b82f6;
-        max-width: 80%;
+        max-width: 85%;
         margin-right: auto;
         box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
     }
@@ -58,7 +58,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     .section-divider {
-        margin-top: 40px;
+        margin-top: 20px;
         margin-bottom: 20px;
         border-bottom: 2px dashed #cbd5e1;
     }
@@ -190,7 +190,7 @@ if user['telefon'].strip() == "" and user['anschrift'].strip() == "" and user['g
     st.stop()
 
 # ----------------------------------------------------
-# APP OBERFLÄCHE & SIDEBAR
+# SIDEBAR NAVIGATION & MENÜS
 # ----------------------------------------------------
 st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner-Zentrale</h1>", unsafe_allow_html=True)
 
@@ -201,7 +201,7 @@ if user.get('geburtstag'):
     geb_formatiert = datetime.strptime(user['geburtstag'], "%Y-%m-%d").strftime("%d.%m.%Y")
 st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}\nGeburtstag: {geb_formatiert}")
 
-# SELBSTSTÄNDIGE PROFILÄNDERUNG IN SIDEBAR
+# Profiländerung (Sidebar)
 with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
     mein_neues_tel = st.text_input("📱 Telefonnummer:", value=user.get('telefon', ''), key="my_own_tel")
     mein_neues_adr = st.text_input("🏠 Anschrift:", value=user.get('anschrift', ''), key="my_own_adr")
@@ -216,17 +216,11 @@ with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
         st.sidebar.success("Daten aktualisiert!")
         st.rerun()
 
-# ----------------------------------------------------
-# FEATURE: "MEIN TEAM" UND GESAMTMITGLIEDER
-# ----------------------------------------------------
+# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN" (In die Sidebar verschoben!)
 st.sidebar.write("---")
-show_team_section = st.sidebar.checkbox("👥 Mein Team & Mitglieder-Infos", value=False)
-
-if show_team_section:
-    st.write("## 👥 Teamverwaltung & Stammdaten")
+with st.sidebar.expander("👥 Teamverwaltung & Stammdaten"):
     person_ausgewaehlt = None
-    
-    st.write(f"### 🛡️ Mein Team ({user['gruppe']})")
+    st.write(f"**🛡️ Mein Team ({user['gruppe']})**")
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
     namen_eigenes_team = sorted([m['name'] for m in eigenes_team])
     
@@ -235,43 +229,55 @@ if show_team_section:
         person_ausgewaehlt = wahl_eigenes_team
 
     if user['rolle'] == "Chef":
-        st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
-        st.write("### 🌍 Alle anderen Ordner-Mitglieder (Gesamtübersicht)")
+        st.write("**🌍 Alle anderen Ordner-Mitglieder**")
         andere_mitglieder = [m for m in st.session_state.mitglieder if m['gruppe'] != user['gruppe']]
         namen_andere = sorted([m['name'] for m in andere_mitglieder])
         
-        wahl_andere = st.selectbox("Anderes Gemeindemitglied wählen:", options=["-- Bitte wählen --"] + namen_andere, key="sel_all_members")
+        wahl_andere = st.selectbox("Anderes Mitglied wählen:", options=["-- Bitte wählen --"] + namen_andere, key="sel_all_members")
         if wahl_andere != "-- Bitte wählen --":
             person_ausgewaehlt = wahl_andere
 
     if person_ausgewaehlt:
         person_daten = next((m for m in st.session_state.mitglieder if m['name'] == person_ausgewaehlt), None)
         if person_daten:
-            st.markdown(f"<div class='card-box'>", unsafe_allow_html=True)
-            st.markdown(f"<h4>📝 Details für {person_daten['name']} ({person_daten['gruppe']})</h4>", unsafe_allow_html=True)
-            
+            st.markdown("---")
+            st.write(f"**Details für {person_daten['name']}**")
             p_telefon = st.text_input("📱 Telefonnummer:", value=person_daten.get('telefon', ''), key="edit_tel")
-            p_anschrift = st.text_input("🏠 Anschrift (Straße, PLZ, Ort):", value=person_daten.get('anschrift', ''), key="edit_adr")
+            p_anschrift = st.text_input("🏠 Anschrift:", value=person_daten.get('anschrift', ''), key="edit_adr")
             p_geb_date = datetime.strptime(person_daten['geburtstag'], "%Y-%m-%d").date() if person_daten.get('geburtstag') else datetime(1995, 1, 1).date()
             p_geb = st.date_input("📅 Geburtstag:", value=p_geb_date, key="edit_geb", min_value=datetime(1940, 1, 1).date())
-            p_infos = st.text_area("ℹ️ Weitere Infos / Notizen:", value=person_daten.get('infos', ''), key="edit_inf")
+            p_infos = st.text_area("ℹ️ Notizen:", value=person_daten.get('infos', ''), key="edit_inf")
             
-            if st.button("💾 Änderungen für diese Person speichern", use_container_width=True, key="save_person_btn"):
+            if st.button("💾 Änderungen speichern", use_container_width=True, key="save_person_btn"):
                 person_daten['telefon'] = p_telefon
                 person_daten['anschrift'] = p_anschrift
                 person_daten['geburtstag'] = p_geb.strftime("%Y-%m-%d")
                 person_daten['infos'] = p_infos
                 speichere_mitglieder(st.session_state.mitglieder)
-                st.success(f"Die Daten für {person_daten['name']} wurden erfolgreich aktualisiert!")
+                st.success("Aktualisiert!")
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-    st.write("---")
 
-# Allgemeine Admin-Verwaltung in Sidebar
+# UNTERMENÜ: "INTERNER CHAT" (In die Sidebar verschoben!)
+if user['rolle'] in ["Chef", "Teamleiter"]:
+    with st.sidebar.expander("💬 Interner Leiter-Chat"):
+        for msg in st.session_state.leiter_chat:
+            if msg['zeit'] == 'Info': 
+                st.markdown(f"<div class='chat-system'>ℹ️ {msg['text']}</div>", unsafe_allow_html=True)
+            elif msg['von'] == user['name']: 
+                st.markdown(f"<div class='chat-bubble-user'><b>Du</b> ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
+            else: 
+                st.markdown(f"<div class='chat-bubble-other'><b>{msg['von']}</b> ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
+                
+        with st.form(key="chat_form_sidebar", clear_on_submit=True):
+            neue_nachricht = st.text_input("Nachricht...", placeholder="Schreiben...")
+            if st.form_submit_button("Senden", use_container_width=True) and neue_nachricht.strip():
+                st.session_state.leiter_chat.append({'von': user['name'], 'text': neue_nachricht, 'zeit': datetime.now().strftime("%H:%M")})
+                st.rerun()
+
+# Admin-Verwaltung (Mitglied hinzufügen / löschen in Sidebar)
 if user['rolle'] in ["Chef", "Teamleiter"]:
     st.sidebar.subheader("⚙️ System-Verwaltung")
     with st.sidebar.expander("➕ Neues Mitglied anlegen"):
-        # Hier ist das neue Formular mit Erfolgs-Meldung eingebaut!
         with st.form("sidebar_add_member_form", clear_on_submit=True):
             neu_name = st.text_input("Vollständiger Name:", placeholder="z.B. Müller Johann")
             neu_gruppe_chef = user['gruppe']
@@ -279,9 +285,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                 neu_gruppe_chef = st.selectbox("Gruppe zuweisen:", options=["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"])
             neu_rolle = st.selectbox("Rolle:", options=["Mitarbeiter", "Teamleiter"])
             
-            submit_neu = st.form_submit_button("Hinzufügen", use_container_width=True)
-            
-            if submit_neu:
+            if st.form_submit_button("Hinzufügen", use_container_width=True):
                 if neu_name.strip() and not any(m['name'].lower() == neu_name.strip().lower() for m in st.session_state.mitglieder):
                     st.session_state.mitglieder.append({
                         'name': neu_name.strip(), 'gruppe': neu_gruppe_chef, 'rolle': neu_rolle, 'passwort': 'Ordner',
@@ -313,47 +317,42 @@ if st.sidebar.button("🚪 Abmelden", use_container_width=True):
     st.session_state.eingeloggt_als = None
     st.rerun()
 
-# ----------------------------------------------------
-# RESTLICHE APP (CHAT)
-# ----------------------------------------------------
-if user['rolle'] in ["Chef", "Teamleiter"]:
-    st.write("### 💬 Interner Chat (Nur für Gruppenleiter sichtbar)")
-    for msg in st.session_state.leiter_chat:
-        if msg['zeit'] == 'Info': st.markdown(f"<div class='chat-system'>ℹ️ {msg['text']}</div>", unsafe_allow_html=True)
-        elif msg['von'] == user['name']: st.markdown(f"<div class='chat-bubble-user'><b>Du</b> ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
-        else: st.markdown(f"<div class='chat-bubble-other'><b>{msg['von']}</b> ({msg['zeit']})<br>{msg['text']}</div>", unsafe_allow_html=True)
-            
-    with st.form(key="chat_form", clear_on_submit=True):
-        col_msg, col_btn = st.columns([4, 1])
-        with col_msg: neue_nachricht = st.text_input("Nachricht schreiben...", placeholder="Schreiben und Enter drücken...")
-        with col_btn: submit_button = st.form_submit_button("Senden", use_container_width=True)
-        if submit_button and neue_nachricht.strip():
-            st.session_state.leiter_chat.append({'von': user['name'], 'text': neue_nachricht, 'zeit': datetime.now().strftime("%H:%M")})
-            st.rerun()
-    st.write("---")
+
+# ====================================================
+# HAUPTSEITE (Fokus auf Kalender, Abfragen & Urlaub)
+# ====================================================
 
 # ----------------------------------------------------
-# KALENDER-GENERIERUNG INKLUSIVE GEBURTSTAGE
+# 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
 # ----------------------------------------------------
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()
 aktueller_sonntag = heute - timedelta(days=(heute.weekday() + 1) % 7)
-if heute.weekday() == 6: aktueller_sonntag = heute
+if heute.weekday() == 6: 
+    aktueller_sonntag = heute
 st.success(f"📢 **Aktuelle Woche:** {get_dienst_gruppe(aktueller_sonntag)} hat Dienst.")
 
 kalender_events = []
 
-# 1. Dienstplan-Wochen generieren
+# Ursprüngliche Dienstplan-Wochen generieren und farblich markieren
 for i in range(-4, 150):
     w_sonntag = datetime(2026, 6, 21).date() + timedelta(weeks=i)
     w_samstag = w_sonntag + timedelta(days=6)
     grp = get_dienst_gruppe(w_sonntag)
+    
+    # Farblogik basierend auf der Dienstgruppe
     farbe = "#1e3a8a" if "Andreas K." in grp else "#8b5cf6" if "Slawik V." in grp else "#f97316"
-    kalender_events.append({"title": f"🛠️ {grp}", "start": w_sonntag.isoformat(), "end": (w_samstag + timedelta(days=1)).isoformat(), "backgroundColor": farbe, "borderColor": farbe, "allDay": True})
+    kalender_events.append({
+        "title": f"🛠️ {grp}", 
+        "start": w_sonntag.isoformat(), 
+        "end": (w_samstag + timedelta(days=1)).isoformat(), 
+        "backgroundColor": farbe, 
+        "borderColor": farbe, 
+        "allDay": True
+    })
 
-# 2. UNENDLICH: Geburtstage des EIGENEN Teams einbetten
+# Unendliche Geburtstage einbetten (Sichtbar für das eigene Team / Chef sieht alle)
 aktuelles_jahr = datetime.now().year
-
 for m in st.session_state.mitglieder:
     if user['rolle'] == "Chef" or m['gruppe'] == user['gruppe']:
         if m.get('geburtstag') and m['geburtstag'].strip() != "":
@@ -366,11 +365,12 @@ for m in st.session_state.mitglieder:
                         "title": f"🎉 Geb.: {m['name']}",
                         "start": geb_aktuell.isoformat(),
                         "end": (geb_aktuell + timedelta(days=1)).isoformat(),
-                        "backgroundColor": "#eab308", 
+                        "backgroundColor": "#eab308", # Gold-Gelb
                         "borderColor": "#ca8a04",
                         "allDay": True
                     })
                 except ValueError:
+                    # Schalttag-Schutz
                     geb_aktuell = datetime(jahr, 2, 28).date()
                     kalender_events.append({
                         "title": f"🎉 Geb.: {m['name']}",
@@ -381,7 +381,7 @@ for m in st.session_state.mitglieder:
                         "allDay": True
                     })
 
-# 3. Urlaube & Engpässe
+# Urlaube im Kalender verarbeiten & markieren
 urlaubs_tage_zaehler = {}
 for u in st.session_state.urlaube:
     u_mitglied = next((m for m in st.session_state.mitglieder if m['name'] == u['name']), None)
@@ -400,14 +400,21 @@ for u in st.session_state.urlaube:
 for tag, namen_liste in urlaubs_tage_zaehler.items():
     anzahl_fehlende = len(namen_liste)
     u_farbe = "#eab308" if anzahl_fehlende == 1 else "#ef4444"
-    kalender_events.append({"title": f"⚠️ Urlaub: {', '.join(namen_liste)}", "start": tag.isoformat(), "end": (tag + timedelta(days=1)).isoformat(), "backgroundColor": u_farbe, "borderColor": u_farbe, "allDay": True})
+    kalender_events.append({
+        "title": f"⚠️ Urlaub: {', '.join(namen_liste)}", 
+        "start": tag.isoformat(), 
+        "end": (tag + timedelta(days=1)).isoformat(), 
+        "backgroundColor": u_farbe, 
+        "borderColor": u_farbe, 
+        "allDay": True
+    })
 
-# HIER IST NUR NOCH DER EINE, KORREKTE KALENDER-AUFRUF
+# Kalender rendern
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
 st.write("---")
 
 # ----------------------------------------------------
-# ABFRAGEN & INTERAKTIONEN
+# 2. ANWESENHEITS-ABFRAGEN
 # ----------------------------------------------------
 st.write("### 📋 Aktuelle Anwesenheits-Abfragen für dich")
 abfragen_gefunden = False
@@ -437,13 +444,15 @@ for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
                 if st.button("🟢 Ich bin DA", key=f"da_{k_abfrage}"): v_abfrage['rueckmeldungen'][user['name']] = "🟢 Bin da"; st.rerun()
             with c2:
                 if st.button("🔴 Ich bin NICHT da", key=f"weg_{k_abfrage}"): v_abfrage['rueckmeldungen'][user['name']] = "🔴 Nicht da"; st.rerun()
-if not abfragen_gefunden: st.write("✅ Keine offenen Abfragen ausstehend.")
+if not abfragen_gefunden: 
+    st.write("✅ Keine offenen Abfragen ausstehend.")
 st.write("---")
 
+# Interaktive Formularboxen am Seitenende
 col_box1, col_box2 = st.columns(2)
 with col_box1:
     st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-    st.subheader("🚀 Anwesenheits-Abfrage")
+    st.subheader("🚀 Neue Abfrage starten")
     if user['rolle'] in ["Chef", "Teamleiter"]:
         if not st.session_state.show_abfrage_form:
             c1, c2 = st.columns(2)
@@ -456,10 +465,15 @@ with col_box1:
             bedarf_personen = st.number_input("Benötigte Personen:", min_value=1, value=2) if st.session_state.abfrage_typ == "alle" else 0
             if st.button("✅ Starten", use_container_width=True):
                 key = f"{user['gruppe'] if st.session_state.abfrage_typ=='gruppe' else 'ALLE'}_{gewaehltes_datum.strftime('%Y-%m-%d')}"
-                st.session_state.gruppen_abfragen[key] = {'status': 'offen', 'typ': st.session_state.abfrage_typ, 'bedarf': bedarf_personen, 'helfer': [], 'rueckmeldungen': {}}
+                st.session_state.gruppen_abfragen[key] = {'status': 'offen', 'typ': st.session_state.abfrage_typ, 'bedarf': bedarby_personen, 'helfer': [], 'rueckmeldungen': {}}
                 st.session_state.show_abfrage_form = False; st.rerun()
+    else:
+        st.write("Nur für Gruppenleiter verfügbar.")
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ----------------------------------------------------
+# 3. URLAUBSVERWALTUNG
+# ----------------------------------------------------
 with col_box2:
     st.markdown("<div class='card-box'>", unsafe_allow_html=True)
     st.subheader("🌴 Urlaubsverwaltung")

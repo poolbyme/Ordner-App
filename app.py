@@ -1,6 +1,10 @@
 import streamlit as st
-from streamlit_cookies_controller import CookieController
+import os
+import json
 import time
+from datetime import datetime, timedelta
+from streamlit_calendar import calendar
+from streamlit_cookies_controller import CookieController
 
 # App-Konfiguration
 st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="⛪", layout="wide")
@@ -8,14 +12,12 @@ st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="�
 # Cookie Controller initialisieren
 controller = CookieController()
 
-# --- DIESER BLOCK ÜBERNIMMT DIE WIEDERERKENNUNG ---
+# --- COOKIE-WIEDERERKENNUNG ---
 if "eingeloggt_als" not in st.session_state:
     saved_user = controller.get('eingeloggt_als')
     if saved_user:
         st.session_state.eingeloggt_als = saved_user
-        # Kleiner Refresh, um sicherzugehen, dass der Zustand geladen ist
-        st.rerun() 
-# --------------------------------------------------
+        st.rerun()
 
 # CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)
 st.markdown("""

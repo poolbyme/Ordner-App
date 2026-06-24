@@ -108,7 +108,7 @@ if "abfrage_typ" not in st.session_state: st.session_state.abfrage_typ = None
 if "show_urlaub_form" not in st.session_state: st.session_state.show_urlaub_form = False
 if "gewaehltes_mitglied" not in st.session_state: st.session_state.gewaehltes_mitglied = None
 
-# CHAT DATENSTRUKTUR ERWEITERN (Für Pop-up Quittierung)
+# CHAT DATENSTRUKTUR ERWEITERN
 if "leiter_chat" not in st.session_state: 
     st.session_state.leiter_chat = [{'von': 'System', 'text': 'Willkommen im internen Chat!', 'zeit': 'Info', 'an': 'Alle', 'gelesen_von': []}]
 
@@ -117,7 +117,6 @@ def get_dienst_gruppe(datum):
     wochen = (datum - basis_datum).days // 7
     return ["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"][wochen % 3]
 
-# Liste aller verfügbaren Leiter für die Chat-Auswahl ermitteln
 alle_leiter = sorted([m['name'] for m in st.session_state.mitglieder if m['rolle'] in ["Chef", "Teamleiter"]])
 
 # ----------------------------------------------------
@@ -218,7 +217,7 @@ with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
         st.sidebar.success("Daten aktualisiert!")
         st.rerun()
 
-# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN" (AUTOMATISCHES ERSETZEN & VERSTECKEN)
+# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN"
 st.sidebar.write("---")
 with st.sidebar.expander("👥 Teamverwaltung & Stammdaten", expanded=True):
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
@@ -265,7 +264,7 @@ with st.sidebar.expander("👥 Teamverwaltung & Stammdaten", expanded=True):
                 st.success("Änderungen erfolgreich gespeichert!")
                 st.rerun()
 
-# UNTERMENÜ: "INTERNER CHAT" (Mit gezielter Empfänger-Auswahl)
+# UNTERMENÜ: "INTERNER CHAT"
 if user['rolle'] in ["Chef", "Teamleiter"]:
     with st.sidebar.expander("💬 Interner Leiter-Chat"):
         for msg in st.session_state.leiter_chat:
@@ -280,10 +279,8 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                 
         with st.form(key="chat_form_sidebar", clear_on_submit=True):
             neue_nachricht = st.text_input("Nachricht...", placeholder="Schreiben...")
-            
-            # EMPFÄNGER MARKIERE / AUSWÄHLEN (Deine neue Anforderung)
             chat_partner_optionen = ["Alle"] + [leiter for leiter in alle_leiter if leiter != user['name']]
-            empfaenger = st.selectbox("An wen (optional):", options=chat_partner_optionen, help="Wählst du niemanden aus ('Alle'), bekommen die anderen Leiter das Pop-up.")
+            empfaenger = st.selectbox("An wen (optional):", options=chat_partner_optionen)
             
             if st.form_submit_button("Senden", use_container_width=True) and neue_nachricht.strip():
                 st.session_state.leiter_chat.append({
@@ -291,11 +288,11 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                     'text': neue_nachricht, 
                     'zeit': datetime.now().strftime("%H:%M"),
                     'an': empfaenger,
-                    'gelesen_von': []  # Liste der Personen, die es weggeklickt haben
+                    'gelesen_von': []
                 })
                 st.rerun()
 
-# Admin-Verwaltung (Mitglied hinzufügen / löschen in Sidebar)
+# System-Verwaltung
 if user['rolle'] in ["Chef", "Teamleiter"]:
     st.sidebar.subheader("⚙️ System-Verwaltung")
     with st.sidebar.expander("➕ Neues Mitglied anlegen"):
@@ -339,9 +336,6 @@ if st.sidebar.button("🚪 Abmelden", use_container_width=True):
 # HAUPTSEITE (Mit automatischem Pop-up System)
 # ====================================================
 
-# ----------------------------------------------------
-# NEU: POP-UP SYSTEM FÜR UNGELESENE CHAT-NACHRICHTEN
-# ----------------------------------------------------
 if user['rolle'] in ["Chef", "Teamleiter"]:
     ungelesene_nachrichten = []
     
@@ -349,8 +343,6 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
         if msg['zeit'] == 'Info' or msg['von'] == user['name']:
             continue
         
-        # Bedingung 1: Nachricht ging direkt an mich
-        # Bedingung 2: Nachricht ging an 'Alle' und ich habe sie noch nicht als gelesen markiert
         if (msg['an'] == user['name'] or msg['an'] == "Alle") and user['name'] not in msg.get('gelesen_von', []):
             ungelesene_nachrichten.append((idx, msg))
             
@@ -358,7 +350,6 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
         st.markdown("<div class='popup-box'>", unsafe_allow_html=True)
         st.error(f"🔔 **WICHTIGE NACHRICHT IM LEITER-CHAT AN DICH!**")
         
-        # Zeige die ungelesenen Nachrichten im Pop-up-Fenster an
         for idx, msg in ungelesene_nachrichten:
             st.write(f"**Von {msg['von']}** ({msg['zeit']}): {msg['text']}")
             if st.button("👁️ Als gelesen markieren & schließen", key=f"read_{idx}"):
@@ -369,9 +360,7 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                 
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ----------------------------------------------------
 # 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
-# ----------------------------------------------------
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()
 aktueller_sonntag = heute - timedelta(days=(heute.weekday() + 1) % 7)
@@ -381,7 +370,6 @@ st.success(f"📢 **Aktuelle Woche:** {get_dienst_gruppe(aktueller_sonntag)} hat
 
 kalender_events = []
 
-# Dienstplan-Wochen generieren
 for i in range(-4, 150):
     w_sonntag = datetime(2026, 6, 21).date() + timedelta(weeks=i)
     w_samstag = w_sonntag + timedelta(days=6)
@@ -461,9 +449,7 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
 st.write("---")
 
-# ----------------------------------------------------
 # 2. ANWESENHEITS-ABFRAGEN
-# ----------------------------------------------------
 st.write("### 📋 Aktuelle Anwesenheits-Abfragen für dich")
 abfragen_gefunden = False
 for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):

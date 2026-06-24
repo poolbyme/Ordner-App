@@ -87,17 +87,23 @@ def get_dienst_gruppe(datum):
 alle_leiter = sorted([m['name'] for m in st.session_state.mitglieder if m['rolle'] in ["Chef", "Teamleiter"]])
 
 # ----------------------------------------------------
-# COOKIE-CHECK & SESSION-INIT (HIER WIRD DAS PROBLEM GELÖST)
+# ROBUSTE COOKIE-Wiederherstellung
 # ----------------------------------------------------
-if "init_done" not in st.session_state:
-    st.session_state.init_done = True
-    # Initiales Lesen der Cookies
-    saved_user = controller.get('eingeloggt_als')
-    if saved_user:
-        st.session_state.eingeloggt_als = saved_user
-        st.rerun()  # Einmal neu laden, damit die App weiß, wer du bist
+def get_user_from_cookie():
+    # Wir lesen den Cookie. Wenn er existiert, geben wir ihn zurück.
+    return controller.get('eingeloggt_als')
+
+# Wenn wir noch nicht eingeloggt sind, aber ein Cookie existiert, 
+# setzen wir den Status direkt.
+if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als is None:
+    cookie_user = get_user_from_cookie()
+    if cookie_user:
+        st.session_state.eingeloggt_als = cookie_user
+        # Wir machen kein st.rerun() mehr, sondern lassen den Code einfach weiterlaufen, 
+        # da die Variable jetzt gesetzt ist.
+
 # ----------------------------------------------------
-# LOGIN-SYSTEM
+# LOGIN-CHECK (Verhindert das Anzeigen der Login-Maske)
 # ----------------------------------------------------
 if "eingeloggt_als" not in st.session_state or st.session_state.eingeloggt_als is None:
     st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner App Login</h1>", unsafe_allow_html=True)

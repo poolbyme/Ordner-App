@@ -1,17 +1,9 @@
 import streamlit as st
 from datetime import datetime, timedelta
 from streamlit_calendar import calendar
+from streamlit_cookies_controller import CookieController
 import os
 import json
-import subprocess
-import sys
-
-# AUTOMATISCHE INSTALLATION DES COOKIE-PAKETS (Falls nicht vorhanden)
-try:
-    from streamlit_cookies_controller import CookieController
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "streamlit-cookies-controller"])
-    from streamlit_cookies_controller import CookieController
 
 # App-Konfiguration
 st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="⛪", layout="wide")
@@ -464,8 +456,9 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
         "allDay": True
     })
 
-# Kalender rendern
-calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
+# Kalender rendern mit eindeutigem, dynamischem Key basierend auf der Event-Anzahl
+calendar_key = f"fecg_calendar_{len(kalender_events)}"
+calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key=calendar_key)
 st.write("---")
 
 # 2. ANWESENHEITS-ABFRAGEN

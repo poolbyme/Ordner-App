@@ -8,11 +8,9 @@ st.set_page_config(page_title="FECG Bruchmühlbach - Ordner Team", page_icon="�
 # CSS FÜR INDIVIDUELLES DESIGN UND FARBEN (FECG THEME)
 st.markdown("""
 <style>
-    /* Hintergrundfarbe der App */
     .stApp {
         background-color: #f4f6f9;
     }
-    /* Titel-Styling */
     .main-title {
         color: #1e3a8a;
         font-family: 'Arial', sans-serif;
@@ -20,7 +18,6 @@ st.markdown("""
         text-align: center;
         margin-bottom: 20px;
     }
-    /* WhatsApp-Style für den Gruppenleiter-Chat */
     .chat-bubble-user {
         background-color: #dcf8c6;
         padding: 12px;
@@ -50,7 +47,6 @@ st.markdown("""
         color: #4b5563;
         margin-bottom: 15px;
     }
-    /* Stilvolle Kartenboxen für die Funktionen */
     .card-box {
         background-color: #ffffff;
         padding: 22px;
@@ -63,9 +59,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# AUTOMATISCHE WHATSAPP-FUNKTION (PLATZHALTER)
+# AUTOMATISCHE WHATSAPP-FUNKTION
 # ----------------------------------------------------
 def sende_whatsapp_benachrichtigung(nachrichtstext):
+    # Hier wird später eure Gruppen-API verknüpft!
     try:
         pass
     except Exception as e:
@@ -74,17 +71,17 @@ def sende_whatsapp_benachrichtigung(nachrichtstext):
 # 1. LIVE-SPEICHER INITIALISIEREN
 if "mitglieder" not in st.session_state:
     st.session_state.mitglieder = [
-        {'name': 'Komjagin Andreas', 'email': 'andreas@kirche.de', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Chef'},
-        {'name': 'Hauf Valintin', 'email': 'valintin@kirche.de', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Geier Enriko', 'email': 'enriko@kirche.de', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Ilchuk Vasyl', 'email': 'vasyl@kirche.de', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Volkov Slawik', 'email': 'slawik@kirche.de', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Teamleiter'},
-        {'name': 'Tissen Eduard', 'email': 'eduard@kirche.de', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Eberhart Wili', 'email': 'wili@kirche.de', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Paul Steffen', 'email': 'steffen@kirche.de', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Schäfer Peter', 'email': 'peter@kirche.de', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Teamleiter'},
-        {'name': 'Akulenko Wili', 'email': 'wili.a@kirche.de', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter'},
-        {'name': 'Hermann Bogdan', 'email': 'bogdan@kirche.de', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter'}
+        {'name': 'Komjagin Andreas', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Chef'},
+        {'name': 'Hauf Valintin', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
+        {'name': 'Geier Enriko', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
+        {'name': 'Ilchuk Vasyl', 'gruppe': 'Gruppe 1 (Andreas K.)', 'rolle': 'Mitarbeiter'},
+        {'name': 'Volkov Slawik', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Teamleiter'},
+        {'name': 'Tissen Eduard', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
+        {'name': 'Eberhart Wili', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
+        {'name': 'Paul Steffen', 'gruppe': 'Gruppe 2 (Slawik V.)', 'rolle': 'Mitarbeiter'},
+        {'name': 'Schäfer Peter', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Teamleiter'},
+        {'name': 'Akulenko Wili', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter'},
+        {'name': 'Hermann Bogdan', 'gruppe': 'Gruppe 3 (Peter S.)', 'rolle': 'Mitarbeiter'}
     ]
 
 if "urlaube" not in st.session_state:
@@ -105,7 +102,6 @@ if "eingeloggt_als" not in st.session_state:
     st.session_state.eingeloggt_als = None
 
 def get_dienst_gruppe(datum):
-    # Basis-Sonntag (21. Juni 2026) -> Hier startet Gruppe 1 (Andreas K.)
     basis_datum = datetime(2026, 6, 21).date()
     wochen = (datum - basis_datum).days // 7
     return ["Gruppe 1 (Andreas K.)", "Gruppe 2 (Slawik V.)", "Gruppe 3 (Peter S.)"][wochen % 3]
@@ -120,7 +116,6 @@ if st.session_state.eingeloggt_als is None:
     col_login, _ = st.columns([1, 1])
     with col_login:
         st.write("Bitte wähle deinen Namen aus und gib das gemeinsame Passwort ein.")
-        
         alle_namen = [m['name'] for m in st.session_state.mitglieder]
         login_name = st.selectbox("Dein Name:", options=alle_namen)
         passwort_eingabe = st.text_input("Passwort (Zentrale):", type="password")
@@ -179,7 +174,6 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                 'zeit': jetzt_zeit
             })
             st.rerun()
-
     st.write("---")
 
 # ----------------------------------------------------
@@ -187,161 +181,97 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
 # ----------------------------------------------------
 st.write("### 📅 Dienstplan-Übersicht")
 heute = datetime.now().date()
-# Berechne den aktuellen Sonntag dieser laufenden Woche
 aktueller_sonntag = heute - timedelta(days=(heute.weekday() + 1) % 7)
-if heute.weekday() == 6: # Falls heute bereits Sonntag ist
+if heute.weekday() == 6:
     aktueller_sonntag = heute
     
 dienst_gruppe = get_dienst_gruppe(aktueller_sonntag)
-
 st.success(f"📢 *Aktuelle Woche:* {dienst_gruppe} hat Dienst (von vergangenem Sonntag bis Samstag).")
 
-# Kalender-Ereignisse vorbereiten
 kalender_events = []
 
-# Generiert die Wochen-Einteilung weit in die Zukunft (für die nächsten Jahre)
 start_basis = datetime(2026, 6, 21).date()
-for i in range(-4, 150):  # Generiert ca. 3 Jahre im Voraus
+for i in range(-4, 150):
     w_sonntag = start_basis + timedelta(weeks=i)
     w_samstag = w_sonntag + timedelta(days=6)
     grp = get_dienst_gruppe(w_sonntag)
     
-    # Farbdefinitionen für die einzelnen Gruppenleiter nach Wunsch
     if "Andreas K." in grp:
-        farbe = "#1e3a8a"  # Dunkelblau für Andreas
+        farbe = "#1e3a8a"  # Dunkelblau
     elif "Slawik V." in grp:
-        farbe = "#8b5cf6"  # Hellviolett / Lila für Slawik
+        farbe = "#8b5cf6"  # Hellviolett
     else:
-        farbe = "#f97316"  # Orange für Peter
+        farbe = "#f97316"  # Orange
         
     kalender_events.append({
         "title": f"🛠️ {grp}",
         "start": w_sonntag.isoformat(),
-        "end": (w_samstag + timedelta(days=1)).isoformat(), # +1 Tag, damit der Samstag voll gefärbt ist
+        "end": (w_samstag + timedelta(days=1)).isoformat(),
         "backgroundColor": farbe,
         "borderColor": farbe,
         "allDay": True
     })
 
-# Urlaube im Kalender anzeigen
+# INTELLIGENTE URLAUBS-LOGIK
+urlaubs_tage_zaehler = {}
 for u in st.session_state.urlaube:
+    u_mitglied = next((m for m in st.session_state.mitglieder if m['name'] == u['name']), None)
+    if u_mitglied:
+        akt_tag = u['von']
+        while akt_tag <= u['bis']:
+            dienst_gruppe_an_dem_tag = get_dienst_gruppe(akt_tag)
+            if u_mitglied['gruppe'] == dienst_gruppe_an_dem_tag:
+                if akt_tag not in urlaubs_tage_zaehler:
+                    urlaubs_tage_zaehler[akt_tag] = []
+                if u['name'] not in urlaubs_tage_zaehler[akt_tag]:
+                    urlaubs_tage_zaehler[akt_tag].append(u['name'])
+            akt_tag += timedelta(days=1)
+
+for tag, namen_liste in urlaubs_tage_zaehler.items():
+    anzahl_fehlende = len(namen_liste)
+    namen_text = ", ".join(namen_liste)
+    
+    if anzahl_fehlende == 1:
+        u_farbe = "#eab308"  # Gelb
+        u_titel = f"⚠️ Urlaub (1/4 fehlt): {namen_text}"
+    else:
+        u_farbe = "#ef4444"  # Rot
+        u_titel = f"🚨 ENG (Urlaub {anzahl_fehlende}/4): {namen_text}"
+        
     kalender_events.append({
-        "title": f"🌴 Urlaub: {u['name']}",
-        "start": u['von'].isoformat() if not isinstance(u['von'], str) else u['von'],
-        "end": (u['bis'] + timedelta(days=1)).isoformat() if not isinstance(u['bis'], str) else u['bis'],
-        "backgroundColor": "#ef4444",
-        "borderColor": "#ef4444",
+        "title": u_titel,
+        "start": tag.isoformat(),
+        "end": (tag + timedelta(days=1)).isoformat(),
+        "backgroundColor": u_farbe,
+        "borderColor": u_farbe,
         "allDay": True
     })
 
-# Kalender-Anzeige
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
-
 st.write("---")
 
 # ----------------------------------------------------
-# 2. DAS AKTIVE RÜCKMELDE-SYSTEM
+# 2. CRITICAL UPDATE: EINMALIGES ANWESENHEITS-RÜCKMELDE-SYSTEM
 # ----------------------------------------------------
 st.write("### 📋 Aktuelle Anwesenheits-Abfragen deiner Gruppe")
-abfrage_key = f"{user['gruppe']}_{aktueller_sonntag.strftime('%Y-%m-%d')}"
 
-if abfrage_key in st.session_state.gruppen_abfragen:
-    abfrage = st.session_state.gruppen_abfragen[abfrage_key]
-    st.info(f"➔ Dein Gruppenleiter fragt ab: *Wer ist am Sonntag, den {aktueller_sonntag.strftime('%d.%m.%Y')} da?*")
-    
-    aktueller_status = abfrage['rueckmeldungen'].get(user['name'], "Noch keine Antwort")
-    st.write(f"Dein aktueller Status: *{aktueller_status}*")
-    
-    col_da, col_weg = st.columns(2)
-    with col_da:
-        if st.button("🟢 Ich bin verbindlich DA", key="btn_da"):
-            abfrage['rueckmeldungen'][user['name']] = "🟢 Bin da"
-            st.rerun()
-    with col_weg:
-        if st.button("🔴 Ich bin NICHT da", key="btn_weg"):
-            abfrage['rueckmeldungen'][user['name']] = "🔴 Nicht da"
-            st.rerun()
-else:
-    st.write("Für diesen Sonntag steht aktuell keine aktive Abfrage von deinem Gruppenleiter an.")
-
-st.write("---")
-
-# ----------------------------------------------------
-# 3. KARTEN-LAYOUT FÜR LEITER-WERKZEUGE & URLAUB
-# ----------------------------------------------------
-col_box1, col_box2 = st.columns(2)
-
-with col_box1:
-    if user['rolle'] in ["Chef", "Teamleiter"]:
-        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-        st.subheader(f"🛠️ Leiter-Werkzeuge ({user['gruppe']})")
+# Wir suchen nach JEDER aktiven Abfrage, um zu sehen, ob der Nutzer antworten muss
+abfragen_gefunden = False
+for k_abfrage, v_abfrage in list(st.session_state.gruppen_abfragen.items()):
+    # Betrifft diese Abfrage die Gruppe des angemeldeten Nutzers?
+    if k_abfrage.startswith(user['gruppe']):
+        # Hat dieser Nutzer bereits geantwortet?
+        if user['name'] in v_abfrage['rueckmeldungen']:
+            # WICHTIG: Wenn er schon geantwortet hat, verschwindet die Abfrage für ihn komplett!
+            continue
         
-        if st.button(f"🚀 Abfrage starten für Sonntag, {aktueller_sonntag.strftime('%d.%m.%Y')}"):
-            st.session_state.gruppen_abfragen[abfrage_key] = {'status': 'offen', 'rueckmeldungen': {}}
-            
-            link_zur_app = "https://fecg-ordner.streamlit.app"
-            msg_text = f"📢 FECG Bruchmühlbach Ordner-App\n\nHallo {user['gruppe']}! {user['name']} hat soeben die Anwesenheits-Abfrage für Sonntag gestartet. Bitte tragt euch kurz ein:\n🔗 {link_zur_app}"
-            sende_whatsapp_benachrichtigung(msg_text)
-            
-            st.success("Abfrage freigeschaltet und WhatsApp-Benachrichtigung vorbereitet!")
-            st.rerun()
-            
-        if abfrage_key in st.session_state.gruppen_abfragen:
-            st.write("#### 📊 Rückmeldungen deines Teams:")
-            team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
-            
-            fehlende_leute = 0
-            for t_mitglied in team:
-                status = st.session_state.gruppen_abfragen[abfrage_key]['rueckmeldungen'].get(t_mitglied['name'], "⏳ Keine Rückmeldung")
-                st.text(f"• {t_mitglied['name']}: {status}")
-                if "Nicht da" in status:
-                    fehlende_leute += 1
-                    
-            if fehlende_leute > 0:
-                st.error(f"Es fehlen {fehlende_leute} Person(en)!")
-                if st.button("🚨 Hilfe anfordern: Ersatz suchen"):
-                    st.session_state.ersatz_suchen.append({
-                        'von_gruppe': user['gruppe'],
-                        'datum': aktueller_sonntag,
-                        'anzahl': fehlende_leute,
-                        'helfer': []
-                    })
-                    st.success("Hilferuf gestartet!")
-                    st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.info("Hier haben nur Gruppenleiter Zugriff auf die Auswertung.")
-
-with col_box2:
-    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-    st.subheader("🌴 Abwesenheit eintragen")
-    u_von = st.date_input("Urlaub von:", value=heute, key="u_von")
-    u_bis = st.date_input("Urlaub bis:", value=heute + timedelta(days=7), key="u_bis")
-    if st.button("Urlaub im Kalender eintragen"):
-        st.session_state.urlaube.append({'name': user['name'], 'von': u_von, 'bis': u_bis})
-        st.success("Urlaub erfolgreich eingetragen!")
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.write("---")
-
-# ----------------------------------------------------
-# 4. GRUPPENÜBERGREIFENDE ERSATZSUCHE
-# ----------------------------------------------------
-st.write("### 📢 Gruppenübergreifende Notfall-Suchen")
-aktive_ersatz_suchen = [s for s in st.session_state.ersatz_suchen if user['gruppe'] != s['von_gruppe']]
-
-if not aktive_ersatz_suchen:
-    st.write("Keine offenen Ersatzsuchen aus anderen Gruppen vorhanden.")
-else:
-    for idx, suche in enumerate(st.session_state.ersatz_suchen):
-        if user['gruppe'] != suche['von_gruppe']:
-            st.warning(f"⚠️ *{suche['von_gruppe']}* sucht dringend {suche['anzahl']} Ersatz-Ordner für Sonntag, {suche['datum'].strftime('%d.%m.%Y')}!")
-            st.write(f"Bereits zugesagt: {', '.join(suche['helfer']) if suche['helfer'] else 'Niemand'}")
-            
-            if user['name'] in suche['helfer']:
-                st.success("✅ Du hast hier bereits verbindlich zugesagt!")
-            else:
-                if st.button(f"🤝 Als {user['name']} verbindlich einspringen", key=f"ersatz_{idx}"):
-                    suche['helfer'].append(user['name'])
-                    st.rerun()
+        abfragen_gefunden = True
+        datum_str = k_abfrage.split("_")[1]
+        ziel_datum = datetime.strptime(datum_str, "%Y-%m-%d").date()
+        
+        st.info(f"➔ *Offene Abfrage:* Wer ist am Sonntag, den {ziel_datum.strftime('%d.%m.%Y')} einsatzbereit?")
+        
+        col_da, col_weg = st.columns(2)
+        with col_da:
+            if st.button("🟢 Ich bin verbindlich DA", key=f"da_{k_abfrage}"):
+                v_ab

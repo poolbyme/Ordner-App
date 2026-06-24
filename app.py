@@ -4,7 +4,7 @@ from streamlit_calendar import calendar
 
 st.set_page_config(page_title="Ordner Team App", page_icon="⛪", layout="wide")
 
-# LIVE-SPEICHER INITIALISIEREN
+# 1. LIVE-SPEICHER INITIALISIEREN
 if "mitglieder" not in st.session_state:
     st.session_state.mitglieder = [
         {'name': 'Komjagin Andreas', 'email': 'andreas@kirche.de', 'gruppe': 'Gruppe 1', 'rolle': 'Chef'},
@@ -21,137 +21,167 @@ if "mitglieder" not in st.session_state:
     ]
 
 if "urlaube" not in st.session_state:
-    st.session_state.urlaube = [
-        {'name': 'Hauf Valintin', 'email': 'valintin@kirche.de', 'von': '2026-06-22', 'bis': '2026-06-25'},
-        {'name': 'Geier Enriko', 'email': 'enriko@kirche.de', 'von': '2026-06-23', 'bis': '2026-06-26'}
-    ]
+    st.session_state.urlaube = []
 
-if "anfragen" not in st.session_state:
-    st.session_state.anfragen = []
+# Speicher für die aktiven Sonntags-Abfragen der Gruppenleiter
+if "gruppen_abfragen" not in st.session_state:
+    st.session_state.gruppen_abfragen = {} # Format: { 'Gruppe X_2026-06-28': {'status': 'offen', 'rueckmeldungen': { 'Name': 'Da' } } }
+
+# Speicher für die gruppenübergreifende Ersatzsuche
+if "ersatz_suchen" not in st.session_state:
+    st.session_state.ersatz_suchen = []
 
 def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
     wochen = (datum - basis_datum).days // 7
     return ["Gruppe 1", "Gruppe 2", "Gruppe 3"][wochen % 3]
 
-st.title("⛪ Ordner-Team Kalender & Einsatzplan")
+st.title("⛪ Ordner-Team Planer & Präsenz-Check")
 
-st.sidebar.header("🔐 Login")
-user_email = st.sidebar.text_input("Deine E-Mail:", value="andreas@kirche.de").strip()
-user = next((m for m in st.session_state.mitglieder if m['email'] == user_email), None)
+# TEST-LOGIN IN DER SEITENLEISTE
+st.sidebar.header("🔐 Ansicht wechseln")
+mitarbeiter_namen = [m['name'] for m in st.session_state.mitglieder]
+ausgewaehlter_name = st.sidebar.selectbox("Du agierst gerade als:", mitarbeiter_namen, index=0)
+user = next((m for m in st.session_state.mitglieder if m['name'] == ausgewaehlter_name), None)
 
-if user:
-    st.sidebar.success(f"Hallo {user['name']}!\n{user['rolle']} ({user['gruppe']})")
+st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}")
+
+# ----------------------------------------------------
+# 1. HAUPT-ÜBERSICHT & KALENDER
+# ----------------------------------------------------
+st.write("### 📅 Dienstplan-Übersicht")
+heute = datetime.now().date()
+aktueller_sonntag = heute - timedelta(days=(heute.weekday() + 1) % 7)
+dienst_gruppe = get_dienst_gruppe(aktueller_sonntag)
+
+st.success(f"📢 *Aktuelle Woche:* {dienst_gruppe} hat regulären Dienst.")
+
+# Kalender-Events zusammenbauen
+kalender_events = []
+start_sonntag = datetime(2026, 6, 21).date()
+for i in range(8):
+    w_start = start_sonntag + timedelta(weeks=i)
+    w_ende = w_start + timedelta(days=6)
+    grp = get_dienst_gruppe(w_start)
+    kalender_events.append({
+        "title": f"🛠️ Dienst: {grp}",
+        "start": w_start.isoformat(),
+        "end": (w_ende + timedelta(days=1)).isoformat(),
+        "backgroundColor": "#28a745" if grp == "Gruppe 1" else ("#17a2b8" if grp == "Gruppe 2" else "#ffc107"),
+        "allDay": True
+    })
+
+# Urlaube in Kalender eintragen
+for u in st.session_state.urlaube:
+    kalender_events.append({
+        "title": f"🌴 Urlaub: {u['name']}",
+        "start": u['von'].isoformat() if not isinstance(u['von'], str) else u['von'],
+        "end": (u['bis'] + timedelta(days=1)).isoformat() if not isinstance(u['bis'], str) else u['bis'],
+        "backgroundColor": "#dc3545",
+        "allDay": True
+    })
+
+calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="calendar")
+
+st.write("---")
+
+# ----------------------------------------------------
+# 2. DAS AKTIVE RÜCKMELDE-SYSTEM (Für den Sonntag)
+# ----------------------------------------------------
+st.write("### 📋 Aktuelle Anwesenheits-Abfragen deiner Gruppe")
+
+# Prüfen, ob für die Gruppe des Nutzers eine Abfrage läuft
+abfrage_key = f"{user['gruppe']}_{aktueller_sonntag.strftime('%Y-%m-%d')}"
+
+if abfrage_key in st.session_state.gruppen_abfragen:
+    abfrage = st.session_state.gruppen_abfragen[abfrage_key]
+    st.info(f"➔ Dein Gruppenleiter fragt ab: *Wer ist am Sonntag, den {aktueller_sonntag.strftime('%d.%m.%Y')} da?*")
     
-    st.write("### 📅 Dein Team-Kalender")
-    st.info("Grün = Alles super | Gelb = 1 Person fehlt | Rot = Mindestens 2 Personen fehlen | Blau = Eingetragene Urlaube")
+    # Eigene Rückmeldung abgeben
+    aktueller_status = abfrage['rueckmeldungen'].get(user['name'], "Noch keine Antwort")
+    st.write(f"Dein aktueller Status: *{aktueller_status}*")
     
-    kalender_events = []
-    start_sonntag = datetime(2026, 6, 21).date()
-    
-    for i in range(12):
-        woche_start = start_sonntag + timedelta(weeks=i)
-        woche_ende = woche_start + timedelta(days=6)
-        aktive_gruppe = get_dienst_gruppe(woche_start)
-        
-        g_mitglieder = [m['email'] for m in st.session_state.mitglieder if m['gruppe'] == aktive_gruppe]
-        abwesende = 0
-        for url in st.session_state.urlaube:
-            if url['email'] in g_mitglieder:
-                u_von = datetime.strptime(url['von'], '%Y-%m-%d').date() if isinstance(url['von'], str) else url['von']
-                u_bis = datetime.strptime(url['bis'], '%Y-%m-%d').date() if isinstance(url['bis'], str) else url['bis']
-                if not (u_von > woche_ende or u_bis < woche_start):
-                    abwesende += 1
-        
-        if abwesende == 0:
-            farbe = "#28a745"
-            titel = f"🟢 {aktive_gruppe} Dienst"
-        elif abwesende == 1:
-            farbe = "#ffc107"
-            titel = f"🟡 {aktive_gruppe} (1 fehlt!)"
-        else:
-            farbe = "#dc3545"
-            titel = f"🔴 {aktive_gruppe} ({abwesende} fehlen!)"
-            
-        kalender_events.append({
-            "title": titel,
-            "start": woche_start.isoformat(),
-            "end": (woche_ende + timedelta(days=1)).isoformat(),
-            "backgroundColor": farbe,
-            "borderColor": farbe,
-            "allDay": True
-        })
-
-    for url in st.session_state.urlaube:
-        u_von = datetime.strptime(url['von'], '%Y-%m-%d').date() if isinstance(url['von'], str) else url['von']
-        u_bis = datetime.strptime(url['bis'], '%Y-%m-%d').date() if isinstance(url['bis'], str) else url['bis']
-        kalender_events.append({
-            "title": f"🌴 Urlaub: {url['name']}",
-            "start": u_von.isoformat(),
-            "end": (u_bis + timedelta(days=1)).isoformat(),
-            "backgroundColor": "#17a2b8",
-            "borderColor": "#17a2b8",
-            "allDay": True
-        })
-
-    kalender_optionen = {
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
-        "initialView": "dayGridMonth",
-        "locale": "de"
-    }
-    calendar(events=kalender_events, options=kalender_optionen, key="team_kalender")
-
-    st.write("---")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🌴 Abwesenheit / Urlaub melden")
-        heute = datetime.now().date()
-        von_tag = st.date_input("Urlaub von:", value=heute, key="u_von")
-        bis_tag = st.date_input("Urlaub bis:", value=heute + timedelta(days=7), key="u_bis")
-        
-        if st.button("Urlaub verbindlich speichern"):
-            st.session_state.urlaube.append({'name': user['name'], 'email': user_email, 'von': von_tag, 'bis': bis_tag})
-            st.success("Dein Urlaub wurde eingetragen!")
+    col_da, col_weg = st.columns(2)
+    with col_da:
+        if st.button("🟢 Ich bin verbindlich DA", key="btn_da"):
+            abfrage['rueckmeldungen'][user['name']] = "🟢 Bin da"
             st.rerun()
-
-    with col2:
-        st.subheader("📢 Offene Hilferufe / Vertretungen")
-        aktive_anfragen = [a for a in st.session_state.anfragen if a['gesucht'] > 0]
-        if not aktive_anfragen:
-            st.write("Aktuell wird keine Hilfe gesucht. Alles stabil!")
-        else:
-            for idx, anfrage in enumerate(st.session_state.anfragen):
-                if anfrage['gesucht'] > 0:
-                    st.warning(f"*Ersatz gesucht für: {anfrage['datum'].strftime('%d.%m.%Y')}* ({anfrage['typ']})")
-                    st.write(f"Noch benötigt: {anfrage['gesucht']} Ordner")
-                    if st.button(f"🤝 Verbindlich zusagen", key=f"help_{idx}"):
-                        anfrage['gesucht'] -= 1
-                        anfrage['helfer'].append(user['name'])
-                        st.rerun()
-
-    if user['rolle'] in ["Chef", "Teamleiter"]:
-        st.write("---")
-        st.subheader("🛠️ Leiter-Menü")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write("*🆘 Neue Suche starten*")
-            anfrage_typ = st.radio("Typ:", ["Ausfall im Team", "Sondereinsatz / Feiertag"])
-            such_datum = st.date_input("Datum:", value=heute + timedelta(days=1))
-            anzahl_helfer = st.number_input("Anzahl Helfer:", min_value=1, max_value=5, value=1)
-            if st.button("Anfrage losschicken"):
-                st.session_state.anfragen.append({'typ': anfrage_typ, 'datum': such_datum, 'gesucht': anzahl_helfer, 'helfer': []})
-                st.success("Anfrage aktiv!")
-                st.rerun()
-        with c2:
-            if user['rolle'] == "Chef":
-                st.write("*➕ Neuen Mitarbeiter anlegen*")
-                n_name = st.text_input("Name:")
-                n_email = st.text_input("E-Mail:")
-                n_grp = st.selectbox("Gruppe:", ["Gruppe 1", "Gruppe 2", "Gruppe 3"])
-                if st.button("Mitarbeiter speichern"):
-                    st.session_state.mitglieder.append({'name': n_name, 'email': n_email, 'gruppe': n_grp, 'rolle': 'Mitarbeiter'})
-                    st.success("Gespeichert!")
-                    st.rerun()
+    with col_weg:
+        if st.button("🔴 Ich bin NICHT da", key="btn_weg"):
+            abfrage['rueckmeldungen'][user['name']] = "🔴 Nicht da"
+            st.rerun()
 else:
-    st.sidebar.error("E-Mail nicht im System.")
+    st.write("Für diesen Sonntag steht aktuell keine aktive Abfrage von deinem Gruppenleiter an.")
+
+st.write("---")
+
+# ----------------------------------------------------
+# 3. INTERNES GRUPPENLEITER- & CHEF-WERKZEUG
+# ----------------------------------------------------
+if user['rolle'] in ["Chef", "Teamleiter"]:
+    st.subheader(f"🛠️ Leiter-Werkzeuge für die {user['gruppe']}")
+    
+    # Aktion A: Abfrage starten
+    if st.button(f"🚀 Abfrage starten für Sonntag, {aktueller_sonntag.strftime('%d.%m.%Y')}"):
+        st.session_state.gruppen_abfragen[abfrage_key] = {'status': 'offen', 'rueckmeldungen': {}}
+        st.success("Abfrage wurde für deine Gruppenmitglieder freigeschaltet!")
+        st.rerun()
+        
+    # Ergebnisse der eigenen Gruppe sehen
+    if abfrage_key in st.session_state.gruppen_abfragen:
+        st.write("#### 📊 Aktuelle Rückmeldungen deines Teams:")
+        team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
+        
+        fehlende_leute = 0
+        for t_mitglied in team:
+            status = st.session_state.gruppen_abfragen[abfrage_key]['rueckmeldungen'].get(t_mitglied['name'], "⏳ Keine Rückmeldung")
+            st.text(f"• {t_mitglied['name']}: {status}")
+            if "Nicht da" in status:
+                fehlende_leute += 1
+                
+        # Aktion B: Wenn Leute fehlen -> Ersatz suchenknopf freischalten!
+        if fehlende_leute > 0:
+            st.error(f"Achtung: Es haben sich bereits {fehlende_leute} Person(en) für Sonntag abgemeldet!")
+            if st.button("🚨 Hilfe anfordern: Ersatz in anderen Gruppen suchen"):
+                st.session_state.ersatz_suchen.append({
+                    'von_gruppe': user['gruppe'],
+                    'datum': aktueller_sonntag,
+                    'anzahl': fehlende_leute,
+                    'helfer': []
+                })
+                st.success("Hilferuf wurde gruppenübergreifend an alle gestartet!")
+                st.rerun()
+
+st.write("---")
+
+# ----------------------------------------------------
+# 4. GRUPPENÜBERGREIFENDE ERSATZSUCHE (Der "Verbindliche Zusage"-Knopf)
+# ----------------------------------------------------
+st.write("### 📢 Gruppenübergreifende Notfall-Suchen")
+if not st.session_state.ersatz_suchen:
+    st.write("Keine offenen Ersatzsuchen aus anderen Gruppen vorhanden.")
+else:
+    for idx, suche in enumerate(st.session_state.ersatz_suchen):
+        if user['gruppe'] != suche['von_gruppe']: # Man sieht nur Suchen ANDERER Gruppen
+            st.warning(f"⚠️ *{suche['von_gruppe']}* sucht dringend {suche['anzahl']} Ersatz-Ordner für Sonntag, {suche['datum'].strftime('%d.%m.%Y')}!")
+            st.write(f"Bereits zugesagt: {', '.join(suche['helfer']) if suche['helfer'] else 'Niemand'}")
+            
+            if user['name'] in suche['helfer']:
+                st.success("✅ Du hast hier bereits verbindlich zugesagt!")
+            else:
+                if st.button(f"🤝 Als {user['name']} verbindlich für {suche['von_gruppe']} einspringen", key=f"ersatz_{idx}"):
+                    suche['helfer'].append(user['name'])
+                    st.success("Danke! Deine Zusage ist verbindlich hinterlegt.")
+                    st.rerun()
+
+# ----------------------------------------------------
+# 5. LANGFRISTIGER URLAUB (Eigener Bereich)
+# ----------------------------------------------------
+st.write("---")
+st.subheader("🌴 Sommerurlaub / Langfristige Abwesenheit eintragen")
+u_von = st.date_input("Urlaub von:", value=heute, key="u_von")
+u_bis = st.date_input("Urlaub bis:", value=heute + timedelta(days=7), key="u_bis")
+if st.button("Urlaub im Kalender eintragen"):
+    st.session_state.urlaube.append({'name': user['name'], 'email': user['email'], 'von': u_von, 'bis': u_bis})
+    st.success("Urlaub erfolgreich eingetragen und rot im Kalender markiert!")
+    st.rerun()

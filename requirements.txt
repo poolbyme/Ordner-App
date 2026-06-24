@@ -1,2 +1,2 @@
-streamlit
 streamlit-calendar
+streamlit-cookies-controller

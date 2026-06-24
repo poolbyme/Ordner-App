@@ -57,16 +57,11 @@ st.markdown("""
         border-top: 5px solid #1e3a8a;
         margin-bottom: 20px;
     }
-    .section-divider {
-        margin-top: 20px;
-        margin-bottom: 20px;
-        border-bottom: 2px dashed #cbd5e1;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# MITGLIEDER SPEICHERN MIT GEBURTSTAGS-SUPPORT
+# MITGLIEDER DATENBANK
 # ----------------------------------------------------
 DB_FILE = "mitglieder_data.json"
 
@@ -92,19 +87,13 @@ def speichere_mitglieder(liste):
 if os.path.exists(DB_FILE):
     with open(DB_FILE, "r", encoding="utf-8") as f:
         st.session_state.mitglieder = json.load(f)
-        for m in st.session_state.mitglieder:
-            if 'telefon' not in m: m['telefon'] = ''
-            if 'anschrift' not in m: m['anschrift'] = ''
-            if 'infos' not in m: m['infos'] = ''
-            if 'geburtstag' not in m: m['geburtstag'] = ''
 else:
     st.session_state.mitglieder = hole_standard_liste()
     speichere_mitglieder(st.session_state.mitglieder)
 
-# Weitere Speicher initialisieren
+# Speicherstrukturen initialisieren
 if "urlaube" not in st.session_state: st.session_state.urlaube = []
 if "gruppen_abfragen" not in st.session_state: st.session_state.gruppen_abfragen = {}
-if "ersatz_suchen" not in st.session_state: st.session_state.ersatz_suchen = []
 if "leiter_chat" not in st.session_state: st.session_state.leiter_chat = [{'von': 'System', 'text': 'Willkommen im internen Chat!', 'zeit': 'Info'}]
 if "eingeloggt_als" not in st.session_state: st.session_state.eingeloggt_als = None
 if "passwort_aendern_fuer" not in st.session_state: st.session_state.passwort_aendern_fuer = None
@@ -112,9 +101,8 @@ if "show_abfrage_form" not in st.session_state: st.session_state.show_abfrage_fo
 if "abfrage_typ" not in st.session_state: st.session_state.abfrage_typ = None
 if "show_urlaub_form" not in st.session_state: st.session_state.show_urlaub_form = False
 
-# Session State Indizes für gegenseitiges Zurücksetzen der Selectboxen
-if "index_mein_team" not in st.session_state: st.session_state.index_mein_team = 0
-if "index_andere" not in st.session_state: st.session_state.index_andere = 0
+# Zustände für die Auswahllisten (Wichtig für das automatische Verstecken/Ersetzen!)
+if "gewaehltes_mitglied" not in st.session_state: st.session_state.gewaehltes_mitglied = None
 
 def get_dienst_gruppe(datum):
     basis_datum = datetime(2026, 6, 21).date()
@@ -170,11 +158,11 @@ if st.session_state.eingeloggt_als is None:
 user = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.eingeloggt_als), None)
 
 # ----------------------------------------------------
-# ERSTMALIGE DATENERFASSUNG (Zwingend nach PW-Wechsel)
+# ERSTMALIGE DATENERFASSUNG
 # ----------------------------------------------------
 if user['telefon'].strip() == "" and user['anschrift'].strip() == "" and user['geburtstag'].strip() == "":
     st.markdown("<h1 class='main-title'>📝 Kontaktdaten & Geburtstag vervollständigen</h1>", unsafe_allow_html=True)
-    st.info(f"Hallo **{user['name']}**, trage bitte deine Daten ein. Dein Geburtstag wird danach für dein gesamtes Team im Kalender angezeigt!")
+    st.info(f"Hallo **{user['name']}**, trage bitte deine Daten ein. Dein Geburtstag wird danach im Kalender angezeigt!")
     
     with st.form("erst_erfassung_form"):
         init_tel = st.text_input("📱 Deine Telefonnummer:", placeholder="z.B. 0176 / 12345678")
@@ -194,7 +182,7 @@ if user['telefon'].strip() == "" and user['anschrift'].strip() == "" and user['g
     st.stop()
 
 # ----------------------------------------------------
-# SIDEBAR NAVIGATION & MENÜS
+# SIDEBAR NAVIGATION
 # ----------------------------------------------------
 st.markdown("<h1 class='main-title'>⛪ FECG Bruchmühlbach — Ordner-Zentrale</h1>", unsafe_allow_html=True)
 
@@ -205,14 +193,13 @@ if user.get('geburtstag'):
     geb_formatiert = datetime.strptime(user['geburtstag'], "%Y-%m-%d").strftime("%d.%m.%Y")
 st.sidebar.info(f"Rolle: {user['rolle']}\nTeam: {user['gruppe']}\nGeburtstag: {geb_formatiert}")
 
-# Profiländerung (Sidebar)
 with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
     mein_neues_tel = st.text_input("📱 Telefonnummer:", value=user.get('telefon', ''), key="my_own_tel")
     mein_neues_adr = st.text_input("🏠 Anschrift:", value=user.get('anschrift', ''), key="my_own_adr")
     aktueller_geb_date = datetime.strptime(user['geburtstag'], "%Y-%m-%d").date() if user.get('geburtstag') else datetime(1995, 1, 1).date()
-    mein_neuer_geb = st.date_input("📅 Geburtstag:", value=aktueller_geb_date, key="my_own_geb", min_value=datetime(1940, 1, 1).date())
+    mein_neuer_geb = st.date_input("📅 Geburtstag:", value=aktueller_geb_date, key="my_own_geb")
     
-    if st.button("💾 Profil aktualisieren", use_container_width=True, key="save_my_profile"):
+    if st.button("💾 Profil aktualisieren", use_container_width=True):
         user['telefon'] = mein_neues_tel
         user['anschrift'] = mein_neues_adr
         user['geburtstag'] = mein_neuer_geb.strftime("%Y-%m-%d")
@@ -220,78 +207,64 @@ with st.sidebar.expander("⚙️ Meine Profildaten ändern"):
         st.sidebar.success("Daten aktualisiert!")
         st.rerun()
 
-# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN" (Mit gegenseitigem Ausblenden)
+# UNTERMENÜ: "TEAMVERWALTUNG & STAMMDATEN" (AUTOMATISCHES ERSETZEN & VERSTECKEN)
 st.sidebar.write("---")
 with st.sidebar.expander("👥 Teamverwaltung & Stammdaten", expanded=True):
-    person_ausgewaehlt = None
     
-    # Listen generieren
+    # Listen aufbereiten
     eigenes_team = [m for m in st.session_state.mitglieder if m['gruppe'] == user['gruppe']]
     namen_eigenes_team = ["-- Bitte wählen --"] + sorted([m['name'] for m in eigenes_team])
     
     andere_mitglieder = [m for m in st.session_state.mitglieder if m['gruppe'] != user['gruppe']]
     namen_andere = ["-- Bitte wählen --"] + sorted([m['name'] for m in andere_mitglieder])
 
-    st.write(f"**🛡️ Mein Team ({user['gruppe']})**")
-    
-    # Funktion für Änderung bei "Mein Team"
-    def change_mein_team():
-        if st.session_state.sel_my_team != "-- Bitte wählen --":
-            st.session_state.index_andere = 0 # Setzt die andere Selectbox zurück
+    # Wenn bereits jemand ausgewählt ist, zeigen wir einen Reset-Button an
+    if st.session_state.gewaehltes_mitglied is not None:
+        if st.button("🔄 Anderes Mitglied suchen", use_container_width=True):
+            st.session_state.gewaehltes_mitglied = None
+            st.rerun()
 
-    wahl_eigenes_team = st.selectbox(
-        "Mitglied aus deinem Team wählen:", 
-        options=namen_eigenes_team, 
-        index=st.session_state.index_mein_team,
-        key="sel_my_team",
-        on_change=change_mein_team
-    )
-
-    if user['rolle'] == "Chef":
-        st.write("**🌍 Alle anderen Ordner-Mitglieder**")
+    # LOGIK: Falls noch niemand gewählt wurde, zeige die Boxen an
+    if st.session_state.gewaehltes_mitglied is None:
         
-        # Funktion für Änderung bei "Alle anderen"
-        def change_andere():
-            if st.session_state.sel_all_members != "-- Bitte wählen --":
-                st.session_state.index_mein_team = 0 # Setzt die Team-Selectbox zurück
+        # 1. EIGENES TEAM BOX
+        st.write(f"**🛡️ Mein Team ({user['gruppe']})**")
+        wahl_team = st.selectbox("Mitglied aus deinem Team wählen:", options=namen_eigenes_team, key="select_team_box")
+        
+        if wahl_team != "-- Bitte wählen --":
+            st.session_state.gewaehltes_mitglied = wahl_team
+            st.rerun()
 
-        wahl_andere = st.selectbox(
-            "Anderes Mitglied wählen:", 
-            options=namen_andere, 
-            index=st.session_state.index_andere,
-            key="sel_all_members",
-            on_change=change_andere
-        )
-    else:
-        wahl_andere = "-- Bitte wählen --"
+        # 2. ALLE ANDEREN MITGLIEDER BOX (Nur sichtbar, wenn oben nichts gewählt wurde und Chef eingeloggt)
+        if user['rolle'] == "Chef":
+            st.write("**🌍 Alle anderen Ordner-Mitglieder**")
+            wahl_andere = st.selectbox("Anderes Mitglied wählen:", options=namen_andere, key="select_andere_box")
+            
+            if wahl_andere != "-- Bitte wählen --":
+                st.session_state.gewaehltes_mitglied = wahl_andere
+                st.rerun()
 
-    # Bestimmen, wer schlussendlich angezeigt werden soll
-    if wahl_eigenes_team != "-- Bitte wählen --":
-        person_ausgewaehlt = wahl_eigenes_team
-    elif wahl_andere != "-- Bitte wählen --":
-        person_ausgewaehlt = wahl_andere
-
-    if person_ausgewaehlt:
-        person_daten = next((m for m in st.session_state.mitglieder if m['name'] == person_ausgewaehlt), None)
+    # DETAILS DETAILSANZEIGE (Wenn jemand ausgewählt wurde, verschwinden die Auswahllisten)
+    if st.session_state.gewaehltes_mitglied:
+        person_daten = next((m for m in st.session_state.mitglieder if m['name'] == st.session_state.gewaehltes_mitglied), None)
         if person_daten:
-            st.markdown("---")
-            st.write(f"**Details für {person_daten['name']}**")
+            st.markdown(f"### 📝 Daten bearbeiten:\n**{person_daten['name']}**")
             p_telefon = st.text_input("📱 Telefonnummer:", value=person_daten.get('telefon', ''), key="edit_tel")
             p_anschrift = st.text_input("🏠 Anschrift:", value=person_daten.get('anschrift', ''), key="edit_adr")
             p_geb_date = datetime.strptime(person_daten['geburtstag'], "%Y-%m-%d").date() if person_daten.get('geburtstag') else datetime(1995, 1, 1).date()
-            p_geb = st.date_input("📅 Geburtstag:", value=p_geb_date, key="edit_geb", min_value=datetime(1940, 1, 1).date())
+            p_geb = st.date_input("📅 Geburtstag:", value=p_geb_date, key="edit_geb")
             p_infos = st.text_area("ℹ️ Notizen:", value=person_daten.get('infos', ''), key="edit_inf")
             
-            if st.button("💾 Änderungen speichern", use_container_width=True, key="save_person_btn"):
+            if st.button("💾 Änderungen speichern", use_container_width=True):
                 person_daten['telefon'] = p_telefon
                 person_daten['anschrift'] = p_anschrift
                 person_daten['geburtstag'] = p_geb.strftime("%Y-%m-%d")
                 person_daten['infos'] = p_infos
                 speichere_mitglieder(st.session_state.mitglieder)
-                st.success("Aktualisiert!")
+                st.success("Änderungen erfolgreich gespeichert!")
                 st.rerun()
 
-# UNTERMENÜ: "INTERNER CHAT" (Sidebar)
+# UNTERMENÜ: "INTERNER CHAT"
 if user['rolle'] in ["Chef", "Teamleiter"]:
     with st.sidebar.expander("💬 Interner Leiter-Chat"):
         for msg in st.session_state.leiter_chat:
@@ -326,12 +299,8 @@ if user['rolle'] in ["Chef", "Teamleiter"]:
                         'telefon': '', 'anschrift': '', 'infos': '', 'geburtstag': ''
                     })
                     speichere_mitglieder(st.session_state.mitglieder)
-                    st.success(f"🎉 **Erfolgreich hinzugefügt!** {neu_name} wurde registriert.")
+                    st.success(f"🎉 **{neu_name}** wurde registriert.")
                     st.rerun()
-                elif not neu_name.strip():
-                    st.error("Bitte gib einen Namen ein.")
-                else:
-                    st.error("Mitglied existiert bereits.")
                 
     with st.sidebar.expander("🗑️ Mitglied entfernen"):
         if user['rolle'] == "Chef":
@@ -353,12 +322,9 @@ if st.sidebar.button("🚪 Abmelden", use_container_width=True):
 
 
 # ====================================================
-# HAUPTSEITE (Fokus auf Kalender, Abfragen & Urlaub)
+# HAUPTSEITE (Kalender, Abfragen & Urlaub)
 # ====================================================
 
-# ----------------------------------------------------
-# 1. DIENSTPLAN- & GEBURTSTAGSKALENDER
-# ----------------------------------------------------
 st.write("### 📅 Dienstplan- & Geburtstagskalender")
 heute = datetime.now().date()
 aktueller_sonntag = heute - timedelta(days=(heute.weekday() + 1) % 7)
@@ -368,13 +334,12 @@ st.success(f"📢 **Aktuelle Woche:** {get_dienst_gruppe(aktueller_sonntag)} hat
 
 kalender_events = []
 
-# Ursprüngliche Dienstplan-Wochen generieren und farblich markieren
+# Dienstplan-Wochen generieren
 for i in range(-4, 150):
     w_sonntag = datetime(2026, 6, 21).date() + timedelta(weeks=i)
     w_samstag = w_sonntag + timedelta(days=6)
     grp = get_dienst_gruppe(w_sonntag)
     
-    # Farblogik basierend auf der Dienstgruppe
     farbe = "#1e3a8a" if "Gruppe 1" in grp else "#8b5cf6" if "Gruppe 2" in grp else "#f97316"
     kalender_events.append({
         "title": f"🛠️ {grp}", 
@@ -385,7 +350,7 @@ for i in range(-4, 150):
         "allDay": True
     })
 
-# Unendliche Geburtstage einbetten (Sichtbar für das eigene Team / Chef sieht alle)
+# Geburtstage einbetten
 aktuelles_jahr = datetime.now().year
 for m in st.session_state.mitglieder:
     if user['rolle'] == "Chef" or m['gruppe'] == user['gruppe']:
@@ -395,19 +360,18 @@ for m in st.session_state.mitglieder:
             except ValueError:
                 continue
             
-            for jahr in range(aktuelles_jahr, aktuelles_jahr + 100):
+            for jahr in range(aktuelles_jahr, aktuelles_jahr + 2):
                 try:
                     geb_aktuell = datetime(jahr, geb_date.month, geb_date.day).date()
                     kalender_events.append({
                         "title": f"🎉 Geb.: {m['name']}",
                         "start": geb_aktuell.isoformat(),
                         "end": (geb_aktuell + timedelta(days=1)).isoformat(),
-                        "backgroundColor": "#eab308", # Gold-Gelb
+                        "backgroundColor": "#eab308", 
                         "borderColor": "#ca8a04",
                         "allDay": True
                     })
                 except ValueError:
-                    # Schalttag-Schutz
                     geb_aktuell = datetime(jahr, 2, 28).date()
                     kalender_events.append({
                         "title": f"🎉 Geb.: {m['name']}",
@@ -418,7 +382,7 @@ for m in st.session_state.mitglieder:
                         "allDay": True
                     })
 
-# Urlaube im Kalender verarbeiten & markieren
+# Urlaube verarbeiten
 urlaubs_tage_zaehler = {}
 for u in st.session_state.urlaube:
     u_mitglied = next((m for m in st.session_state.mitglieder if m['name'] == u['name']), None)
@@ -446,7 +410,7 @@ for tag, namen_liste in urlaubs_tage_zaehler.items():
         "allDay": True
     })
 
-# Kalender rendern - Einmalig am Ende aufgerufen, um Duplicate Keys zu verhindern
+# Kalender rendern (Fehlerfrei gelöst)
 calendar(events=kalender_events, options={"initialView": "dayGridMonth", "locale": "de"}, key="fecg_calendar")
 st.write("---")
 
@@ -485,7 +449,7 @@ if not abfragen_gefunden:
     st.write("✅ Keine offenen Abfragen ausstehend.")
 st.write("---")
 
-# Interaktive Formularboxen am Seitenende
+# Interaktive Formularboxen
 col_box1, col_box2 = st.columns(2)
 with col_box1:
     st.markdown("<div class='card-box'>", unsafe_allow_html=True)

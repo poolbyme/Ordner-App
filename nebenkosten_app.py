@@ -23,8 +23,14 @@ from nebenkosten.modell import (
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
-st.set_page_config(page_title="Nebenkostenabrechnung", page_icon="🏠", layout="wide",
-                   initial_sidebar_state="collapsed")
+# Als Seitensymbol das echte App-Bild, nicht ein Emoji: Legt jemand die Seite
+# ueber „Zum Startbildschirm hinzufuegen" ab, statt sie zu installieren, nimmt
+# Chrome genau dieses Bild - dann steht dort das Haus und nicht das
+# Streamlit-Segel. Fehlt die Datei, bleibt das Emoji.
+_SEITENSYMBOL = design.ICON_GROSS if design.ICON_GROSS.exists() else "🏠"
+
+st.set_page_config(page_title="Nebenkostenabrechnung", page_icon=_SEITENSYMBOL,
+                   layout="wide", initial_sidebar_state="collapsed")
 
 SCHLUESSEL_LABELS = list(SCHLUESSEL.values())
 LABEL_ZU_KEY = {v: k for k, v in SCHLUESSEL.items()}

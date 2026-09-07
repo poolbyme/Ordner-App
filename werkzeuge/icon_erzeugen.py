@@ -16,6 +16,7 @@ ZIEL = Path(__file__).resolve().parents[1] / "static"
 DUNKEL = (14, 43, 71)      # tiefes Blau
 HELL = (23, 106, 148)      # Petrol
 WASSER = (86, 190, 214)    # Tropfenblau
+FLAMME = (245, 176, 65)    # Warmes Gelb für die Gasflamme
 WEISS = (255, 255, 255)
 
 
@@ -41,21 +42,29 @@ def abgerundet(bild: Image.Image, radius_anteil: float = 0.22) -> Image.Image:
     return ergebnis
 
 
+def tropfenform(zeichnung: ImageDraw.ImageDraw, x: float, y: float,
+                radius: float, farbe: tuple) -> None:
+    """Ein Tropfen: Kreis mit aufgesetzter Spitze. Dient auch als Flamme."""
+    zeichnung.ellipse([(x - radius, y - radius), (x + radius, y + radius)], fill=farbe)
+    zeichnung.polygon([(x, y - radius * 2.1),
+                       (x - radius * 0.9, y + radius * 0.12),
+                       (x + radius * 0.9, y + radius * 0.12)], fill=farbe)
+
+
 def haus(zeichnung: ImageDraw.ImageDraw, g: int) -> None:
-    """Weißes Haus mit einem Wassertropfen in der Mitte."""
+    """Weißes Haus, darin ein Wassertropfen und eine Gasflamme.
+
+    Die beiden Zeichen stehen für das, was die App verteilt: Wasser und Gas.
+    """
     e = g / 100  # eine Einheit = 1 % der Kantenlänge
 
     # Dach
-    zeichnung.polygon([(50 * e, 18 * e), (87 * e, 47 * e), (13 * e, 47 * e)], fill=WEISS)
+    zeichnung.polygon([(50 * e, 14 * e), (88 * e, 44 * e), (12 * e, 44 * e)], fill=WEISS)
     # Wände
-    zeichnung.rounded_rectangle([(22 * e, 45 * e), (78 * e, 84 * e)],
-                                radius=int(5 * e), fill=WEISS)
-    # Tropfen: Kreis mit aufgesetzter Spitze
-    mitte_x, mitte_y, r = 50 * e, 68 * e, 11.5 * e
-    zeichnung.ellipse([(mitte_x - r, mitte_y - r), (mitte_x + r, mitte_y + r)], fill=WASSER)
-    zeichnung.polygon([(mitte_x, mitte_y - 22 * e),
-                       (mitte_x - r * 0.9, mitte_y + 2 * e),
-                       (mitte_x + r * 0.9, mitte_y + 2 * e)], fill=WASSER)
+    zeichnung.rounded_rectangle([(20 * e, 42 * e), (80 * e, 87 * e)],
+                                radius=int(6 * e), fill=WEISS)
+    tropfenform(zeichnung, 37 * e, 68 * e, 8.5 * e, WASSER)
+    tropfenform(zeichnung, 63 * e, 68 * e, 8.5 * e, FLAMME)
 
 
 def erzeuge(groesse: int) -> Image.Image:

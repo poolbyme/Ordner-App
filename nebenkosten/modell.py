@@ -19,6 +19,19 @@ SCHLUESSEL = {
     "direkt": "nur der Mieter",
 }
 
+ABRECHNUNGSARTEN = {
+    "jahr": "Jahresabrechnung",
+    "mietende": "Abrechnung zum Mietende (Auszug)",
+}
+
+# Wie die Differenz zwischen Hauptzähler und Wohnungszählern verteilt wird.
+# Ohne andere Vereinbarung im Mietvertrag ist die Wohnfläche der gesetzliche
+# Maßstab (§ 556a Abs. 1 S. 1 BGB).
+DIFFERENZ_VERTEILUNG = {
+    "flaeche": "nach Wohnfläche",
+    "verbrauch": "nach gemessenem Verbrauch",
+}
+
 # Positionen, die nach herrschender Rechtsprechung nicht auf den Mieter
 # umgelegt werden dürfen. Wird nur für Warnhinweise in der App benutzt.
 NICHT_UMLAGEFAEHIG_STICHWORTE = [
@@ -43,6 +56,9 @@ class Position:
     zaehler_haus_neu: float = 0.0
     zaehler_mieter_alt: float = 0.0
     zaehler_mieter_neu: float = 0.0
+    zaehler_eigen_alt: float = 0.0   # Zähler der selbst bewohnten Wohnung
+    zaehler_eigen_neu: float = 0.0
+    verbrauch_eigen_direkt: float = 0.0
     einheit: str = ""              # z. B. m³, kWh
     arbeitskosten: float = 0.0     # im Betrag enthaltene Lohnkosten (§ 35a EStG)
     zeitanteilig: bool = True      # bei unterjähriger Nutzung anteilig kürzen
@@ -62,9 +78,16 @@ class Position:
         return differenz if differenz > 0 else float(self.verbrauch_mieter)
 
     @property
+    def verbrauch_eigen(self) -> float:
+        """Verbrauch der eigenen Wohnung – nötig für die Zählerdifferenz."""
+        differenz = self.zaehler_eigen_neu - self.zaehler_eigen_alt
+        return differenz if differenz > 0 else float(self.verbrauch_eigen_direkt)
+
+    @property
     def hat_zaehlerstaende(self) -> bool:
         return any([self.zaehler_haus_alt, self.zaehler_haus_neu,
-                    self.zaehler_mieter_alt, self.zaehler_mieter_neu])
+                    self.zaehler_mieter_alt, self.zaehler_mieter_neu,
+                    self.zaehler_eigen_alt, self.zaehler_eigen_neu])
 
 
 @dataclass
@@ -83,6 +106,10 @@ class Stammdaten:
     objekt_strasse: str = ""
     objekt_plz_ort: str = ""
 
+    # Art der Abrechnung
+    abrechnungsart: str = "jahr"   # "jahr" oder "mietende"
+    auszug_am: str = ""            # nur bei abrechnungsart == "mietende"
+
     # Zeiträume
     zeitraum_von: str = ""
     zeitraum_bis: str = ""
@@ -96,6 +123,10 @@ class Stammdaten:
     personen_mieter: float = 0.0
     einheiten_gesamt: float = 2.0
     einheiten_mieter: float = 1.0
+    grundstuecksflaeche: float = 0.0   # nur zur Information im Abrechnungskopf
+
+    # Verteilung der Differenz zwischen Hauptzähler und Wohnungszählern
+    zaehlerdifferenz: str = "flaeche"  # "flaeche" oder "verbrauch"
 
     # Vorauszahlungen
     vorauszahlung_monatlich: float = 0.0
@@ -108,6 +139,14 @@ class Stammdaten:
     ort: str = ""
     datum: str = field(default_factory=lambda: date.today().isoformat())
     anpassung_vorschlagen: bool = True
+
+    @property
+    def ist_endabrechnung(self) -> bool:
+        return self.abrechnungsart == "mietende"
+
+    @property
+    def bezeichnung_abrechnung(self) -> str:
+        return "Abrechnung zum Mietende" if self.ist_endabrechnung else "Jahresabrechnung"
 
     @property
     def vorauszahlung_gesamt(self) -> float:

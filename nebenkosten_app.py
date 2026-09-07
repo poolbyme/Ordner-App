@@ -11,9 +11,13 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from nebenkosten.berechnung import berechne, eur, menge, parse_datum, zahl
+from nebenkosten.berechnung import (
+    berechne, eur, menge, parse_datum, verbrauchsaufteilung, zahl,
+)
+from nebenkosten import speicher
 from nebenkosten.modell import (
-    SCHLUESSEL, Position, Stammdaten, as_dict, from_dict, standard_positionen,
+    ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, SCHLUESSEL, Position, Stammdaten,
+    as_dict, from_dict, standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
@@ -49,6 +53,12 @@ def init_state() -> None:
 
     if "stamm" in st.session_state:
         return
+
+    gespeichert = speicher.laden()
+    if gespeichert:
+        st.session_state.stamm, st.session_state.positionen = gespeichert
+        return
+
     jahr = date.today().year - 1
     st.session_state.stamm = Stammdaten(
         zeitraum_von=date(jahr, 1, 1).isoformat(),
@@ -57,6 +67,15 @@ def init_state() -> None:
         nutzung_bis=date(jahr, 12, 31).isoformat(),
     )
     st.session_state.positionen = standard_positionen()
+
+
+def sichern() -> None:
+    """Alles in die Datei schreiben. Fehler landen sichtbar in der Seitenleiste."""
+    try:
+        speicher.speichern(st.session_state.stamm, st.session_state.positionen)
+        st.session_state["_speicherfehler"] = ""
+    except OSError as fehler:
+        st.session_state["_speicherfehler"] = str(fehler)
 
 
 def neu_zeichnen() -> None:
@@ -112,6 +131,9 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position]) -> list[Posit
             zaehler_haus_neu=vorgaenger.zaehler_haus_neu if vorgaenger else 0.0,
             zaehler_mieter_alt=vorgaenger.zaehler_mieter_alt if vorgaenger else 0.0,
             zaehler_mieter_neu=vorgaenger.zaehler_mieter_neu if vorgaenger else 0.0,
+            zaehler_eigen_alt=vorgaenger.zaehler_eigen_alt if vorgaenger else 0.0,
+            zaehler_eigen_neu=vorgaenger.zaehler_eigen_neu if vorgaenger else 0.0,
+            verbrauch_eigen_direkt=vorgaenger.verbrauch_eigen_direkt if vorgaenger else 0.0,
             einheit=vorgaenger.einheit if vorgaenger else "",
             arbeitskosten=zahlwert(SP_LOHN, vorgaenger.arbeitskosten if vorgaenger else 0.0),
             zeitanteilig=bool(r.get(SP_ZEIT, vorgaenger.zeitanteilig if vorgaenger else True)),
@@ -119,6 +141,11 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position]) -> list[Posit
             hinweis=str(r.get(SP_BELEG) or ""),
         ))
     return positionen
+
+
+def _fmt(iso: str) -> str:
+    d = parse_datum(iso)
+    return d.strftime("%d.%m.%Y") if d else "—"
 
 
 def datum_feld(label: str, wert: str, key: str, hilfe: str | None = None) -> str:
@@ -139,25 +166,49 @@ with st.sidebar:
         help="Zeigt zusätzliche Felder: Lohnkosten für die Steuererklärung des "
              "Mieters, anteilige Abrechnung bei Ein- oder Auszug, Anschreiben.")
 
-    st.header("Speichern")
+    st.header("Gespeichert wird automatisch")
+    stand = speicher.gespeichert_am()
+    if st.session_state.get("_speicherfehler"):
+        st.error(f"Speichern nicht möglich: {st.session_state['_speicherfehler']}")
+    elif stand:
+        st.success(f"Zuletzt gespeichert: {stand.strftime('%d.%m.%Y um %H:%M:%S')}")
+    else:
+        st.info("Wird gespeichert, sobald du etwas eingibst.")
+    st.caption(f"Ordner: `{speicher.ORDNER}`")
+
     st.download_button(
-        "💾 Eingaben als Datei sichern",
+        "💾 Sicherungskopie herunterladen",
         data=json.dumps(as_dict(stamm, st.session_state.positionen),
                         ensure_ascii=False, indent=2).encode("utf-8"),
         file_name=f"nebenkosten_{(parse_datum(stamm.zeitraum_bis) or date.today()).year}.json",
         mime="application/json",
         width="stretch",
-        help="Damit du im nächsten Jahr nicht alles neu tippen musst.",
+        help="Zusätzliche Kopie für den Fall, dass der Rechner kaputtgeht.",
     )
-    hochgeladen = st.file_uploader("📂 Gesicherte Datei öffnen", type="json")
+    hochgeladen = st.file_uploader("📂 Sicherungskopie einlesen", type="json")
     if hochgeladen is not None and st.button("Daten übernehmen", width="stretch"):
         try:
             neu_stamm, neu_pos = from_dict(json.load(hochgeladen))
             st.session_state.stamm = neu_stamm
             st.session_state.positionen = neu_pos
+            sichern()
             neu_zeichnen()
         except Exception as fehler:  # noqa: BLE001 – Nutzerdatei kann alles enthalten
             st.error(f"Datei konnte nicht gelesen werden: {fehler}")
+
+    abgelegt = speicher.archiv()
+    if abgelegt:
+        with st.expander(f"📁 Fertige Abrechnungen ({len(abgelegt)})"):
+            auswahl = st.selectbox("Frühere Abrechnung", abgelegt,
+                                   format_func=lambda pfad: pfad.stem.replace("_", " "))
+            if st.button("Diese Abrechnung öffnen", width="stretch"):
+                geladen = speicher.aus_archiv(auswahl)
+                if geladen:
+                    st.session_state.stamm, st.session_state.positionen = geladen
+                    sichern()
+                    neu_zeichnen()
+                else:
+                    st.error("Die Datei konnte nicht gelesen werden.")
 
     st.divider()
     if st.button("📅 Nächstes Jahr vorbereiten", width="stretch",
@@ -176,6 +227,9 @@ with st.sidebar:
             p.zaehler_haus_alt = p.zaehler_haus_neu = p.zaehler_haus_alt = 0.0
             p.zaehler_mieter_alt = p.zaehler_mieter_neu = 0.0
         stamm.datum = date.today().isoformat()
+        stamm.abrechnungsart = "jahr"
+        stamm.auszug_am = ""
+        sichern()
         neu_zeichnen()
 
     if st.button("🗑️ Alles zurücksetzen", width="stretch"):
@@ -202,34 +256,39 @@ zieht ab, was er schon vorausgezahlt hat, und schreibt daraus ein fertiges PDF.
 **Was die App nicht weiß:** wie hoch deine Rechnungen waren. Die Beträge musst du
 eintippen – die App kennt weder deinen Grundsteuerbescheid noch deine Gasrechnung.
 
-**Das brauchst du dafür (aus dem abzurechnenden Jahr):**
+**Einmal eintragen, dann steht es:** Haus, Wohnflächen, Grundstück und deine Daten
+gibst du nur beim ersten Mal ein. Die App speichert alles automatisch und weiß es
+beim nächsten Mal wieder. Jedes Jahr änderst du nur noch Zeitraum, Zählerstände
+und Rechnungsbeträge.
 
-* Grundsteuerbescheid, Müllgebühren, Wasser-/Abwasserrechnung
+**Das brauchst du für eine Abrechnung:**
+
+* Grundsteuerbescheid, Müllgebühren, Wasser- und Abwasserrechnung
 * Rechnungen für Gas, Öl oder Pellets, Schornsteinfeger, Wartung
 * Gebäude- und Haftpflichtversicherung, Allgemeinstrom, Gartenpflege
-* Zählerstände vom Anfang und vom Ende des Jahres (Haus und Mieterwohnung)
+* Zählerstände am Anfang und am Ende: Hauptzähler, Wohnung des Mieters, deine Wohnung
 * was dein Mieter monatlich an Nebenkostenvorauszahlung überwiesen hat
-
-**Ablauf:** Angaben → Kosten → Zählerstände → Vorauszahlungen → PDF herunterladen.
 
 **Zwei Dinge, die du vorher wissen solltest:**
 
 1. In deinem Mietvertrag muss stehen, dass der Mieter die Nebenkosten trägt.
    Steht da nichts, darfst du ihm auch nichts berechnen.
-2. Die Abrechnung muss innerhalb von 12 Monaten nach dem Ende des Abrechnungsjahres
+2. Die Abrechnung muss innerhalb von 12 Monaten nach dem Ende des Abrechnungszeitraums
    bei ihm ankommen. Für 2025 also bis zum 31.12.2026. Danach kannst du nichts mehr
    nachfordern – ein Guthaben musst du ihm trotzdem auszahlen.
         """
     )
 
-tab_angaben, tab_kosten, tab_zaehler, tab_vz, tab_ergebnis = st.tabs(
-    ["1 · Angaben", "2 · Kosten", "3 · Zählerstände", "4 · Vorauszahlungen", "5 · Abrechnung & PDF"]
+tab_haus, tab_diese, tab_kosten, tab_zaehler, tab_vz, tab_ergebnis = st.tabs(
+    ["1 · Haus (bleibt gleich)", "2 · Diese Abrechnung", "3 · Kosten",
+     "4 · Zählerstände", "5 · Vorauszahlungen", "6 · Fertige Abrechnung"]
 )
 
 # --------------------------------------------------------------------------
-# 1 Angaben
+# 1 Haus und Vermieter – die Daten, die jedes Jahr gleich bleiben
 # --------------------------------------------------------------------------
-with tab_angaben:
+with tab_haus:
+    st.caption("Diese Angaben trägst du einmal ein. Die App merkt sie sich dauerhaft.")
     links, rechts = st.columns(2)
     with links:
         st.subheader("Du als Vermieter")
@@ -243,42 +302,22 @@ with tab_angaben:
             stamm.vermieter_bank = st.text_input("Bank", stamm.vermieter_bank, key="v_bank")
 
     with rechts:
-        st.subheader("Dein Mieter")
-        stamm.mieter_name = st.text_input("Name des Mieters", stamm.mieter_name, key="m_name")
+        st.subheader("Das Haus")
+        stamm.objekt_strasse = st.text_input("Straße und Hausnummer", stamm.objekt_strasse, key="o_str")
+        stamm.objekt_plz_ort = st.text_input("PLZ und Ort", stamm.objekt_plz_ort, key="o_ort")
         stamm.mieter_wohnung = st.text_input(
-            "Welche Wohnung?", stamm.mieter_wohnung, key="m_wohnung",
-            help="Zum Beispiel „Wohnung Obergeschoss“.")
-        stamm.objekt_strasse = st.text_input("Haus: Straße und Hausnummer", stamm.objekt_strasse, key="o_str")
-        stamm.objekt_plz_ort = st.text_input("Haus: PLZ und Ort", stamm.objekt_plz_ort, key="o_ort")
-        if erweitert:
-            stamm.anrede = st.text_input(
-                "Anrede im Brief", stamm.anrede, key="m_anrede",
-                help="Zum Beispiel „Sehr geehrter Herr Müller,“.")
+            "Welche Wohnung ist vermietet?", stamm.mieter_wohnung, key="m_wohnung",
+            help="Zum Beispiel „Wohnung Obergeschoss“. Steht so im PDF.")
+        stamm.grundstuecksflaeche = st.number_input(
+            "Grundstück (m²)", min_value=0.0, step=10.0,
+            value=float(stamm.grundstuecksflaeche), key="g_flaeche",
+            help="Nur zur Information im Kopf der Abrechnung. Für die Verteilung "
+                 "der Kosten wird die Wohnfläche benutzt.")
 
     st.divider()
-    st.subheader("Welches Jahr wird abgerechnet?")
-    s1, s2 = st.columns(2)
-    with s1:
-        stamm.zeitraum_von = datum_feld("Vom", stamm.zeitraum_von, "z_von")
-    with s2:
-        stamm.zeitraum_bis = datum_feld(
-            "Bis", stamm.zeitraum_bis, "z_bis",
-            "Normalerweise ein volles Kalenderjahr, also 01.01. bis 31.12.")
-
-    if erweitert:
-        st.caption("Nur nötig, wenn der Mieter mitten im Jahr ein- oder ausgezogen ist:")
-        m1, m2 = st.columns(2)
-        with m1:
-            stamm.nutzung_von = datum_feld("Mieter wohnt hier seit", stamm.nutzung_von, "n_von")
-        with m2:
-            stamm.nutzung_bis = datum_feld("Mieter wohnt hier bis", stamm.nutzung_bis, "n_bis")
-    else:
-        stamm.nutzung_von, stamm.nutzung_bis = stamm.zeitraum_von, stamm.zeitraum_bis
-
-    st.divider()
-    st.subheader("Wohnfläche und Personen")
+    st.subheader("Wohnflächen und Wohnungen")
     st.caption("Danach werden die meisten Kosten verteilt. Die Wohnfläche steht im Mietvertrag.")
-    g1, g2, g3 = st.columns(3)
+    g1, g2 = st.columns(2)
     with g1:
         stamm.flaeche_gesamt = st.number_input(
             "Wohnfläche des ganzen Hauses (m²)", min_value=0.0, step=1.0,
@@ -287,7 +326,78 @@ with tab_angaben:
         stamm.flaeche_mieter = st.number_input(
             "davon Wohnung des Mieters (m²)", min_value=0.0, step=1.0,
             value=float(stamm.flaeche_mieter), key="f_mieter")
+        if stamm.flaeche_gesamt and stamm.flaeche_mieter:
+            st.caption(f"Anteil des Mieters: "
+                       f"**{zahl(stamm.flaeche_mieter / stamm.flaeche_gesamt * 100)} %**")
     with g2:
+        stamm.einheiten_gesamt = st.number_input(
+            "Wohnungen im Haus", min_value=1.0, step=1.0,
+            value=float(stamm.einheiten_gesamt), key="e_gesamt")
+        stamm.einheiten_mieter = st.number_input(
+            "davon vermietet", min_value=0.0, step=1.0,
+            value=float(stamm.einheiten_mieter), key="e_mieter")
+
+# --------------------------------------------------------------------------
+# 2 Diese Abrechnung – Art, Zeitraum, Mieter
+# --------------------------------------------------------------------------
+with tab_diese:
+    st.subheader("Was für eine Abrechnung ist das?")
+    arten = list(ABRECHNUNGSARTEN)
+    stamm.abrechnungsart = st.radio(
+        "Art der Abrechnung",
+        arten,
+        index=arten.index(stamm.abrechnungsart) if stamm.abrechnungsart in arten else 0,
+        format_func=lambda k: ABRECHNUNGSARTEN[k],
+        horizontal=True,
+        key="art",
+        label_visibility="collapsed",
+        help="Die Auswahl steht auch im PDF über der Abrechnung.")
+
+    if stamm.ist_endabrechnung:
+        st.caption(
+            "Bei einem Auszug wird nur bis zum Auszugstag abgerechnet. Alle Kosten, die "
+            "nicht über einen Zähler laufen, werden dabei tageweise geteilt."
+        )
+        z1, z2 = st.columns(2)
+        with z1:
+            stamm.zeitraum_von = datum_feld("Abrechnung ab", stamm.zeitraum_von, "z_von",
+                                            "In der Regel der 1. Januar des Auszugsjahres – "
+                                            "oder der Einzugstag, wenn er später war.")
+        with z2:
+            stamm.auszug_am = datum_feld("Auszug am", stamm.auszug_am or stamm.zeitraum_bis, "auszug",
+                                         "Letzter Tag des Mietverhältnisses.")
+        stamm.zeitraum_bis = stamm.auszug_am
+        stamm.nutzung_von, stamm.nutzung_bis = stamm.zeitraum_von, stamm.auszug_am
+        st.info("Zum Mietende: Prüfe, ob dein Mieter die Vorauszahlungen wirklich für alle "
+                "Monate gezahlt hat – Tab „Vorauszahlungen“.")
+    else:
+        z1, z2 = st.columns(2)
+        with z1:
+            stamm.zeitraum_von = datum_feld("Vom", stamm.zeitraum_von, "z_von")
+        with z2:
+            stamm.zeitraum_bis = datum_feld(
+                "Bis", stamm.zeitraum_bis, "z_bis",
+                "Normalerweise ein volles Kalenderjahr, also 01.01. bis 31.12.")
+        if erweitert:
+            st.caption("Nur nötig, wenn der Mieter mitten im Jahr eingezogen ist:")
+            m1, m2 = st.columns(2)
+            with m1:
+                stamm.nutzung_von = datum_feld("Mieter wohnt hier seit", stamm.nutzung_von, "n_von")
+            with m2:
+                stamm.nutzung_bis = datum_feld("Mieter wohnt hier bis", stamm.nutzung_bis, "n_bis")
+        else:
+            stamm.nutzung_von, stamm.nutzung_bis = stamm.zeitraum_von, stamm.zeitraum_bis
+
+    st.divider()
+    st.subheader("Dein Mieter")
+    m1, m2 = st.columns(2)
+    with m1:
+        stamm.mieter_name = st.text_input("Name des Mieters", stamm.mieter_name, key="m_name")
+        if erweitert:
+            stamm.anrede = st.text_input(
+                "Anrede im Brief", stamm.anrede, key="m_anrede",
+                help="Zum Beispiel „Sehr geehrter Herr Müller,“.")
+    with m2:
         stamm.personen_gesamt = st.number_input(
             "Personen im Haus insgesamt", min_value=0.0, step=1.0,
             value=float(stamm.personen_gesamt), key="p_gesamt",
@@ -295,13 +405,6 @@ with tab_angaben:
         stamm.personen_mieter = st.number_input(
             "davon beim Mieter", min_value=0.0, step=1.0,
             value=float(stamm.personen_mieter), key="p_mieter")
-    with g3:
-        stamm.einheiten_gesamt = st.number_input(
-            "Wohnungen im Haus", min_value=1.0, step=1.0,
-            value=float(stamm.einheiten_gesamt), key="e_gesamt")
-        stamm.einheiten_mieter = st.number_input(
-            "davon vermietet", min_value=0.0, step=1.0,
-            value=float(stamm.einheiten_mieter), key="e_mieter")
 
     if erweitert:
         st.divider()
@@ -317,10 +420,10 @@ with tab_angaben:
                 value=int(stamm.zahlungsfrist_tage), key="s_frist"))
 
 # --------------------------------------------------------------------------
-# 2 Kosten
+# 3 Kosten
 # --------------------------------------------------------------------------
 with tab_kosten:
-    st.subheader("Was hat das Haus im Abrechnungsjahr gekostet?")
+    st.subheader("Was hat das Haus in diesem Zeitraum gekostet?")
     st.caption(
         "Trag pro Zeile ein, was **für das ganze Haus** angefallen ist – die App rechnet "
         "aus, welcher Anteil auf den Mieter entfällt. Zeilen, die es bei dir nicht gibt, "
@@ -349,7 +452,7 @@ with tab_kosten:
                      "Dein Mieter kann ihn von der Steuer absetzen; die App bescheinigt ihn im PDF."),
             SP_ZEIT: st.column_config.CheckboxColumn(
                 width="small", default=True,
-                help="Bei Ein- oder Auszug mitten im Jahr nur für die Tage abrechnen, "
+                help="Bei Ein- oder Auszug mitten im Zeitraum nur für die Tage abrechnen, "
                      "die der Mieter da war."),
             SP_BELEG: st.column_config.TextColumn(width="large"),
         },
@@ -382,7 +485,7 @@ Betrag, den eine Firma dafür nehmen würde, aber ohne Mehrwertsteuer.
         )
 
 # --------------------------------------------------------------------------
-# 3 Zählerstände
+# 4 Zählerstände
 # --------------------------------------------------------------------------
 with tab_zaehler:
     st.subheader("Zählerstände")
@@ -395,11 +498,27 @@ with tab_zaehler:
         )
     else:
         st.caption(
-            "**Hauszähler** ist der Zähler, über den das ganze Haus läuft. "
-            "**Wohnungszähler** ist der Zähler in der Wohnung deines Mieters. "
-            "Trag jeweils den Stand am Anfang und am Ende des Abrechnungsjahres ein – "
-            "den Verbrauch rechnet die App selbst aus."
+            "Trag für jeden Zähler den Stand am Anfang und am Ende des Abrechnungszeitraums "
+            "ein – den Verbrauch rechnet die App aus. **Hauptzähler** ist der Zähler fürs "
+            "ganze Haus, dazu die Zähler der beiden Wohnungen."
         )
+        st.radio(
+            "Der Hauptzähler zeigt mehr an als die Wohnungszähler zusammen. Wie soll diese "
+            "Differenz verteilt werden?",
+            list(DIFFERENZ_VERTEILUNG),
+            index=list(DIFFERENZ_VERTEILUNG).index(stamm.zaehlerdifferenz)
+            if stamm.zaehlerdifferenz in DIFFERENZ_VERTEILUNG else 0,
+            format_func=lambda k: DIFFERENZ_VERTEILUNG[k],
+            horizontal=True,
+            key="differenz_art",
+            help="Die Differenz entsteht durch Messtoleranz, den Gartenwasserhahn oder "
+                 "undichte Leitungen. Sie darf nicht allein dem Mieter angelastet werden. "
+                 "Ohne besondere Vereinbarung im Mietvertrag ist die Wohnfläche der "
+                 "gesetzliche Maßstab (§ 556a BGB); nach gemessenem Verbrauch ist ebenfalls "
+                 "üblich. Trägst du deinen eigenen Zähler nicht ein, bleibt die ganze "
+                 "Differenz bei dir.")
+        stamm.zaehlerdifferenz = st.session_state["differenz_art"]
+
     for i, p in verbrauchszeilen:
         with st.container(border=True):
             kopf, einheit_spalte = st.columns([3, 1])
@@ -408,49 +527,73 @@ with tab_zaehler:
                 "Einheit", p.einheit or "m³", key=f"zae{i}_einheit",
                 help="Was zählt der Zähler? Bei Wasser m³, bei Strom kWh.")
 
-            haus, wohnung = st.columns(2)
+            haus, wohnung, eigen = st.columns(3)
             with haus:
-                st.markdown("Hauszähler")
-                h1, h2 = st.columns(2)
-                p.zaehler_haus_alt = h1.number_input(
-                    "Stand am Jahresanfang", min_value=0.0, step=1.0,
+                st.markdown("**Hauptzähler (ganzes Haus)**")
+                p.zaehler_haus_alt = st.number_input(
+                    "Stand am Anfang", min_value=0.0, step=1.0,
                     value=float(p.zaehler_haus_alt), key=f"zae{i}_haus_alt")
-                p.zaehler_haus_neu = h2.number_input(
-                    "Stand am Jahresende", min_value=0.0, step=1.0,
+                p.zaehler_haus_neu = st.number_input(
+                    "Stand am Ende", min_value=0.0, step=1.0,
                     value=float(p.zaehler_haus_neu), key=f"zae{i}_haus_neu")
             with wohnung:
-                st.markdown("Wohnungszähler des Mieters")
-                w1, w2 = st.columns(2)
-                p.zaehler_mieter_alt = w1.number_input(
-                    "Stand am Jahresanfang ", min_value=0.0, step=1.0,
+                st.markdown("**Wohnung des Mieters**")
+                p.zaehler_mieter_alt = st.number_input(
+                    "Stand am Anfang ", min_value=0.0, step=1.0,
                     value=float(p.zaehler_mieter_alt), key=f"zae{i}_m_alt")
-                p.zaehler_mieter_neu = w2.number_input(
-                    "Stand am Jahresende ", min_value=0.0, step=1.0,
+                p.zaehler_mieter_neu = st.number_input(
+                    "Stand am Ende ", min_value=0.0, step=1.0,
                     value=float(p.zaehler_mieter_neu), key=f"zae{i}_m_neu")
+            with eigen:
+                st.markdown("**Deine eigene Wohnung**")
+                p.zaehler_eigen_alt = st.number_input(
+                    "Stand am Anfang  ", min_value=0.0, step=1.0,
+                    value=float(p.zaehler_eigen_alt), key=f"zae{i}_e_alt")
+                p.zaehler_eigen_neu = st.number_input(
+                    "Stand am Ende  ", min_value=0.0, step=1.0,
+                    value=float(p.zaehler_eigen_neu), key=f"zae{i}_e_neu")
 
             with st.expander("Kein Zähler vorhanden? Verbrauch direkt eintragen"):
-                d1, d2 = st.columns(2)
+                d1, d2, d3 = st.columns(3)
                 p.verbrauch_gesamt = d1.number_input(
-                    "Verbrauch des ganzen Hauses", min_value=0.0, step=1.0,
+                    "Verbrauch ganzes Haus", min_value=0.0, step=1.0,
                     value=float(p.verbrauch_gesamt), key=f"zae{i}_v_haus",
                     help="Steht auf der Jahresrechnung des Versorgers.")
                 p.verbrauch_mieter = d2.number_input(
-                    "davon die Mieterwohnung", min_value=0.0, step=1.0,
+                    "Verbrauch Mieterwohnung", min_value=0.0, step=1.0,
                     value=float(p.verbrauch_mieter), key=f"zae{i}_v_mieter")
-                st.caption("Diese Felder werden nur benutzt, wenn oben keine Zählerstände stehen.")
+                p.verbrauch_eigen_direkt = d3.number_input(
+                    "Verbrauch deine Wohnung", min_value=0.0, step=1.0,
+                    value=float(p.verbrauch_eigen_direkt), key=f"zae{i}_v_eigen")
+                st.caption("Diese Felder gelten nur, wenn oben keine Zählerstände stehen.")
 
             if p.verbrauch_haus > 0:
-                anteil = p.verbrauch_wohnung / p.verbrauch_haus * 100
-                st.success(
-                    f"Verbrauch Haus **{menge(p.verbrauch_haus)} {p.einheit}**, "
-                    f"davon Mieter **{menge(p.verbrauch_wohnung)} {p.einheit}** "
-                    f"= **{zahl(anteil)} %**"
-                )
+                aufteilung = verbrauchsaufteilung(p, stamm)
+                anteil = aufteilung.menge_mieter / p.verbrauch_haus * 100
+                einheit = p.einheit
+                if aufteilung.differenz > 0:
+                    st.success(
+                        f"Hauptzähler **{menge(p.verbrauch_haus)} {einheit}** · "
+                        f"Mieter **{menge(aufteilung.mieter_verbrauch)}** · "
+                        f"du **{menge(aufteilung.eigen_verbrauch)}** · "
+                        f"Differenz **{menge(aufteilung.differenz)}**, davon "
+                        f"{menge(aufteilung.differenz_mieter)} für den Mieter "
+                        f"({aufteilung.differenz_text}) → angerechnet "
+                        f"**{menge(aufteilung.menge_mieter)} {einheit}** = **{zahl(anteil)} %**"
+                    )
+                else:
+                    st.success(
+                        f"Hauptzähler **{menge(p.verbrauch_haus)} {einheit}**, davon Mieter "
+                        f"**{menge(aufteilung.menge_mieter)} {einheit}** = **{zahl(anteil)} %**"
+                    )
+                    if aufteilung.eigen_verbrauch <= 0:
+                        st.caption("Trag auch den Zähler deiner eigenen Wohnung ein – sonst "
+                                   "trägst du die gesamte Differenz zum Hauptzähler allein.")
             else:
                 st.warning("Noch kein Verbrauch erkennbar – bitte die Zählerstände eintragen.")
 
 # --------------------------------------------------------------------------
-# 4 Vorauszahlungen
+# 5 Vorauszahlungen
 # --------------------------------------------------------------------------
 with tab_vz:
     st.subheader("Was hat dein Mieter schon gezahlt?")
@@ -499,13 +642,17 @@ with tab_vz:
             "Im PDF ankündigen, dass die Vorauszahlung angepasst wird",
             value=stamm.anpassung_vorschlagen, key="anpassung",
             help="Sinnvoll, wenn die bisherige Vorauszahlung deutlich zu niedrig oder "
-                 "zu hoch war. Die App schlägt einen Betrag vor.")
+                 "zu hoch war. Die App schlägt einen Betrag vor. Bei einer Abrechnung "
+                 "zum Mietende brauchst du das nicht.")
 
 # --------------------------------------------------------------------------
-# 5 Ergebnis
+# 6 Ergebnis
 # --------------------------------------------------------------------------
 with tab_ergebnis:
     ergebnis = berechne(stamm, st.session_state.positionen)
+    st.caption(f"{stamm.bezeichnung_abrechnung} für "
+               f"{stamm.mieter_name or 'deinen Mieter'} · "
+               f"{_fmt(stamm.zeitraum_von)} bis {_fmt(stamm.zeitraum_bis)}")
 
     for fehler in ergebnis.fehler:
         st.error(fehler)
@@ -551,7 +698,7 @@ with tab_ergebnis:
             st.caption(f"Der Mieter hat {ergebnis.tage_nutzung} von {ergebnis.tage_zeitraum} Tagen "
                        "hier gewohnt – so viel wurde berechnet.")
     with e2:
-        if ergebnis.empfehlung_vorauszahlung:
+        if ergebnis.empfehlung_vorauszahlung and not stamm.ist_endabrechnung:
             st.caption(f"Passende Vorauszahlung ab jetzt: **{eur(ergebnis.empfehlung_vorauszahlung)} €** "
                        "im Monat.")
 
@@ -561,16 +708,25 @@ with tab_ergebnis:
     elif not ergebnis.zeilen:
         st.info("Ohne Kosten gibt es nichts abzurechnen.")
     else:
-        st.download_button(
-            "📄 Abrechnung als PDF herunterladen",
+        if st.download_button(
+            "📄 Abrechnung als PDF speichern",
             data=erzeuge_pdf(stamm, ergebnis),
             file_name=dateiname(stamm),
             mime="application/pdf",
             type="primary",
             width="stretch",
-        )
+        ):
+            try:
+                abgelegt = speicher.archivieren(stamm, st.session_state.positionen)
+                st.success(f"Abrechnung abgelegt unter `{abgelegt.name}` – "
+                           "du findest sie in der Seitenleiste wieder.")
+            except OSError as fehler:
+                st.warning(f"Ablegen nicht möglich: {fehler}")
         st.caption(
-            "Vor dem Aushändigen kurz prüfen: Namen, Jahr, Beträge, IBAN. "
+            "Vor dem Aushändigen kurz prüfen: Namen, Zeitraum, Beträge, IBAN. "
             "Das PDF ausdrucken, unterschreiben und dem Mieter geben – "
             "am besten mit Kopien der Rechnungen."
         )
+
+# Nach jeder Eingabe alles dauerhaft sichern.
+sichern()

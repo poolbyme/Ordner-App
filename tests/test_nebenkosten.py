@@ -227,6 +227,90 @@ def test_pdf_mit_zaehlerstaenden():
     assert daten.startswith(b"%PDF") and len(daten) > 1000
 
 
+# --- Zählerdifferenz zwischen Hauptzähler und Wohnungszählern ---------------
+
+def wasserzaehler(**abweichungen) -> Position:
+    werte = dict(bezeichnung="Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³",
+                 zaehler_haus_alt=1000.0, zaehler_haus_neu=1200.0,     # 200 m³
+                 zaehler_mieter_alt=500.0, zaehler_mieter_neu=580.0,   # 80 m³
+                 zaehler_eigen_alt=200.0, zaehler_eigen_neu=300.0)     # 100 m³
+    werte.update(abweichungen)
+    return Position(**werte)
+
+
+def test_differenz_wird_nach_wohnflaeche_verteilt():
+    # 200 - (80 + 100) = 20 m³ Differenz, Mieter hat 80 von 200 m² = 40 %
+    s = basis_stammdaten()
+    e = berechne(s, [wasserzaehler()])
+    z = e.zeilen[0].zaehler
+    assert z.differenz == 20.0
+    assert z.differenz_mieter == 8.0          # 20 × 40 %
+    assert z.menge_mieter == 88.0             # 80 + 8
+    assert e.summe_anteil == round(600 * 88 / 200, 2)
+    assert "Wohnfläche" in z.differenz_text
+
+
+def test_differenz_wird_nach_verbrauch_verteilt():
+    s = basis_stammdaten(zaehlerdifferenz="verbrauch")
+    z = berechne(s, [wasserzaehler()]).zeilen[0].zaehler
+    assert z.differenz_mieter == round(20 * 80 / 180, 2)
+    assert "gemessenem Verbrauch" in z.differenz_text
+
+
+def test_ohne_eigenen_zaehler_bleibt_die_differenz_beim_vermieter():
+    pos = wasserzaehler(zaehler_eigen_alt=0.0, zaehler_eigen_neu=0.0)
+    e = berechne(basis_stammdaten(), [pos])
+    assert e.zeilen[0].zaehler.differenz == 0.0
+    assert e.summe_anteil == round(600 * 80 / 200, 2)
+
+
+def test_warnung_wenn_wohnungszaehler_mehr_zeigen_als_der_hauptzaehler():
+    pos = wasserzaehler(zaehler_haus_neu=1100.0)   # nur 100 m³ im Haus
+    e = berechne(basis_stammdaten(), [pos])
+    assert any("mehr an als der Hauptzähler" in w for w in e.warnungen)
+    assert e.zeilen[0].zaehler.differenz == 0.0
+
+
+def test_endabrechnung_bei_auszug():
+    s = basis_stammdaten(abrechnungsart="mietende", auszug_am="2025-06-30",
+                         zeitraum_bis="2025-06-30", nutzung_bis="2025-06-30")
+    e = berechne(s, [Position("Grundsteuer", betrag=1000.0)])
+    assert s.ist_endabrechnung and s.bezeichnung_abrechnung == "Abrechnung zum Mietende"
+    assert e.tage_zeitraum == e.tage_nutzung == 181
+    assert e.summe_anteil == 400.0             # voller Zeitraum = volle Umlage
+
+
+def test_speichern_und_laden(tmp_ordner=None):
+    import tempfile
+    from pathlib import Path
+    from nebenkosten import speicher
+
+    with tempfile.TemporaryDirectory() as ordner:
+        original_ordner, original_datei, original_archiv = (
+            speicher.ORDNER, speicher.AKTUELL, speicher.ARCHIV)
+        try:
+            speicher.ORDNER = Path(ordner)
+            speicher.AKTUELL = Path(ordner) / "abrechnung.json"
+            speicher.ARCHIV = Path(ordner) / "archiv"
+
+            assert speicher.laden() is None
+            s = basis_stammdaten(flaeche_gesamt=222.0)
+            positionen = standard_positionen()
+            positionen[0].betrag = 481.0
+            speicher.speichern(s, positionen)
+
+            s2, p2 = speicher.laden()
+            assert s2.flaeche_gesamt == 222.0 and p2[0].betrag == 481.0
+            assert speicher.gespeichert_am() is not None
+
+            speicher.archivieren(s, positionen)
+            assert len(speicher.archiv()) == 1
+            assert speicher.aus_archiv(speicher.archiv()[0])[0].flaeche_gesamt == 222.0
+        finally:
+            speicher.ORDNER, speicher.AKTUELL, speicher.ARCHIV = (
+                original_ordner, original_datei, original_archiv)
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

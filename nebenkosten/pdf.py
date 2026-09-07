@@ -136,10 +136,16 @@ def _kopf(pdf: Abrechnung) -> None:
     pdf.abstand(4)
 
     pdf.zeile("Betriebskostenabrechnung (Nebenkostenabrechnung)", size=14, bold=True, h=8)
-    pdf.zeile(f"Abrechnungszeitraum {_fmt_datum(s.zeitraum_von)} bis {_fmt_datum(s.zeitraum_bis)}", size=10)
+    pdf.zeile(f"{s.bezeichnung_abrechnung} für den Zeitraum "
+              f"{_fmt_datum(s.zeitraum_von)} bis {_fmt_datum(s.zeitraum_bis)}", size=10)
     pdf.abstand(3)
     if s.anrede:
         pdf.zeile(s.anrede, size=10.5)
+        pdf.abstand(1)
+    if s.ist_endabrechnung:
+        ende = f" zum {_fmt_datum(s.auszug_am)}" if s.auszug_am else ""
+        pdf.zeile(f"mit dem Ende des Mietverhältnisses{ende} rechne ich die Betriebskosten "
+                  "für den oben genannten Zeitraum abschließend ab.", size=10.5)
         pdf.abstand(1)
 
 
@@ -154,9 +160,13 @@ def _objektdaten(pdf: Abrechnung, e: Ergebnis) -> None:
                              f"({e.tage_nutzung} von {e.tage_zeitraum} Tagen)"),
         ("Wohnfläche", f"{zahl(s.flaeche_mieter)} m² von {zahl(s.flaeche_gesamt)} m² Gesamtwohnfläche"),
     ]
+    if s.grundstuecksflaeche:
+        zeilen.append(("Grundstück", f"{zahl(s.grundstuecksflaeche)} m²"))
     if s.personen_gesamt:
         zeilen.append(("Personen im Haus",
                        f"{zahl(s.personen_mieter, 0)} von {zahl(s.personen_gesamt, 0)}"))
+    if s.ist_endabrechnung and s.auszug_am:
+        zeilen.append(("Mietende", _fmt_datum(s.auszug_am)))
 
     pdf.font(9.5)
     for name, wert in zeilen:
@@ -201,31 +211,54 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
     if not zeilen:
         return
     pdf.abschnitt_ueberschrift("Zählerstände")
-    pdf.font(8.5)
-    kopf = FontFace(emphasis="BOLD", fill_color=GRAU, size_pt=8)
-    with pdf.table(
-        col_widths=(46, 20, 20, 20, 22, 22, 20),
-        text_align=("LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"),
-        headings_style=kopf,
-        line_height=4.4,
-        padding=(1.3, 1.6, 1.3, 1.6),
-        borders_layout="HORIZONTAL_LINES",
-    ) as tabelle:
-        kopfzeile = tabelle.row()
-        for titel in ("Zähler", "Haus\nAnfang", "Haus\nEnde", "Haus\nVerbrauch",
-                      "Wohnung\nAnfang", "Wohnung\nEnde", "Wohnung\nVerbrauch"):
-            kopfzeile.cell(pdf.t(titel))
-        for z in zeilen:
-            zae = z.zaehler
-            einheit = f" {zae.einheit}" if zae.einheit else ""
-            reihe = tabelle.row()
-            reihe.cell(pdf.t(z.bezeichnung))
-            reihe.cell(menge(zae.haus_alt))
-            reihe.cell(menge(zae.haus_neu))
-            reihe.cell(pdf.t(menge(zae.haus_verbrauch) + einheit))
-            reihe.cell(menge(zae.mieter_alt))
-            reihe.cell(menge(zae.mieter_neu))
-            reihe.cell(pdf.t(menge(zae.mieter_verbrauch) + einheit))
+    breite = pdf.w - pdf.l_margin - pdf.r_margin
+
+    def messzeile(name: str, alt: float, neu: float, verbrauch: float,
+                  einheit: str, bold: bool = False) -> None:
+        pdf.font(9, bold)
+        pdf.cell(breite - 105, 5, pdf.t(name))
+        pdf.cell(30, 5, pdf.t(menge(alt)), align="R")
+        pdf.cell(30, 5, pdf.t(menge(neu)), align="R")
+        pdf.cell(45, 5, pdf.t(f"{menge(verbrauch)} {einheit}".strip()), align="R",
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    def summenzeile(name: str, wert: str, bold: bool = False) -> None:
+        pdf.font(9, bold)
+        pdf.cell(breite - 45, 5, pdf.t(name))
+        pdf.cell(45, 5, pdf.t(wert), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    for z in zeilen:
+        zae = z.zaehler
+        einheit = zae.einheit or ""
+        if pdf.get_y() + 34 > pdf.h - pdf.b_margin:
+            pdf.add_page()
+        pdf.abstand(2)
+        pdf.font(9.5, bold=True)
+        pdf.cell(breite - 105, 5.5, pdf.t(z.bezeichnung))
+        pdf.set_text_color(90, 90, 90)
+        pdf.font(8)
+        pdf.cell(30, 5.5, pdf.t("Anfang"), align="R")
+        pdf.cell(30, 5.5, pdf.t("Ende"), align="R")
+        pdf.cell(45, 5.5, pdf.t("Verbrauch"), align="R",
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_draw_color(*LINIE)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+
+        messzeile("Hauptzähler des Hauses", zae.haus_alt, zae.haus_neu,
+                  zae.haus_verbrauch, einheit)
+        messzeile("Zähler der Mietwohnung", zae.mieter_alt, zae.mieter_neu,
+                  zae.mieter_verbrauch, einheit)
+        if zae.mit_differenz:
+            messzeile("Zähler der Vermieterwohnung", zae.eigen_alt, zae.eigen_neu,
+                      zae.eigen_verbrauch, einheit)
+            summenzeile("nicht durch Wohnungszähler erfasste Differenz",
+                        f"{menge(zae.differenz)} {einheit}".strip())
+            summenzeile(f"davon auf den Mieter entfallend ({zae.differenz_text})",
+                        f"{menge(zae.differenz_mieter)} {einheit}".strip())
+            summenzeile("angerechneter Verbrauch der Mietwohnung",
+                        f"{menge(zae.menge_mieter)} {einheit}".strip(), bold=True)
+        pdf.abstand(1)
 
 
 def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
@@ -272,7 +305,7 @@ def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
         frist = f" bis zum {_fmt_datum(faellig)}" if faellig else " zeitnah"
         pdf.zeile(f"Das Guthaben wird Ihnen{frist} auf Ihr bekanntes Konto überwiesen.", size=10)
 
-    if s.anpassung_vorschlagen and e.empfehlung_vorauszahlung > 0:
+    if s.anpassung_vorschlagen and e.empfehlung_vorauszahlung > 0 and not s.ist_endabrechnung:
         alt = s.vorauszahlung_monatlich
         neu = e.empfehlung_vorauszahlung
         if not alt or abs(neu - alt) >= 5:
@@ -302,8 +335,14 @@ def _erlaeuterungen(pdf: Abrechnung, e: Ergebnis) -> None:
             f"Personenschlüssel: {zahl(s.personen_mieter, 0)} Personen der Mietwohnung zu "
             f"{zahl(s.personen_gesamt, 0)} Personen im Gebäude."
         )
-    if any("Verbrauch" in z.schluessel_text for z in e.zeilen):
+    if any("Verbrauch" in z.schluessel_text or "Zähler" in z.schluessel_text for z in e.zeilen):
         punkte.append("Verbrauchsabhängige Positionen wurden nach den abgelesenen Zählerständen verteilt.")
+    if any(z.zaehler and z.zaehler.mit_differenz for z in e.zeilen):
+        punkte.append(
+            "Der Hauptzähler des Hauses weist regelmäßig einen höheren Verbrauch aus als die "
+            "Wohnungszähler zusammen (Messtoleranzen, Außenzapfstellen, Leitungsverluste). "
+            "Diese Differenz wurde nicht einseitig angelastet, sondern auf beide Wohnungen "
+            "verteilt; der Maßstab ist oben bei den Zählerständen angegeben.")
     if e.tage_nutzung and e.tage_zeitraum and e.tage_nutzung < e.tage_zeitraum:
         punkte.append(
             f"Das Mietverhältnis bestand {e.tage_nutzung} von {e.tage_zeitraum} Tagen des "

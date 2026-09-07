@@ -433,6 +433,63 @@ def test_ablage_laesst_sich_umstellen():
     assert speicher.beschreibung() == "Datei auf diesem Gerät"
 
 
+# --- Zwischenabrechnung ----------------------------------------------------
+
+def halbjahr(**abweichungen) -> Stammdaten:
+    werte = dict(abrechnungsart="zwischen", zeitraum_von="2025-01-01",
+                 zeitraum_bis="2025-06-30", nutzung_von="2025-01-01",
+                 nutzung_bis="2025-06-30", vorauszahlung_monate=6)
+    werte.update(abweichungen)
+    return basis_stammdaten(**werte)
+
+
+def test_zwischenabrechnung_ist_unverbindlich():
+    s = halbjahr()
+    assert s.bezeichnung_abrechnung == "Zwischenabrechnung" and not s.ist_verbindlich
+    e = berechne(s, [Position("Heizung", betrag=1400.0)])
+    assert any("begründet noch keine Nachzahlung" in w for w in e.warnungen)
+
+
+def test_zwischenabrechnung_kennt_keine_abrechnungsfrist():
+    """Die Zwölfmonatsfrist läuft erst mit der regulären Abrechnung."""
+    vorletztes = date.today().year - 2
+    s = halbjahr(zeitraum_von=date(vorletztes, 1, 1).isoformat(),
+                 zeitraum_bis=date(vorletztes, 6, 30).isoformat(),
+                 nutzung_von=date(vorletztes, 1, 1).isoformat(),
+                 nutzung_bis=date(vorletztes, 6, 30).isoformat())
+    e = berechne(s, [Position("Heizung", betrag=1400.0)])
+    assert not any("Abrechnungsfrist" in w for w in e.warnungen)
+
+
+def test_hochrechnung_aufs_ganze_jahr():
+    s = halbjahr(vorauszahlung_monatlich=100.0)
+    e = berechne(s, [Position("Heizung", betrag=1000.0)])   # Mieter 40 % = 400 EUR
+    assert e.tage_nutzung == 181
+    assert e.umlage == 400.0
+    assert e.hochrechnung_jahr == round(400 / 181 * 365, 2)
+    assert e.empfehlung_vorauszahlung == 68.0               # aufgerundet je Monat
+
+
+def test_jahresabrechnung_ohne_hochrechnungsbedarf():
+    e = berechne(basis_stammdaten(), [Position("Heizung", betrag=1000.0)])
+    assert e.hochrechnung_jahr == 400.0                     # voller Zeitraum
+
+
+def test_zwischenabrechnung_als_pdf():
+    s = halbjahr(anlass="Wechsel des Gasanbieters")
+    daten = erzeuge_pdf(s, berechne(s, [Position("Heizung", betrag=1400.0)]))
+    assert daten.startswith(b"%PDF") and len(daten) > 1000
+
+
+def test_archivname_nennt_die_art():
+    from nebenkosten import speicher
+
+    assert "Zwischenabrechnung" in speicher._dateiname(halbjahr(mieter_name="Meier"))
+    assert "Mietende" in speicher._dateiname(
+        basis_stammdaten(abrechnungsart="mietende", mieter_name="Meier"))
+    assert "Jahresabrechnung" in speicher._dateiname(basis_stammdaten(mieter_name="Meier"))
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

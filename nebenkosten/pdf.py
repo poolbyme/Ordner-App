@@ -147,6 +147,12 @@ def _kopf(pdf: Abrechnung) -> None:
         pdf.zeile(f"mit dem Ende des Mietverhältnisses{ende} rechne ich die Betriebskosten "
                   "für den oben genannten Zeitraum abschließend ab.", size=10.5)
         pdf.abstand(1)
+    elif s.ist_zwischenabrechnung:
+        anlass = f" Anlass: {s.anlass}." if s.anlass else ""
+        pdf.zeile("diese Zwischenabrechnung zeigt den Stand der Betriebskosten für den oben "
+                  f"genannten Zeitraum.{anlass} Sie dient der Information und ersetzt nicht "
+                  "die Abrechnung nach Ablauf des Abrechnungszeitraums.", size=10.5)
+        pdf.abstand(1)
 
 
 def _objektdaten(pdf: Abrechnung, e: Ergebnis) -> None:
@@ -319,7 +325,11 @@ def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
     pdf.rect(pdf.l_margin, y, breite, 10, style="F")
     pdf.set_xy(pdf.l_margin + 2, y + 2)
     pdf.font(11.5, bold=True)
-    titel = "Nachzahlung des Mieters" if e.ist_nachzahlung else "Guthaben des Mieters"
+    if s.ist_zwischenabrechnung:
+        titel = ("bisher nicht gedeckte Kosten" if e.ist_nachzahlung
+                 else "bisher zu viel gezahlt")
+    else:
+        titel = "Nachzahlung des Mieters" if e.ist_nachzahlung else "Guthaben des Mieters"
     if abs(e.saldo) < 0.005:
         titel = "Ergebnis: ausgeglichen"
     pdf.cell(breite - 44, 6, pdf.t(titel), align="L")
@@ -331,6 +341,10 @@ def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
     d = parse_datum(s.datum)
     if d and s.zahlungsfrist_tage:
         faellig = d + timedelta(days=int(s.zahlungsfrist_tage))
+
+    if s.ist_zwischenabrechnung:
+        _zwischenstand(pdf, e)
+        return
 
     if e.ist_nachzahlung and e.betrag_absolut >= 0.01:
         konto = ""
@@ -352,6 +366,25 @@ def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
             pdf.zeile(
                 f"Nach § 560 Abs. 4 BGB wird die monatliche Vorauszahlung auf die Betriebskosten "
                 f"ab dem übernächsten Monat auf {eur(neu)} {w}{bisher} angepasst.", size=10)
+
+
+def _zwischenstand(pdf: Abrechnung, e: Ergebnis) -> None:
+    """Was bei einer Zwischenabrechnung statt der Zahlungsaufforderung steht."""
+    w = "€" if pdf.unicode else "EUR"
+    pdf.zeile("Aus dieser Zwischenabrechnung ergibt sich noch keine Nachzahlung und kein "
+              "Guthaben. Verbindlich abgerechnet wird nach Ablauf des Abrechnungszeitraums.",
+              size=10)
+    if e.hochrechnung_jahr > 0 and e.tage_nutzung < 360:
+        pdf.abstand(1)
+        pdf.betragszeile("auf zwölf Monate hochgerechnete Kosten", e.hochrechnung_jahr)
+        if e.empfehlung_vorauszahlung > 0:
+            pdf.betragszeile("das wären monatlich", round(e.hochrechnung_jahr / 12, 2))
+    if e.empfehlung_vorauszahlung > 0:
+        pdf.abstand(1)
+        pdf.zeile(f"Rechnerisch angemessen wäre nach diesem Zwischenstand eine monatliche "
+                  f"Vorauszahlung von {eur(e.empfehlung_vorauszahlung)} {w}. Eine Anpassung "
+                  "der Vorauszahlungen ist erst nach der nächsten regulären Abrechnung "
+                  "möglich.", size=10)
 
 
 def _erlaeuterungen(pdf: Abrechnung, e: Ergebnis) -> None:
@@ -392,11 +425,18 @@ def _erlaeuterungen(pdf: Abrechnung, e: Ergebnis) -> None:
             f"{'€' if pdf.unicode else 'EUR'} enthalten. Diese Bescheinigung kann für die "
             "Steuererklärung nach § 35a EStG verwendet werden."
         )
-    punkte.append(
-        "Die Belege können nach vorheriger Terminabsprache eingesehen werden. Einwendungen gegen "
-        "diese Abrechnung sind spätestens zwölf Monate nach ihrem Zugang mitzuteilen "
-        "(§ 556 Abs. 3 S. 5 BGB)."
-    )
+    if s.ist_zwischenabrechnung:
+        punkte.append(
+            "Die Belege können nach vorheriger Terminabsprache eingesehen werden. Diese "
+            "Zwischenabrechnung ist keine Abrechnung im Sinne des § 556 Abs. 3 BGB; Fristen "
+            "für Nachforderungen und Einwendungen laufen erst mit der regulären Abrechnung."
+        )
+    else:
+        punkte.append(
+            "Die Belege können nach vorheriger Terminabsprache eingesehen werden. Einwendungen "
+            "gegen diese Abrechnung sind spätestens zwölf Monate nach ihrem Zugang mitzuteilen "
+            "(§ 556 Abs. 3 S. 5 BGB)."
+        )
     pdf.font(9.5)
     for punkt in punkte:
         pdf.multi_cell(0, 4.6, pdf.t(("•  " if pdf.unicode else "-  ") + punkt),

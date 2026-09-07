@@ -89,7 +89,7 @@ def _dateiname(stammdaten: Stammdaten) -> str:
     jahr = (parse_datum(stammdaten.zeitraum_bis) or datetime.today().date()).year
     name = "".join(c for c in stammdaten.mieter_name if c.isalnum() or c in " -_").strip()
     name = name.replace(" ", "_") or "Mieter"
-    art = "Mietende" if stammdaten.ist_endabrechnung else "Jahresabrechnung"
+    art = stammdaten.bezeichnung_abrechnung.replace(" ", "-")
     return f"{jahr}_{name}_{art}.json"
 
 

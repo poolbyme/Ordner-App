@@ -22,7 +22,16 @@ SCHLUESSEL = {
 ABRECHNUNGSARTEN = {
     "jahr": "Jahresabrechnung",
     "mietende": "Abrechnung zum Mietende (Auszug)",
+    "zwischen": "Zwischenabrechnung (nur zur Information)",
 }
+
+# Häufige Gründe für eine Zwischenabrechnung – nur Vorschläge für das Feld.
+ZWISCHEN_ANLAESSE = [
+    "Wechsel des Gasanbieters",
+    "Wechsel des Strom- oder Wasserversorgers",
+    "auf Wunsch des Mieters",
+    "Zwischenstand zur Prüfung der Vorauszahlungen",
+]
 
 # Wie die Differenz zwischen Hauptzähler und Wohnungszählern verteilt wird.
 # Ohne andere Vereinbarung im Mietvertrag ist die Wohnfläche der gesetzliche
@@ -127,8 +136,9 @@ class Stammdaten:
     objekt_plz_ort: str = ""
 
     # Art der Abrechnung
-    abrechnungsart: str = "jahr"   # "jahr" oder "mietende"
+    abrechnungsart: str = "jahr"   # "jahr", "mietende" oder "zwischen"
     auszug_am: str = ""            # nur bei abrechnungsart == "mietende"
+    anlass: str = ""               # nur bei abrechnungsart == "zwischen"
 
     # Zeiträume
     zeitraum_von: str = ""
@@ -165,8 +175,18 @@ class Stammdaten:
         return self.abrechnungsart == "mietende"
 
     @property
+    def ist_zwischenabrechnung(self) -> bool:
+        return self.abrechnungsart == "zwischen"
+
+    @property
+    def ist_verbindlich(self) -> bool:
+        """Eine Zwischenabrechnung begründet noch keine Forderung."""
+        return not self.ist_zwischenabrechnung
+
+    @property
     def bezeichnung_abrechnung(self) -> str:
-        return "Abrechnung zum Mietende" if self.ist_endabrechnung else "Jahresabrechnung"
+        return {"mietende": "Abrechnung zum Mietende",
+                "zwischen": "Zwischenabrechnung"}.get(self.abrechnungsart, "Jahresabrechnung")
 
     @property
     def vorauszahlung_gesamt(self) -> float:

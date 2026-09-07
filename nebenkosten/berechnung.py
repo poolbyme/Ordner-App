@@ -103,6 +103,7 @@ class Ergebnis:
     tage_nutzung: int = 0
     monate_nutzung: float = 0.0
     empfehlung_vorauszahlung: float = 0.0
+    hochrechnung_jahr: float = 0.0    # Kosten des Mieters auf zwölf Monate gerechnet
     warnungen: list[str] = field(default_factory=list)
     fehler: list[str] = field(default_factory=list)
 
@@ -254,6 +255,7 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
     elif e.tage_zeitraum > 366:
         e.fehler.append("Der Abrechnungszeitraum darf höchstens 12 Monate umfassen (§ 556 Abs. 3 S. 1 BGB).")
 
+
     zeitfaktor_basis = (e.tage_nutzung / e.tage_zeitraum) if e.tage_zeitraum else 1.0
     zeitfaktor_basis = min(zeitfaktor_basis, 1.0) if zeitfaktor_basis else 1.0
 
@@ -334,6 +336,7 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
     e.monate_nutzung = (e.tage_nutzung / 365 * 12) if e.tage_nutzung else 0.0
     if e.monate_nutzung > 0:
         e.empfehlung_vorauszahlung = float(math.ceil(e.umlage / e.monate_nutzung))
+        e.hochrechnung_jahr = round(e.umlage / e.tage_nutzung * 365, 2)
 
     _plausibilitaet(s, e, bis)
     e.fehler = list(dict.fromkeys(e.fehler))
@@ -342,6 +345,11 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
 
 
 def _plausibilitaet(s: Stammdaten, e: Ergebnis, bis: date | None) -> None:
+    if s.ist_zwischenabrechnung:
+        e.warnungen.append(
+            "Zwischenabrechnung: Sie zeigt nur den Stand und begründet noch keine "
+            "Nachzahlung. Verbindlich wird erst die Abrechnung nach Ablauf des "
+            "Abrechnungszeitraums (§ 556 Abs. 3 BGB).")
     if s.flaeche_gesamt and s.flaeche_mieter > s.flaeche_gesamt:
         e.fehler.append("Die Wohnfläche des Mieters ist größer als die Gesamtwohnfläche.")
     if s.personen_gesamt and s.personen_mieter > s.personen_gesamt:
@@ -349,7 +357,7 @@ def _plausibilitaet(s: Stammdaten, e: Ergebnis, bis: date | None) -> None:
     if s.einheiten_gesamt and s.einheiten_mieter > s.einheiten_gesamt:
         e.fehler.append("Der Mieter kann nicht mehr Wohneinheiten als das Haus haben.")
 
-    if bis:
+    if bis and not s.ist_zwischenabrechnung:
         frist = date(bis.year + 1, bis.month, bis.day) if (bis.month, bis.day) != (2, 29) \
             else date(bis.year + 1, 2, 28)
         if date.today() > frist:
@@ -364,7 +372,7 @@ def _plausibilitaet(s: Stammdaten, e: Ergebnis, bis: date | None) -> None:
                 "(§ 556 Abs. 3 S. 2 BGB)."
             )
 
-    if e.vorauszahlungen <= 0:
+    if e.vorauszahlungen <= 0 and not s.ist_zwischenabrechnung:
         e.warnungen.append("Es sind keine Vorauszahlungen erfasst – der gesamte Betrag wird nachgefordert.")
 
     if s.einheiten_gesamt and s.einheiten_gesamt > 2:

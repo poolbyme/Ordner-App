@@ -17,7 +17,8 @@ from nebenkosten.berechnung import (
 from nebenkosten import speicher
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, PARTEIEN, SCHLUESSEL, ZAEHLER_GRUNDLAGE,
-    Position, Stammdaten, Zaehlerstand, as_dict, from_dict, standard_positionen,
+    ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand, as_dict, from_dict,
+    standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
@@ -432,7 +433,27 @@ with tab_diese:
         label_visibility="collapsed",
         help="Die Auswahl steht auch im PDF über der Abrechnung.")
 
-    if stamm.ist_endabrechnung:
+    if stamm.ist_zwischenabrechnung:
+        st.caption(
+            "Eine Zwischenabrechnung ist eine Momentaufnahme – zum Beispiel beim Wechsel "
+            "des Gasanbieters oder wenn dein Mieter wissen will, ob seine Vorauszahlung "
+            "passt. Sie ist rechtlich unverbindlich: Nachzahlen muss er erst nach der "
+            "regulären Abrechnung. Die App rechnet den Stand hoch aufs ganze Jahr und "
+            "schlägt eine passende Vorauszahlung vor."
+        )
+        z1, z2 = st.columns(2)
+        with z1:
+            stamm.zeitraum_von = datum_feld("Zwischenabrechnung ab", stamm.zeitraum_von, "z_von")
+        with z2:
+            stamm.zeitraum_bis = datum_feld(
+                "Stichtag", stamm.zeitraum_bis, "z_bis",
+                "Bis zu diesem Tag wird gerechnet – meist der Tag der Zählerablesung.")
+        stamm.nutzung_von, stamm.nutzung_bis = stamm.zeitraum_von, stamm.zeitraum_bis
+        stamm.anlass = st.text_input(
+            "Warum diese Zwischenabrechnung?", stamm.anlass, key="anlass",
+            placeholder=ZWISCHEN_ANLAESSE[0],
+            help="Steht so im PDF. Üblich: " + ", ".join(ZWISCHEN_ANLAESSE) + ".")
+    elif stamm.ist_endabrechnung:
         st.caption(
             "Bei einem Auszug wird nur bis zum Auszugstag abgerechnet. Alle Kosten, die "
             "nicht über einen Zähler laufen, werden dabei tageweise geteilt."
@@ -494,9 +515,10 @@ with tab_diese:
         with a2:
             stamm.datum = datum_feld("Datum der Abrechnung", stamm.datum, "s_datum")
         with a3:
-            stamm.zahlungsfrist_tage = int(st.number_input(
-                "Zahlungsfrist (Tage)", min_value=0, max_value=90, step=1,
-                value=int(stamm.zahlungsfrist_tage), key="s_frist"))
+            if stamm.ist_verbindlich:
+                stamm.zahlungsfrist_tage = int(st.number_input(
+                    "Zahlungsfrist (Tage)", min_value=0, max_value=90, step=1,
+                    value=int(stamm.zahlungsfrist_tage), key="s_frist"))
 
 # --------------------------------------------------------------------------
 # 3 Kosten
@@ -819,6 +841,10 @@ with tab_vz:
             value=float(stamm.co2_abzug), key="co2",
             help="Wird vom Anteil des Mieters abgezogen.")
     with c2:
+        if stamm.ist_zwischenabrechnung:
+            st.info("Bei einer Zwischenabrechnung steht im PDF nur ein Vorschlag für die "
+                    "künftige Vorauszahlung – ändern darfst du sie erst nach der "
+                    "regulären Abrechnung.")
         stamm.anpassung_vorschlagen = st.checkbox(
             "Im PDF ankündigen, dass die Vorauszahlung angepasst wird",
             value=stamm.anpassung_vorschlagen, key="anpassung",
@@ -843,11 +869,26 @@ with tab_ergebnis:
     k1, k2, k3 = st.columns(3)
     k1.metric("Anteil des Mieters", f"{eur(ergebnis.umlage)} €")
     k2.metric("Schon gezahlt", f"{eur(ergebnis.vorauszahlungen)} €")
-    k3.metric("Nachzahlung" if ergebnis.ist_nachzahlung else "Guthaben",
-              f"{eur(ergebnis.betrag_absolut)} €")
+    if stamm.ist_zwischenabrechnung:
+        k3.metric("Fehlt noch" if ergebnis.ist_nachzahlung else "Zu viel gezahlt",
+                  f"{eur(ergebnis.betrag_absolut)} €")
+    else:
+        k3.metric("Nachzahlung" if ergebnis.ist_nachzahlung else "Guthaben",
+                  f"{eur(ergebnis.betrag_absolut)} €")
 
     if ergebnis.zeilen:
-        if ergebnis.betrag_absolut < 0.01:
+        if stamm.ist_zwischenabrechnung:
+            if ergebnis.ist_nachzahlung:
+                st.success(f"Stand jetzt fehlen **{eur(ergebnis.betrag_absolut)} €** – seine "
+                           "Vorauszahlung ist zu niedrig.")
+            else:
+                st.success(f"Stand jetzt hat er **{eur(ergebnis.betrag_absolut)} €** zu viel "
+                           "gezahlt – seine Vorauszahlung ist reichlich bemessen.")
+            if ergebnis.hochrechnung_jahr:
+                st.info(f"Aufs ganze Jahr hochgerechnet: **{eur(ergebnis.hochrechnung_jahr)} €** "
+                        f"= **{eur(ergebnis.hochrechnung_jahr / 12)} €** im Monat. "
+                        "Nachzahlen muss er aus dieser Zwischenabrechnung nichts.")
+        elif ergebnis.betrag_absolut < 0.01:
             st.success("Die Vorauszahlungen decken die Kosten genau – niemand zahlt etwas nach.")
         elif ergebnis.ist_nachzahlung:
             st.success(f"Dein Mieter muss **{eur(ergebnis.betrag_absolut)} €** nachzahlen.")

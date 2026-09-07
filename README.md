@@ -104,10 +104,10 @@ hilft die Sicherungskopie aus der Seitenleiste.
 
 1. **Haus (bleibt gleich)** – Vermieter, Adresse, Wohnflächen, Grundstück,
    Anzahl der Wohnungen. Einmal ausfüllen, danach nie wieder.
-2. **Diese Abrechnung** – **Jahresabrechnung** oder **Abrechnung zum Mietende**
-   auswählen; bei einem Auszug wird bis zum Auszugstag gerechnet und alles, was
-   nicht über einen Zähler läuft, tageweise geteilt. Dazu Mieter und Personenzahl.
-   Die gewählte Art steht auch im Kopf des PDF.
+2. **Diese Abrechnung** – Art auswählen: **Jahresabrechnung**, **Abrechnung zum
+   Mietende** (rechnet bis zum Auszugstag, alles ohne Zähler wird tageweise geteilt)
+   oder **Zwischenabrechnung** (siehe unten). Dazu Mieter und Personenzahl. Die
+   gewählte Art steht auch im Kopf des PDF.
 3. **Kosten** – pro Zeile eintragen, was **für das ganze Haus** angefallen ist.
    Die üblichen Kostenarten sind vorbereitet, jede mit dem Hinweis, welcher Beleg
    dazugehört. Pro Zeile wählbar, wie verteilt wird: nach Wohnfläche, nach
@@ -122,6 +122,26 @@ hilft die Sicherungskopie aus der Seitenleiste.
 Über „Mehr Einstellungen anzeigen" in der Seitenleiste kommen die selteneren
 Felder dazu: Lohnkosten für die Steuererklärung des Mieters, unterjähriger Einzug,
 Anrede und Datum des Anschreibens.
+
+### Zwischenabrechnung
+
+Für eine Momentaufnahme mitten im Jahr – etwa beim Wechsel des Gasanbieters oder
+wenn der Mieter wissen möchte, ob seine Vorauszahlung passt. Zeitraum und Stichtag
+sind frei wählbar, der Anlass steht im PDF.
+
+Rechtlich ist das **keine** Abrechnung im Sinne des § 556 Abs. 3 BGB: Sie begründet
+keine Nachforderung, setzt keine Fristen in Gang und erlaubt noch keine Änderung der
+Vorauszahlung. Das PDF sagt das ausdrücklich und enthält deshalb keine
+Zahlungsaufforderung. Stattdessen rechnet die App den Stand auf zwölf Monate hoch und
+nennt eine rechnerisch passende monatliche Vorauszahlung – genau die Auskunft, die ein
+Mieter mit dieser Frage sucht.
+
+**Anbieterwechsel mitten im Jahr:** Dafür braucht es keine Zwischenabrechnung. Beide
+Rechnungen gehören in dieselbe Jahresabrechnung – entweder als eine Summe oder als zwei
+Zeilen („Gas 01.01.–14.06. Anbieter A" und „Gas 15.06.–31.12. Anbieter B"). Verteilt
+wird nach den Zählerständen des ganzen Jahres; die Ablesung zum Wechseltag braucht nur
+der Versorger. Eine Zwischenabrechnung lohnt sich, wenn der Mieter einen Zwischenstand
+sehen soll oder du selbst wissen willst, wo ihr steht.
 
 ### Zähler
 

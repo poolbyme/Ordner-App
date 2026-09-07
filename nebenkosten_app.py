@@ -371,7 +371,7 @@ with st.sidebar:
         neu_zeichnen()
 
     st.divider()
-    design.startbildschirm_hilfe()
+    design.startbildschirm_hilfe(speicher.beschreibung() != "Datei auf diesem Gerät")
 
     st.caption(
         "Die App erstellt das Abrechnungsschreiben, sie ist keine Rechtsberatung. "

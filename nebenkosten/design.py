@@ -378,8 +378,14 @@ def kopfzeile(titel: str, untertitel: str = "") -> None:
     )
 
 
-def startbildschirm_hilfe() -> None:
-    """Anleitung, wie die App als Symbol auf dem Handy landet."""
+def startbildschirm_hilfe(dauerhafte_ablage: bool = False) -> None:
+    """Anleitung, wie die App als Symbol auf dem Handy landet.
+
+    Der Schlussabsatz richtet sich danach, wie die App tatsächlich betrieben
+    wird. Beide Fälle nebeneinander aufzuzählen verunsichert nur: Wer alles
+    richtig eingerichtet hat, liest dort trotzdem eine Warnung und denkt, sie
+    gelte ihm.
+    """
     with st.expander("📲 App auf den Startbildschirm legen"):
         st.markdown(
             """
@@ -396,9 +402,21 @@ eigenem Symbol, ohne Adresszeile.
 2. Oben rechts auf die **drei Punkte** tippen.
 3. **App installieren** oder **Zum Startbildschirm hinzufügen** wählen.
 
-Läuft die App auf dem eigenen Rechner, muss dieser eingeschaltet und im selben
-WLAN sein. Soll sie von überall erreichbar sein, gehört sie in die Streamlit
-Cloud – dann bitte auch die Google-Tabelle als Ablage einrichten, sonst sind die
-Daten nach einem Neustart weg.
             """
         )
+        if dauerhafte_ablage:
+            st.success(
+                "**Bei dir ist alles eingerichtet.** Die App liegt im Internet und "
+                "speichert in die Google-Tabelle: Du und deine Frau kommt von "
+                "überall dran, auch wenn zu Hause kein Rechner läuft.",
+                icon="✅",
+            )
+        else:
+            st.info(
+                "Läuft die App auf dem eigenen Rechner, muss dieser eingeschaltet "
+                "und im selben WLAN sein. Soll sie von überall erreichbar sein, "
+                "gehört sie in die Streamlit Cloud – dann bitte auch die "
+                "Google-Tabelle als Ablage einrichten, sonst sind die Daten nach "
+                "einem Neustart weg.",
+                icon="ℹ️",
+            )

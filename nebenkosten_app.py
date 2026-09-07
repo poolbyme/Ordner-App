@@ -15,7 +15,7 @@ from nebenkosten.berechnung import (
     berechne, co2_vermieteranteil, eur, menge, parse_datum, verbrauchsaufteilung,
     warmwasser_kwh, zaehlerquelle, zahl,
 )
-from nebenkosten import speicher
+from nebenkosten import design, speicher
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
@@ -23,7 +23,8 @@ from nebenkosten.modell import (
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
-st.set_page_config(page_title="Nebenkostenabrechnung", page_icon="🏠", layout="wide")
+st.set_page_config(page_title="Nebenkostenabrechnung", page_icon="🏠", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 SCHLUESSEL_LABELS = list(SCHLUESSEL.values())
 LABEL_ZU_KEY = {v: k for k, v in SCHLUESSEL.items()}
@@ -219,6 +220,7 @@ def datum_feld(label: str, wert: str, key: str, hilfe: str | None = None) -> str
 
 
 init_state()
+design.anwenden()
 stamm: Stammdaten = st.session_state.stamm
 
 # --------------------------------------------------------------------------
@@ -326,13 +328,18 @@ with st.sidebar:
         neu_zeichnen()
 
     st.divider()
+    design.startbildschirm_hilfe()
+
     st.caption(
         "Die App erstellt das Abrechnungsschreiben, sie ist keine Rechtsberatung. "
         "Bei Streit mit dem Mieter hilft der Haus- und Grundbesitzerverein oder "
         "ein Anwalt für Mietrecht."
     )
 
-st.title("🏠 Nebenkostenabrechnung")
+_zeitraum = f"{_fmt(stamm.zeitraum_von)} – {_fmt(stamm.zeitraum_bis)}"
+_objekt = stamm.objekt_strasse or "noch kein Objekt eingetragen"
+design.kopfzeile("Nebenkostenabrechnung",
+                 f"{_objekt} · {stamm.bezeichnung_abrechnung} {_zeitraum}")
 
 with st.expander("So geht's – bitte einmal lesen",
                  expanded=not (stamm.mieter_name or stamm.flaeche_gesamt)):
@@ -610,7 +617,7 @@ with tab_kosten:
                     SP_AKTIV: st.column_config.CheckboxColumn(width="small", default=True),
                     SP_NAME: st.column_config.TextColumn(width="medium", required=True),
                     SP_BETRAG: st.column_config.NumberColumn(format="%.2f", min_value=0.0,
-                                                            step=10.0),
+                                                            step=0.01),
                     SP_VERTEILUNG: st.column_config.SelectboxColumn(
                         options=SCHLUESSEL_LABELS, default=SCHLUESSEL["flaeche"], width="medium",
                         help="Nach Wohnfläche ist der Normalfall. „Nach Zählerstand“ nur, wenn "

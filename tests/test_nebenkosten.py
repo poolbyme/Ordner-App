@@ -675,6 +675,53 @@ def test_warnung_nur_wenn_waerme_gar_nicht_nach_verbrauch_geht():
     assert not any("nur nach Fläche" in w for w in berechne(s, mit_zaehler).warnungen)
 
 
+# --- Aussehen und Startbildschirm ------------------------------------------
+
+def test_alte_dateien_bekommen_eine_kategorie():
+    """Vor der Gliederung gespeicherte Daten kannten kein Feld „kategorie“."""
+    alt = {"stammdaten": {},
+           "positionen": [{"bezeichnung": "Wasser", "betrag": 402.52},
+                          {"bezeichnung": "Abwasser", "betrag": 519.18},
+                          {"bezeichnung": "Heizung (Gas)", "betrag": 1970.53},
+                          {"bezeichnung": "Schornsteinfeger", "betrag": 95.0},
+                          {"bezeichnung": "Grundsteuer", "betrag": 421.44}]}
+    positionen = from_dict(alt)[1]
+    assert [p.kategorie for p in positionen] == [
+        "wasser", "wasser", "gas", "gas", "sonstiges"]
+    assert positionen[0].betrag == 402.52     # Cents bleiben erhalten
+
+
+def test_kategorie_raten():
+    from nebenkosten.modell import kategorie_raten
+
+    assert kategorie_raten("Niederschlagswasser") == "wasser"
+    assert kategorie_raten("Wärmemengenzähler-Miete") == "gas"
+    assert kategorie_raten("Gartenpflege") == "sonstiges"
+
+
+def test_gestaltung_laesst_sich_laden():
+    from nebenkosten import design
+
+    stil = design._stil()
+    assert stil.startswith("\n<style>") and stil.rstrip().endswith("</style>")
+    assert "--nk-akzent" in stil and "prefers-color-scheme: dark" in stil
+    # Die Symbolschrift darf nicht überschrieben werden, sonst erscheinen
+    # die Namen der Symbole als Text.
+    assert "font-family" not in stil.split("/* ---------- Kopfzeile")[0]
+
+
+def test_symbol_und_manifest_liegen_bereit():
+    import json
+    from pathlib import Path
+
+    statisch = Path(__file__).resolve().parents[1] / "static"
+    for name in ("app-icon.png", "app-icon-180.png", "manifest.json"):
+        assert (statisch / name).exists(), name
+    manifest = json.loads((statisch / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["display"] == "standalone"
+    assert all(s["src"].startswith("/app/static/") for s in manifest["icons"])
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

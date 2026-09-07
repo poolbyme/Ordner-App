@@ -1,0 +1,4 @@
+# Gilt für alle Apps in diesem Ordner.
+# Das Ausliefern von static/ wird für das App-Symbol auf dem Startbildschirm gebraucht.
+[server]
+enableStaticServing = true

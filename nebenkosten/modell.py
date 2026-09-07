@@ -361,6 +361,22 @@ def as_dict(stammdaten: Stammdaten, positionen: list[Position]) -> dict:
     }
 
 
+_WASSERWOERTER = ("wasser", "abwasser", "niederschlag", "kanal", "hebeanlage",
+                  "legionell", "entwässerung", "entwaesserung")
+_GASWOERTER = ("heiz", "warmwasser", "gas", "öl", "oel", "brennstoff", "schornstein",
+               "wärme", "waerme", "tank", "kamin")
+
+
+def kategorie_raten(bezeichnung: str) -> str:
+    """Bereich aus dem Namen ableiten – für Daten aus früheren Fassungen."""
+    name = bezeichnung.lower()
+    if any(wort in name for wort in _GASWOERTER):
+        return "gas"
+    if any(wort in name for wort in _WASSERWOERTER):
+        return "wasser"
+    return "sonstiges"
+
+
 def _zaehler_aus_dict(daten: dict) -> list[Zaehlerstand]:
     """Zähler einlesen – auch aus dem alten Format mit drei festen Zählern."""
     if daten.get("zaehler"):
@@ -387,5 +403,7 @@ def from_dict(daten: dict) -> tuple[Stammdaten, list[Position]]:
     positionen = []
     for p in daten.get("positionen", []):
         werte = {k: v for k, v in p.items() if k in pos_felder}
+        if not werte.get("kategorie"):
+            werte["kategorie"] = kategorie_raten(str(p.get("bezeichnung", "")))
         positionen.append(Position(zaehler=_zaehler_aus_dict(p), **werte))
     return stamm, positionen or standard_positionen()

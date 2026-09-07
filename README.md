@@ -26,6 +26,20 @@ Für die Streamlit Community Cloud dieselbe Datei als „Main file path" eintrag
 Die App braucht weder Google-Zugang noch Secrets. Alle Eingaben bleiben in der
 Sitzung und lassen sich über die Seitenleiste als Datei sichern und wieder laden.
 
+### Aussehen
+
+Die Oberfläche bringt ihr eigenes Aussehen mit (`nebenkosten/design.py`): Kopfzeile mit
+App-Symbol, Reiter als Kacheln, Kennzahlen und Tabellen als Karten, abgestimmte Farben
+für helle und dunkle Anzeige – die App folgt der Einstellung des Geräts. Alles davon ist
+Kosmetik über CSS; ändert Streamlit interne Namen, sieht die App schlichter aus, sie
+funktioniert aber weiter.
+
+Das Symbol liegt in `static/` und lässt sich neu erzeugen:
+
+```bash
+python werkzeuge/icon_erzeugen.py
+```
+
 ### Auf dem Handy benutzen
 
 Die App ist eine Webseite – sie läuft überall, wo ein Browser ist. Zwei Wege:
@@ -55,6 +69,17 @@ Die Tabelle muss für die E-Mail-Adresse des Dienstkontos freigegeben sein
 `nebenkosten` an: eine Zeile für den aktuellen Stand, je eine weitere für jede
 fertige Abrechnung. Fehlen die Angaben oder ist die Tabelle nicht erreichbar,
 schreibt die App wie gehabt in eine Datei und sagt das in der Seitenleiste.
+
+**Als App ablegen.** Die App meldet ein Symbol, einen Namen und eine Farbe für den
+Startbildschirm an (`static/manifest.json`, ausgeliefert über `/app/static/`). Damit
+landet sie mit eigenem Icon und ohne Adresszeile auf dem Handy:
+
+* **iPhone/iPad:** in **Safari** öffnen → Teilen → *Zum Home-Bildschirm*
+* **Android:** in **Chrome** öffnen → drei Punkte → *App installieren*
+
+Die Anleitung steht auch in der App selbst (Seitenleiste → „App auf den Startbildschirm
+legen"). Voraussetzung ist `enableStaticServing = true` in `.streamlit/config.toml` –
+das ist eingerichtet.
 
 In beiden Fällen hilft der Schalter **📱 Handy-Ansicht** in der Seitenleiste: Statt
 breiter Tabellen erscheinen einzelne Eingabefelder untereinander, die sich mit dem
@@ -357,6 +382,9 @@ nebenkosten/modell.py     Datenmodell, Katalog der Betriebskosten nach § 2 Betr
 nebenkosten/berechnung.py Verteilung, Zählerdifferenz, Zeitanteil, Saldo, Prüfungen
 nebenkosten/speicher.py   dauerhaftes Speichern und Archiv
 nebenkosten/cloud.py      Ablage in einer Google-Tabelle (für den Cloud-Betrieb)
+nebenkosten/design.py     Aussehen und Anmeldung als App auf dem Startbildschirm
+static/                   App-Symbol und manifest.json
+werkzeuge/icon_erzeugen.py  erzeugt das App-Symbol neu
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)
 tests/                    Tests der Berechnung und der PDF-Ausgabe
 ```

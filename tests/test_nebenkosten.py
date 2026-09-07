@@ -613,6 +613,24 @@ def test_gemeinsame_menge_nach_wohnflaeche():
     assert "Wohnfläche" in z.verteiltext
 
 
+def test_warnung_bei_nicht_abgelesenem_zaehler():
+    """Ein leerer Zähler wandert sonst unbemerkt in die Differenz."""
+    pos = Position("Wasser", betrag=922.0, schluessel="verbrauch", einheit="m³", zaehler=[
+        Zaehlerstand("Hauptzähler", "haus", 0.0, 188.0),
+        Zaehlerstand("Mieter", "mieter", 0.0, 60.0),
+        Zaehlerstand("eigene Wohnung", "vermieter", 0.0, 110.0),
+        Zaehlerstand("Außenzapfstelle / Garten", "vermieter", 0.0, 0.0)])
+    e = berechne(basis_stammdaten(), [pos])
+    assert any("Außenzapfstelle" in w and "fehlen die Stände" in w for w in e.warnungen)
+
+
+def test_keine_warnung_wenn_gar_keine_zaehler_abgelesen_sind():
+    pos = Position("Wasser", betrag=922.0, schluessel="verbrauch", zaehler=[
+        Zaehlerstand("Hauptzähler", "haus", 0.0, 0.0),
+        Zaehlerstand("Mieter", "mieter", 0.0, 0.0)])
+    assert not any("fehlen die Stände" in w for w in berechne(basis_stammdaten(), [pos]).warnungen)
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

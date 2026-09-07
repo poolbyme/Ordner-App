@@ -420,6 +420,15 @@ def berechne(s: Stammdaten, positionen: list[Position],
                 e.warnungen.append(
                     f"„{quelle.bezeichnung}“: Die Unterzähler zeigen zusammen mehr an als der "
                     "Hauptzähler. Bitte die Stände prüfen – gerechnet wird ohne Differenz.")
+            # Ein angelegter, aber nicht abgelesener Zähler ist tückisch: seine Menge
+            # rutscht in die Differenz und wird dadurch mitverteilt.
+            if any(z.alt or z.neu for z in quelle.zaehler):
+                for zst in quelle.zaehler:
+                    if not zst.alt and not zst.neu and zst.name.strip():
+                        e.warnungen.append(
+                            f"„{quelle.bezeichnung}“: Für den Zähler „{zst.name}“ fehlen die "
+                            "Stände. Sein Verbrauch landet sonst in der Differenz und wird "
+                            "mitverteilt.")
             aufteilung = zaehler
             if (aufteilung and aufteilung.differenz > 0
                     and aufteilung.haus_verbrauch > 0

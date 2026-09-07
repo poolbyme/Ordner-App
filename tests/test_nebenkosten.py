@@ -387,6 +387,52 @@ def test_speichern_und_laden(tmp_ordner=None):
                 original_ordner, original_datei, original_archiv)
 
 
+def test_ablage_laesst_sich_umstellen():
+    """Statt in eine Datei kann alles in eine Google-Tabelle geschrieben werden."""
+    from datetime import datetime as _dt
+    from nebenkosten import speicher
+
+    class Tabelle:
+        beschreibung = "Google-Tabelle"
+        adresse = "https://docs.google.com/spreadsheets/d/test"
+
+        def __init__(self):
+            self.zeilen = {}
+
+        def lesen(self, schluessel):
+            return self.zeilen.get(schluessel)
+
+        def schreiben(self, schluessel, daten):
+            self.zeilen[schluessel] = daten
+
+        def zeitpunkt(self, schluessel):
+            return _dt.now() if schluessel in self.zeilen else None
+
+        def schluessel(self):
+            return [k for k in self.zeilen if k != "aktuell"]
+
+    tabelle = Tabelle()
+    try:
+        speicher.konfiguriere(tabelle)
+        assert speicher.laden() is None
+        assert speicher.beschreibung() == "Google-Tabelle"
+
+        s = basis_stammdaten(flaeche_gesamt=321.0)
+        positionen = standard_positionen()
+        speicher.speichern(s, positionen)
+        assert "aktuell" in tabelle.zeilen
+        assert speicher.laden()[0].flaeche_gesamt == 321.0
+        assert speicher.gespeichert_am() is not None
+
+        name = speicher.archivieren(s, positionen)
+        assert speicher.archiv() == [name]
+        assert speicher.aus_archiv(name)[0].flaeche_gesamt == 321.0
+        assert " " in speicher.archivname(name)
+    finally:
+        speicher.konfiguriere(None)
+    assert speicher.beschreibung() == "Datei auf diesem Gerät"
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

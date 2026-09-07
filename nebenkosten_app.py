@@ -45,6 +45,8 @@ BEHALTEN = {"stamm", "positionen", "erweitert"}
 # Zustand
 # --------------------------------------------------------------------------
 def init_state() -> None:
+    ablage_einrichten()
+
     # Nach dem Laden einer Datei müssen die Eingabefelder ihre alten Werte
     # vergessen. Das passiert hier, bevor irgendein Feld gezeichnet wird.
     if st.session_state.pop("_felder_leeren", False):
@@ -67,6 +69,27 @@ def init_state() -> None:
         nutzung_bis=date(jahr, 12, 31).isoformat(),
     )
     st.session_state.positionen = standard_positionen()
+
+
+def ablage_einrichten() -> None:
+    """Falls Zugangsdaten hinterlegt sind, in die Google-Tabelle speichern."""
+    if st.session_state.get("_ablage_geprueft"):
+        return
+    st.session_state["_ablage_geprueft"] = True
+    try:
+        zugang = st.secrets.get("gcp_json")
+        adresse = st.secrets.get("nebenkosten_sheet_url")
+    except Exception:  # noqa: BLE001 – ohne secrets.toml wirft st.secrets
+        return
+    if not zugang or not adresse:
+        return
+    try:
+        from nebenkosten.cloud import TabellenSpeicher
+
+        daten = json.loads(zugang) if isinstance(zugang, str) else dict(zugang)
+        speicher.konfiguriere(TabellenSpeicher(str(adresse), daten))
+    except Exception as fehler:  # noqa: BLE001 – Netz, Rechte, Tabelle fehlt
+        st.session_state["_ablagefehler"] = str(fehler)
 
 
 def sichern() -> None:
@@ -193,6 +216,10 @@ stamm: Stammdaten = st.session_state.stamm
 # Seitenleiste
 # --------------------------------------------------------------------------
 with st.sidebar:
+    handy = st.toggle(
+        "📱 Handy-Ansicht", key="handy",
+        help="Statt breiter Tabellen einzelne Eingabefelder untereinander – "
+             "auf einem kleinen Bildschirm viel einfacher zu tippen.")
     erweitert = st.toggle(
         "Mehr Einstellungen anzeigen", key="erweitert",
         help="Zeigt zusätzliche Felder: Lohnkosten für die Steuererklärung des "
@@ -200,13 +227,32 @@ with st.sidebar:
 
     st.header("Gespeichert wird automatisch")
     stand = speicher.gespeichert_am()
+    if st.session_state.get("_ablagefehler"):
+        st.warning(f"Google-Tabelle nicht erreichbar, es wird in eine Datei gespeichert: "
+                   f"{st.session_state['_ablagefehler']}")
     if st.session_state.get("_speicherfehler"):
         st.error(f"Speichern nicht möglich: {st.session_state['_speicherfehler']}")
     elif stand:
         st.success(f"Zuletzt gespeichert: {stand.strftime('%d.%m.%Y um %H:%M:%S')}")
     else:
         st.info("Wird gespeichert, sobald du etwas eingibst.")
-    st.caption(f"Ordner: `{speicher.ORDNER}`")
+
+    with st.expander("Wo liegen meine Daten?"):
+        st.markdown(f"**Ablage:** {speicher.beschreibung()}")
+        st.code(speicher.adresse(), language=None)
+        if speicher.beschreibung() == "Datei auf diesem Gerät":
+            st.markdown(
+                f"Fertige Abrechnungen: `{speicher.ARCHIV}`\n\n"
+                "Die Datei kannst du kopieren, mitnehmen und hier wieder einlesen. "
+                "Läuft die App in der Cloud, ist sie nach einem Neustart weg – "
+                "dann bitte regelmäßig eine Sicherungskopie herunterladen."
+            )
+        else:
+            st.markdown("Fertige Abrechnungen stehen als weitere Zeilen in derselben Tabelle.")
+        st.markdown(
+            "**Das PDF** landet dort, wo dein Gerät Downloads ablegt – am Rechner im "
+            "Ordner Downloads, am Handy unter Dateien / Downloads."
+        )
 
     st.download_button(
         "💾 Sicherungskopie herunterladen",
@@ -232,7 +278,7 @@ with st.sidebar:
     if abgelegt:
         with st.expander(f"📁 Fertige Abrechnungen ({len(abgelegt)})"):
             auswahl = st.selectbox("Frühere Abrechnung", abgelegt,
-                                   format_func=lambda pfad: pfad.stem.replace("_", " "))
+                                   format_func=speicher.archivname)
             if st.button("Diese Abrechnung öffnen", width="stretch"):
                 geladen = speicher.aus_archiv(auswahl)
                 if geladen:
@@ -463,35 +509,63 @@ with tab_kosten:
         "einfach links abwählen. Eigene Zeilen unten anfügen."
     )
 
-    bearbeitet = st.data_editor(
-        positionen_als_df(st.session_state.positionen),
-        key="kosten_editor",
-        num_rows="dynamic",
-        width="stretch",
-        hide_index=True,
-        column_order=SPALTEN_ERWEITERT if erweitert else SPALTEN_EINFACH,
-        column_config={
-            SP_AKTIV: st.column_config.CheckboxColumn(width="small", default=True),
-            SP_NAME: st.column_config.TextColumn(width="medium", required=True),
-            SP_BETRAG: st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=10.0),
-            SP_VERTEILUNG: st.column_config.SelectboxColumn(
-                options=SCHLUESSEL_LABELS, default=SCHLUESSEL["flaeche"], width="medium",
-                help="Wie sollen die Kosten aufgeteilt werden? Nach Wohnfläche ist der "
-                     "Normalfall. „Nach Zählerstand“ nur, wenn es einen eigenen Zähler "
-                     "für die Wohnung gibt. „Nur der Mieter“ heißt: die Kosten trägt er allein."),
-            SP_LOHN: st.column_config.NumberColumn(
-                format="%.2f", min_value=0.0,
-                help="Der Lohnanteil auf der Rechnung (z. B. Gärtner, Schornsteinfeger). "
-                     "Dein Mieter kann ihn von der Steuer absetzen; die App bescheinigt ihn im PDF."),
-            SP_ZEIT: st.column_config.CheckboxColumn(
-                width="small", default=True,
-                help="Bei Ein- oder Auszug mitten im Zeitraum nur für die Tage abrechnen, "
-                     "die der Mieter da war."),
-            SP_BELEG: st.column_config.TextColumn(width="large"),
-        },
-    )
-    st.session_state.positionen = df_als_positionen(bearbeitet, st.session_state.positionen)
-
+    if handy:
+        for i, p in enumerate(st.session_state.positionen):
+            if not p.aktiv:
+                continue
+            p.betrag = st.number_input(
+                f"{p.bezeichnung} (€)", min_value=0.0, step=10.0,
+                value=float(p.betrag), key=f"kos{i}_betrag", help=p.hinweis)
+        with st.expander("Welche Kostenarten brauche ich?"):
+            for i, p in enumerate(st.session_state.positionen):
+                p.aktiv = st.checkbox(p.bezeichnung, value=p.aktiv, key=f"kos{i}_aktiv",
+                                      help=p.hinweis)
+        with st.expander("Wie wird verteilt?"):
+            for i, p in enumerate(st.session_state.positionen):
+                if not p.aktiv:
+                    continue
+                gewaehlt = st.selectbox(
+                    p.bezeichnung, SCHLUESSEL_LABELS, key=f"kos{i}_schluessel",
+                    index=SCHLUESSEL_LABELS.index(SCHLUESSEL.get(p.schluessel,
+                                                                 SCHLUESSEL["flaeche"])))
+                p.schluessel = LABEL_ZU_KEY.get(gewaehlt, "flaeche")
+        if erweitert:
+            with st.expander("Lohnkosten für die Steuererklärung des Mieters"):
+                for i, p in enumerate(st.session_state.positionen):
+                    if not p.aktiv or not p.betrag:
+                        continue
+                    p.arbeitskosten = st.number_input(
+                        f"{p.bezeichnung}: davon Lohnkosten (€)", min_value=0.0, step=10.0,
+                        value=float(p.arbeitskosten), key=f"kos{i}_lohn")
+    else:
+        bearbeitet = st.data_editor(
+            positionen_als_df(st.session_state.positionen),
+            key="kosten_editor",
+            num_rows="dynamic",
+            width="stretch",
+            hide_index=True,
+            column_order=SPALTEN_ERWEITERT if erweitert else SPALTEN_EINFACH,
+            column_config={
+                SP_AKTIV: st.column_config.CheckboxColumn(width="small", default=True),
+                SP_NAME: st.column_config.TextColumn(width="medium", required=True),
+                SP_BETRAG: st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=10.0),
+                SP_VERTEILUNG: st.column_config.SelectboxColumn(
+                    options=SCHLUESSEL_LABELS, default=SCHLUESSEL["flaeche"], width="medium",
+                    help="Wie sollen die Kosten aufgeteilt werden? Nach Wohnfläche ist der "
+                         "Normalfall. „Nach Zählerstand“ nur, wenn es einen eigenen Zähler "
+                         "für die Wohnung gibt. „Nur der Mieter“ heißt: die Kosten trägt er allein."),
+                SP_LOHN: st.column_config.NumberColumn(
+                    format="%.2f", min_value=0.0,
+                    help="Der Lohnanteil auf der Rechnung (z. B. Gärtner, Schornsteinfeger). "
+                         "Dein Mieter kann ihn von der Steuer absetzen; die App bescheinigt ihn im PDF."),
+                SP_ZEIT: st.column_config.CheckboxColumn(
+                    width="small", default=True,
+                    help="Bei Ein- oder Auszug mitten im Zeitraum nur für die Tage abrechnen, "
+                         "die der Mieter da war."),
+                SP_BELEG: st.column_config.TextColumn(width="large"),
+            },
+        )
+        st.session_state.positionen = df_als_positionen(bearbeitet, st.session_state.positionen)
     summe = sum(p.betrag for p in st.session_state.positionen if p.aktiv)
     st.info(f"Kosten des Hauses insgesamt: **{eur(summe)} €**")
 
@@ -607,24 +681,53 @@ und der Heizungsanteil nach den Wärmemengenzählern.
                          "Dann zählt nur das Verhältnis der Unterzähler zueinander, und ein "
                          "Hauptzähler steht bloß zur Information dabei.")
 
-                bearbeitet_zae = st.data_editor(
-                    zaehler_als_df(p),
-                    key=f"zae{i}_tabelle",
-                    num_rows="dynamic",
-                    width="stretch",
-                    hide_index=True,
-                    disabled=[ZAE_VERBRAUCH],
-                    column_config={
-                        ZAE_NAME: st.column_config.TextColumn(width="medium", required=True),
-                        ZAE_WER: st.column_config.SelectboxColumn(
-                            options=PARTEI_LABELS, default=PARTEIEN["mieter"], width="medium"),
-                        ZAE_ALT: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
-                        ZAE_NEU: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
-                        ZAE_VERBRAUCH: st.column_config.NumberColumn(
-                            format="%.3f", help="Rechnet die App aus: Ende minus Anfang."),
-                    },
-                )
-                p.zaehler = df_als_zaehler(bearbeitet_zae)
+                if handy:
+                    for nr, z in enumerate(p.zaehler):
+                        st.markdown(f"**{z.name or 'Zähler'}** · {PARTEIEN.get(z.partei, '')}")
+                        sa, se = st.columns(2)
+                        z.alt = sa.number_input(
+                            "Stand Anfang", min_value=0.0, step=1.0, value=float(z.alt),
+                            key=f"zae{i}_{nr}_alt", label_visibility="collapsed",
+                            placeholder="Anfang")
+                        z.neu = se.number_input(
+                            "Stand Ende", min_value=0.0, step=1.0, value=float(z.neu),
+                            key=f"zae{i}_{nr}_neu", label_visibility="collapsed",
+                            placeholder="Ende")
+                        st.caption(f"Anfang → Ende, Verbrauch {menge(z.verbrauch)} {p.einheit}")
+                    with st.expander("Zähler umbenennen, zuordnen oder löschen"):
+                        for nr, z in enumerate(p.zaehler):
+                            z.name = st.text_input("Name", z.name, key=f"zae{i}_{nr}_name")
+                            z.partei = LABEL_ZU_PARTEI.get(st.selectbox(
+                                "Wem gehört der Zähler?", PARTEI_LABELS,
+                                index=PARTEI_LABELS.index(PARTEIEN.get(z.partei,
+                                                                       PARTEIEN["mieter"])),
+                                key=f"zae{i}_{nr}_partei"), "mieter")
+                            if st.button("Diesen Zähler löschen", key=f"zae{i}_{nr}_weg"):
+                                p.zaehler.pop(nr)
+                                neu_zeichnen()
+                            st.divider()
+                        if st.button("Zähler hinzufügen", key=f"zae{i}_plus"):
+                            p.zaehler.append(Zaehlerstand("Neuer Zähler", "mieter"))
+                            neu_zeichnen()
+                else:
+                    bearbeitet_zae = st.data_editor(
+                        zaehler_als_df(p),
+                        key=f"zae{i}_tabelle",
+                        num_rows="dynamic",
+                        width="stretch",
+                        hide_index=True,
+                        disabled=[ZAE_VERBRAUCH],
+                        column_config={
+                            ZAE_NAME: st.column_config.TextColumn(width="medium", required=True),
+                            ZAE_WER: st.column_config.SelectboxColumn(
+                                options=PARTEI_LABELS, default=PARTEIEN["mieter"], width="medium"),
+                            ZAE_ALT: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
+                            ZAE_NEU: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
+                            ZAE_VERBRAUCH: st.column_config.NumberColumn(
+                                format="%.3f", help="Rechnet die App aus: Ende minus Anfang."),
+                        },
+                    )
+                    p.zaehler = df_als_zaehler(bearbeitet_zae)
 
                 if not p.zaehler:
                     with st.expander("Kein Zähler vorhanden? Mengen direkt eintragen"):
@@ -796,7 +899,7 @@ with tab_ergebnis:
         ):
             try:
                 abgelegt = speicher.archivieren(stamm, st.session_state.positionen)
-                st.success(f"Abrechnung abgelegt unter `{abgelegt.name}` – "
+                st.success(f"Abrechnung abgelegt unter `{speicher.archivname(abgelegt)}` – "
                            "du findest sie in der Seitenleiste wieder.")
             except OSError as fehler:
                 st.warning(f"Ablegen nicht möglich: {fehler}")

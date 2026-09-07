@@ -26,6 +26,51 @@ Für die Streamlit Community Cloud dieselbe Datei als „Main file path" eintrag
 Die App braucht weder Google-Zugang noch Secrets. Alle Eingaben bleiben in der
 Sitzung und lassen sich über die Seitenleiste als Datei sichern und wieder laden.
 
+### Auf dem Handy benutzen
+
+Die App ist eine Webseite – sie läuft überall, wo ein Browser ist. Zwei Wege:
+
+**A · Rechner läuft, Handy im selben WLAN** (nichts einzurichten, Daten bleiben zu Hause)
+
+```bash
+streamlit run nebenkosten_app.py --server.address 0.0.0.0
+```
+
+Im Terminal erscheint eine „Network URL" wie `http://192.168.1.23:8501` – die am
+Handy im Browser öffnen. Der Rechner muss dabei laufen. Über „Zum Startbildschirm
+hinzufügen" wird daraus ein Symbol wie bei einer App.
+
+**B · Streamlit Community Cloud** (überall erreichbar, Rechner kann aus bleiben)
+
+Dort ist der Dateispeicher flüchtig. Damit die Daten einen Neustart überleben,
+speichert die App in eine Google-Tabelle, sobald in den Streamlit-Secrets steht:
+
+```toml
+gcp_json = "{...Zugangsdaten des Google-Dienstkontos als JSON-Text...}"
+nebenkosten_sheet_url = "https://docs.google.com/spreadsheets/d/…/edit"
+```
+
+Die Tabelle muss für die E-Mail-Adresse des Dienstkontos freigegeben sein
+(Freigeben → E-Mail eintragen → Bearbeiter). Die App legt darin ein Blatt
+`nebenkosten` an: eine Zeile für den aktuellen Stand, je eine weitere für jede
+fertige Abrechnung. Fehlen die Angaben oder ist die Tabelle nicht erreichbar,
+schreibt die App wie gehabt in eine Datei und sagt das in der Seitenleiste.
+
+In beiden Fällen hilft der Schalter **📱 Handy-Ansicht** in der Seitenleiste: Statt
+breiter Tabellen erscheinen einzelne Eingabefelder untereinander, die sich mit dem
+Daumen bedienen lassen. Gerechnet wird in beiden Ansichten gleich.
+
+### Wo liegt was
+
+| Was | Wo |
+| --- | --- |
+| Alle Eingaben | `daten/abrechnung.json` (oder die Google-Tabelle) |
+| Fertige Abrechnungen | `daten/archiv/2025_Mustermann_Jahresabrechnung.json` |
+| Sicherungskopie | wohin dein Browser Downloads legt |
+| Das fertige PDF | ebenfalls im Download-Ordner, am Handy unter Dateien / Downloads |
+
+Der Ablageort steht in der App selbst: Seitenleiste → „Wo liegen meine Daten?".
+
 ### Was einmal eingetragen wird und was jedes Jahr neu
 
 | Bleibt gleich (Tab 1) | Ändert sich (Tabs 2–5) |
@@ -178,6 +223,7 @@ nebenkosten_app.py        Streamlit-Oberfläche
 nebenkosten/modell.py     Datenmodell, Katalog der Betriebskosten nach § 2 BetrKV
 nebenkosten/berechnung.py Verteilung, Zählerdifferenz, Zeitanteil, Saldo, Prüfungen
 nebenkosten/speicher.py   dauerhaftes Speichern und Archiv
+nebenkosten/cloud.py      Ablage in einer Google-Tabelle (für den Cloud-Betrieb)
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)
 tests/                    Tests der Berechnung und der PDF-Ausgabe
 ```

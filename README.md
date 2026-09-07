@@ -141,8 +141,9 @@ eigenem Icon und ohne Adresszeile auf dem Handy:
 * **iPhone/iPad:** in **Safari** öffnen → Teilen → *Zum Home-Bildschirm*
 * **Android:** in **Chrome** öffnen → drei Punkte → *App installieren*
 
-Die Anleitung steht auch in der App selbst (Seitenleiste → „App auf den Startbildschirm
-legen").
+Wie das geht, steht in der Anleitung – nicht in der App: Wer sie benutzt, hat sie
+längst abgelegt, und eine Einrichtungsanleitung in der täglichen Oberfläche ist nur
+Ballast.
 
 In beiden Fällen hilft der Schalter **📱 Handy-Ansicht** in der Seitenleiste: Statt
 breiter Tabellen erscheinen einzelne Eingabefelder untereinander, die sich mit dem

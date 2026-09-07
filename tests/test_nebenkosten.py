@@ -631,6 +631,50 @@ def test_keine_warnung_wenn_gar_keine_zaehler_abgelesen_sind():
     assert not any("fehlen die Stände" in w for w in berechne(basis_stammdaten(), [pos]).warnungen)
 
 
+# --- Kategorien ------------------------------------------------------------
+
+def test_katalog_ist_nach_kategorien_sortiert():
+    from nebenkosten.modell import KATEGORIEN
+
+    positionen = standard_positionen()
+    assert {p.kategorie for p in positionen} <= set(KATEGORIEN)
+    for schluessel in ("wasser", "gas", "sonstiges"):
+        assert any(p.kategorie == schluessel and p.aktiv for p in positionen)
+    # jede Position hat einen Hinweis, welcher Beleg dazugehört
+    assert all(p.hinweis for p in positionen)
+
+
+def test_ergebnis_gruppiert_nach_kategorie():
+    positionen = [Position("Wasser", "wasser", betrag=400.0),
+                  Position("Abwasser", "wasser", betrag=500.0),
+                  Position("Heizung", "gas", betrag=2000.0),
+                  Position("Grundsteuer", "sonstiges", betrag=1000.0)]
+    e = berechne(basis_stammdaten(), positionen)
+    gruppen = e.nach_kategorie()
+    assert [g[0] for g in gruppen] == ["wasser", "gas", "sonstiges"]
+    assert gruppen[0][2] == 900.0 and gruppen[0][3] == 360.0     # 40 % Wohnfläche
+    assert round(sum(g[3] for g in gruppen), 2) == e.summe_anteil
+
+
+def test_neue_umlagefaehige_positionen_sind_vorhanden():
+    namen = {p.bezeichnung for p in standard_positionen()}
+    for pflicht in ("Niederschlagswasser", "Kosten der Heizkostenabrechnung",
+                    "Rauchwarnmelder – Wartung", "Grundgebühr Wasser / Zählermiete",
+                    "Legionellenprüfung", "Betriebsstrom der Heizung"):
+        assert pflicht in namen, pflicht
+
+
+def test_warnung_nur_wenn_waerme_gar_nicht_nach_verbrauch_geht():
+    s = basis_stammdaten()
+    nur_flaeche = [Position("Heizung", "gas", betrag=2000.0, schluessel="flaeche")]
+    assert any("nur nach Fläche" in w for w in berechne(s, nur_flaeche).warnungen)
+
+    mit_zaehler = [Position("Heizung", "gas", betrag=2000.0, schluessel="verbrauch",
+                            verbrauch_gesamt=100.0, verbrauch_mieter=30.0),
+                   Position("Heizungswartung", "gas", betrag=180.0, schluessel="flaeche")]
+    assert not any("nur nach Fläche" in w for w in berechne(s, mit_zaehler).warnungen)
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

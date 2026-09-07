@@ -88,6 +88,7 @@ class Zaehler:
 @dataclass
 class Zeile:
     bezeichnung: str
+    kategorie: str
     gesamtkosten: float
     schluessel_text: str
     quote: float
@@ -128,6 +129,25 @@ class Ergebnis:
     @property
     def betrag_absolut(self) -> float:
         return abs(self.saldo)
+
+    def nach_kategorie(self) -> list[tuple[str, list[Zeile], float, float]]:
+        """Zeilen gruppiert: (Kategorie, Zeilen, Summe Gesamtkosten, Summe Anteil)."""
+        from .modell import KATEGORIEN
+
+        gruppen = []
+        for schluessel in KATEGORIEN:
+            zeilen = [z for z in self.zeilen if z.kategorie == schluessel]
+            if zeilen:
+                gruppen.append((schluessel, zeilen,
+                                round(sum(z.gesamtkosten for z in zeilen), 2),
+                                round(sum(z.anteil for z in zeilen), 2)))
+        rest = [z for z in self.zeilen
+                if z.kategorie not in KATEGORIEN]
+        if rest:
+            gruppen.append(("sonstiges", rest,
+                            round(sum(z.gesamtkosten for z in rest), 2),
+                            round(sum(z.anteil for z in rest), 2)))
+        return gruppen
 
 
 def zaehlerquelle(pos: Position, positionen: list[Position] | None) -> Position:
@@ -376,6 +396,7 @@ def berechne(s: Stammdaten, positionen: list[Position],
                 grundtext += f"; Zeitanteil {e.tage_nutzung}/{e.tage_zeitraum} Tage"
             e.zeilen.append(Zeile(
                 bezeichnung=f"{pos.bezeichnung.strip()} – Grundkosten {zahl(grund * 100, 0)} %",
+                kategorie=pos.kategorie,
                 gesamtkosten=round(pos.betrag * grund, 2),
                 schluessel_text=grundtext,
                 quote=flaechenquote,
@@ -396,6 +417,7 @@ def berechne(s: Stammdaten, positionen: list[Position],
 
         e.zeilen.append(Zeile(
             bezeichnung=bezeichnung,
+            kategorie=pos.kategorie,
             gesamtkosten=round(pos.betrag * restanteil, 2),
             schluessel_text=text,
             quote=quote,
@@ -512,14 +534,15 @@ def _plausibilitaet(s: Stammdaten, e: Ergebnis, bis: date | None) -> None:
             "Heiz- und Warmwasserkosten müssen dann zu 50–70 % verbrauchsabhängig abgerechnet werden."
         )
 
-    heiz_nach_flaeche = [z for z in e.zeilen
-                         if ("heiz" in z.bezeichnung.lower()
-                             or "warmwasser" in z.bezeichnung.lower())
-                         and "Wohnfläche" in z.schluessel_text
-                         and "Grundkosten" not in z.bezeichnung]
-    if heiz_nach_flaeche and s.einheiten_gesamt <= 2:
+    # Nur melden, wenn die Wärmekosten gar nicht verbrauchsabhängig verteilt werden.
+    waermezeilen = [z for z in e.zeilen if z.kategorie == "gas"
+                    and ("heiz" in z.bezeichnung.lower()
+                         or "warmwasser" in z.bezeichnung.lower())]
+    nach_verbrauch = [z for z in waermezeilen if "Verbrauch" in z.schluessel_text
+                      or "Zähler" in z.schluessel_text]
+    if waermezeilen and not nach_verbrauch and s.einheiten_gesamt <= 2:
         e.warnungen.append(
-            "Heiz-/Warmwasserkosten werden nach Fläche verteilt. Das ist im selbst bewohnten "
-            "Zweifamilienhaus nach § 2 HeizkostenV zulässig – sofern der Mietvertrag nichts "
-            "anderes vorschreibt."
+            "Heiz- und Warmwasserkosten werden nur nach Fläche verteilt. Das ist im selbst "
+            "bewohnten Zweifamilienhaus nach § 2 HeizkostenV zulässig – sofern der Mietvertrag "
+            "nichts anderes vorschreibt. Mit Wärmemengenzählern wäre es genauer."
         )

@@ -17,9 +17,9 @@ from nebenkosten.berechnung import (
 )
 from nebenkosten import speicher
 from nebenkosten.modell import (
-    ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, PARTEIEN, SCHLUESSEL, ZAEHLER_GRUNDLAGE,
-    ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand, as_dict, from_dict,
-    standard_positionen,
+    ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
+    ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
+    as_dict, from_dict, standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
@@ -123,7 +123,8 @@ def positionen_als_df(positionen: list[Position]) -> pd.DataFrame:
     } for p in positionen])
 
 
-def df_als_positionen(df: pd.DataFrame, bestehend: list[Position]) -> list[Position]:
+def df_als_positionen(df: pd.DataFrame, bestehend: list[Position],
+                      kategorie: str = "sonstiges") -> list[Position]:
     """Tabelle zurück in Positionen wandeln.
 
     Zählerstände stehen nicht in der Tabelle, sondern im Tab „Zählerstände“ –
@@ -151,6 +152,7 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position]) -> list[Posit
 
         positionen.append(Position(
             bezeichnung=name,
+            kategorie=vorgaenger.kategorie if vorgaenger else kategorie,
             betrag=zahlwert(SP_BETRAG),
             schluessel=LABEL_ZU_KEY.get(str(r.get(SP_VERTEILUNG)), "flaeche"),
             einheit=vorgaenger.einheit if vorgaenger else "",
@@ -537,17 +539,37 @@ with tab_kosten:
         "einfach links abwählen. Eigene Zeilen unten anfügen."
     )
 
+    def kategorie_positionen(schluessel: str) -> list[Position]:
+        return [p for p in st.session_state.positionen if p.kategorie == schluessel]
+
+    def zusammenfuehren(schluessel: str, neue: list[Position]) -> None:
+        """Bearbeitete Zeilen einer Kategorie zurück in die Gesamtliste."""
+        zusammen: list[Position] = []
+        eingefuegt = False
+        for p in st.session_state.positionen:
+            if p.kategorie != schluessel:
+                zusammen.append(p)
+            elif not eingefuegt:
+                zusammen.extend(neue)
+                eingefuegt = True
+        if not eingefuegt:
+            zusammen.extend(neue)
+        st.session_state.positionen = zusammen
+
     if handy:
-        for i, p in enumerate(st.session_state.positionen):
-            if not p.aktiv:
-                continue
-            p.betrag = st.number_input(
-                f"{p.bezeichnung} (€)", min_value=0.0, step=10.0,
-                value=float(p.betrag), key=f"kos{i}_betrag", help=p.hinweis)
-        with st.expander("Welche Kostenarten brauche ich?"):
-            for i, p in enumerate(st.session_state.positionen):
-                p.aktiv = st.checkbox(p.bezeichnung, value=p.aktiv, key=f"kos{i}_aktiv",
-                                      help=p.hinweis)
+        for schluessel, name in KATEGORIEN.items():
+            st.markdown(f"#### {name}")
+            gruppe = kategorie_positionen(schluessel)
+            for i, p in enumerate(gruppe):
+                if not p.aktiv:
+                    continue
+                p.betrag = st.number_input(
+                    f"{p.bezeichnung} (€)", min_value=0.0, step=10.0,
+                    value=float(p.betrag), key=f"kos_{schluessel}_{i}_betrag", help=p.hinweis)
+            with st.expander(f"Zeilen für „{name}“ ein- und ausschalten"):
+                for i, p in enumerate(gruppe):
+                    p.aktiv = st.checkbox(p.bezeichnung, value=p.aktiv,
+                                          key=f"kos_{schluessel}_{i}_aktiv", help=p.hinweis)
         with st.expander("Wie wird verteilt?"):
             for i, p in enumerate(st.session_state.positionen):
                 if not p.aktiv:
@@ -573,39 +595,44 @@ with tab_kosten:
                         f"{p.bezeichnung}: davon Lohnkosten (€)", min_value=0.0, step=10.0,
                         value=float(p.arbeitskosten), key=f"kos{i}_lohn")
     else:
-        bearbeitet = st.data_editor(
-            positionen_als_df(st.session_state.positionen),
-            key="kosten_editor",
-            num_rows="dynamic",
-            width="stretch",
-            hide_index=True,
-            column_order=SPALTEN_ERWEITERT if erweitert else SPALTEN_EINFACH,
-            column_config={
-                SP_AKTIV: st.column_config.CheckboxColumn(width="small", default=True),
-                SP_NAME: st.column_config.TextColumn(width="medium", required=True),
-                SP_BETRAG: st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=10.0),
-                SP_VERTEILUNG: st.column_config.SelectboxColumn(
-                    options=SCHLUESSEL_LABELS, default=SCHLUESSEL["flaeche"], width="medium",
-                    help="Wie sollen die Kosten aufgeteilt werden? Nach Wohnfläche ist der "
-                         "Normalfall. „Nach Zählerstand“ nur, wenn es einen eigenen Zähler "
-                         "für die Wohnung gibt. „Nur der Mieter“ heißt: die Kosten trägt er allein."),
-                SP_GRUND: st.column_config.NumberColumn(
-                    format="%.0f", min_value=0.0, max_value=50.0, step=5.0,
-                    help="Nur bei Verteilung nach Zählerstand: Anteil der Kosten, der nach "
-                         "Wohnfläche verteilt wird (Grundkosten). Bei Heizung und Warmwasser "
-                         "sind 30 % üblich, der Rest geht nach Verbrauch. 0 = alles nach Verbrauch."),
-                SP_LOHN: st.column_config.NumberColumn(
-                    format="%.2f", min_value=0.0,
-                    help="Der Lohnanteil auf der Rechnung (z. B. Gärtner, Schornsteinfeger). "
-                         "Dein Mieter kann ihn von der Steuer absetzen; die App bescheinigt ihn im PDF."),
-                SP_ZEIT: st.column_config.CheckboxColumn(
-                    width="small", default=True,
-                    help="Bei Ein- oder Auszug mitten im Zeitraum nur für die Tage abrechnen, "
-                         "die der Mieter da war."),
-                SP_BELEG: st.column_config.TextColumn(width="large"),
-            },
-        )
-        st.session_state.positionen = df_als_positionen(bearbeitet, st.session_state.positionen)
+        for schluessel, name in KATEGORIEN.items():
+            gruppe = kategorie_positionen(schluessel)
+            teilsumme = sum(p.betrag for p in gruppe if p.aktiv)
+            st.markdown(f"#### {name} · {eur(teilsumme)} €")
+            bearbeitet = st.data_editor(
+                positionen_als_df(gruppe),
+                key=f"kosten_editor_{schluessel}",
+                num_rows="dynamic",
+                width="stretch",
+                hide_index=True,
+                column_order=SPALTEN_ERWEITERT if erweitert else SPALTEN_EINFACH,
+                column_config={
+                    SP_AKTIV: st.column_config.CheckboxColumn(width="small", default=True),
+                    SP_NAME: st.column_config.TextColumn(width="medium", required=True),
+                    SP_BETRAG: st.column_config.NumberColumn(format="%.2f", min_value=0.0,
+                                                            step=10.0),
+                    SP_VERTEILUNG: st.column_config.SelectboxColumn(
+                        options=SCHLUESSEL_LABELS, default=SCHLUESSEL["flaeche"], width="medium",
+                        help="Nach Wohnfläche ist der Normalfall. „Nach Zählerstand“ nur, wenn "
+                             "es einen eigenen Zähler gibt. „Nur der Mieter“ bzw. „nur ich "
+                             "selbst“ für Kosten, die eine Seite allein trägt."),
+                    SP_GRUND: st.column_config.NumberColumn(
+                        format="%.0f", min_value=0.0, max_value=50.0, step=5.0,
+                        help="Nur bei Verteilung nach Zählerstand: Anteil, der nach Wohnfläche "
+                             "verteilt wird. Bei Heizung und Warmwasser sind 30 % üblich."),
+                    SP_LOHN: st.column_config.NumberColumn(
+                        format="%.2f", min_value=0.0,
+                        help="Lohnanteil auf der Rechnung – dein Mieter kann ihn von der "
+                             "Steuer absetzen; die App bescheinigt ihn im PDF."),
+                    SP_ZEIT: st.column_config.CheckboxColumn(
+                        width="small", default=True,
+                        help="Bei Ein- oder Auszug mitten im Zeitraum nur für die Tage "
+                             "abrechnen, die der Mieter da war."),
+                    SP_BELEG: st.column_config.TextColumn(width="large"),
+                },
+            )
+            zusammenfuehren(schluessel, df_als_positionen(bearbeitet, gruppe, schluessel))
+
     summe = sum(p.betrag for p in st.session_state.positionen if p.aktiv)
     st.info(f"Kosten des Hauses insgesamt: **{eur(summe)} €**")
 

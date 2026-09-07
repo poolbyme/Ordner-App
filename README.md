@@ -71,6 +71,43 @@ Daumen bedienen lassen. Gerechnet wird in beiden Ansichten gleich.
 
 Der Ablageort steht in der App selbst: Seitenleiste → „Wo liegen meine Daten?".
 
+### Kostenarten nach Bereichen
+
+Die Kosten sind in drei Bereiche gegliedert, im Eingabetab wie im PDF – dort mit
+Zwischensummen je Bereich:
+
+**Wasser und Abwasser** — Wasser, Abwasser, Niederschlagswasser, Grundgebühr und
+Zählermiete, Eichung und Wartung der Wasserzähler, Wasseraufbereitung,
+Abwasserhebeanlage, Legionellenprüfung
+
+**Heizung und Warmwasser** — Heizung, Warmwasser, Heizungswartung, Schornsteinfeger,
+Betriebsstrom der Heizung, Miete und Eichung der Wärmezähler, Kosten der
+Heizkostenabrechnung, Tankreinigung und Immissionsmessung
+
+**Sonstige Betriebskosten** — Grundsteuer, Müllabfuhr, Straßenreinigung und
+Winterdienst, Gartenpflege, Allgemeinstrom, Versicherungen, Gebäudereinigung,
+Ungezieferbekämpfung, Hausmeister, Rauchwarnmelder-Wartung, Dachrinnenreinigung,
+Wartung der Lüftungsanlage, Prüfung der Elektroanlage, Aufzug, gemeinsame
+Waschmaschine, Kabelanschluss, Sonstiges
+
+Aktiv ist, was in einem Zweifamilienhaus mit Gasheizung üblich ist; der Rest steht
+abgewählt bereit. Eigene Zeilen lassen sich in jedem Bereich anfügen.
+
+Drei Positionen werden oft übersehen und sind trotzdem umlagefähig:
+
+* **Kosten der Heizkostenabrechnung** – Ablesung, Berechnung und Aufteilung durch einen
+  Abrechnungsdienst (§ 2 Nr. 4a BetrKV). Der einzige Fall, in dem Abrechnungsaufwand
+  auf den Mieter darf.
+* **Miete und Eichung der Zähler** – für Wärme- und Wasserzähler.
+* **Niederschlagswassergebühr** – wird gern mit der Abwassergebühr verwechselt und dann
+  gar nicht umgelegt.
+
+Vier Positionen setzen voraus, dass sie im Mietvertrag ausdrücklich als sonstige
+Betriebskosten benannt sind (§ 2 Nr. 17 BetrKV): Rauchwarnmelder-Wartung,
+Dachrinnenreinigung, Wartung der Lüftungsanlage, Prüfung der Elektroanlage. Bei
+Rauchwarnmeldern ist außerdem nur die Wartung umlagefähig, nicht die Miete der Geräte
+(BGH 2022).
+
 ### Was einmal eingetragen wird und was jedes Jahr neu
 
 | Bleibt gleich (Tab 1) | Ändert sich (Tabs 2–5) |

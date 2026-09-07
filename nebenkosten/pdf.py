@@ -10,7 +10,7 @@ from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 
 from .berechnung import Ergebnis, eur, menge, parse_datum, zahl
-from .modell import Stammdaten, sicht_vermieter
+from .modell import KATEGORIEN, Stammdaten, sicht_vermieter
 
 # Falls eine Unicode-Schrift verfügbar ist, wird sie benutzt (echtes €-Zeichen).
 # Sonst greift die eingebaute Helvetica, die nur Latin-1 kann.
@@ -195,6 +195,7 @@ def _kostentabelle(pdf: Abrechnung, e: Ergebnis) -> None:
     pdf.abschnitt_ueberschrift("Zusammenstellung der Gesamtkosten und Verteilung")
     waehrung = "€" if pdf.unicode else "EUR"
     pdf.font(8.5)
+    gruppen = e.nach_kategorie()
     kopf = FontFace(emphasis="BOLD", fill_color=GRAU, size_pt=8)
     with pdf.table(
         col_widths=(48, 29, 59, 34),
@@ -204,18 +205,30 @@ def _kostentabelle(pdf: Abrechnung, e: Ergebnis) -> None:
         padding=(1.3, 1.6, 1.3, 1.6),
         borders_layout="HORIZONTAL_LINES",
     ) as tabelle:
-        kopfzeile = tabelle.row()
         anteil_titel = ("Anteil eigene\nWohnung" if pdf.eigene_aufstellung else "Anteil Mieter")
+        kopfzeile = tabelle.row()
         for titel in ("Kostenart", f"Gesamtkosten\n({waehrung})", "Verteilerschlüssel",
                       f"{anteil_titel}\n({waehrung})"):
             kopfzeile.cell(pdf.t(titel))
-        for z in e.zeilen:
-            reihe = tabelle.row()
-            reihe.cell(pdf.t(z.bezeichnung))
-            reihe.cell(eur(z.gesamtkosten))
-            reihe.cell(pdf.t(z.schluessel_text))
-            reihe.cell(eur(z.anteil))
-        summe = tabelle.row(style=FontFace(emphasis="BOLD"))
+
+        mehrere = len(gruppen) > 1
+        for schluessel, zeilen, summe_gesamt, summe_anteil in gruppen:
+            if mehrere:
+                gruppenzeile = tabelle.row(style=FontFace(emphasis="BOLD", fill_color=(250, 250, 251)))
+                gruppenzeile.cell(pdf.t(KATEGORIEN.get(schluessel, "Sonstiges")), colspan=4)
+            for z in zeilen:
+                reihe = tabelle.row()
+                reihe.cell(pdf.t(z.bezeichnung))
+                reihe.cell(eur(z.gesamtkosten))
+                reihe.cell(pdf.t(z.schluessel_text))
+                reihe.cell(eur(z.anteil))
+            if mehrere:
+                zwischen = tabelle.row(style=FontFace(emphasis="BOLD"))
+                zwischen.cell(pdf.t(f"Zwischensumme {KATEGORIEN.get(schluessel, '')}"))
+                zwischen.cell(eur(summe_gesamt))
+                zwischen.cell("")
+                zwischen.cell(eur(summe_anteil))
+        summe = tabelle.row(style=FontFace(emphasis="BOLD", fill_color=GRAU))
         summe.cell(pdf.t("Summe"))
         summe.cell(eur(e.summe_gesamtkosten))
         summe.cell("")

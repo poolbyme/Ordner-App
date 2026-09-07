@@ -52,6 +52,12 @@ NICHT_UMLAGEFAEHIG_STICHWORTE = [
 ]
 
 
+KATEGORIEN = {
+    "wasser": "Wasser und Abwasser",
+    "gas": "Heizung und Warmwasser",
+    "sonstiges": "Sonstige Betriebskosten",
+}
+
 SICHTEN = {
     "mieter": "Abrechnung für den Mieter",
     "vermieter": "Abrechnung für die eigene Wohnung",
@@ -90,6 +96,7 @@ class Position:
     """Eine Kostenart der Abrechnung (i. d. R. eine Position nach § 2 BetrKV)."""
 
     bezeichnung: str
+    kategorie: str = "sonstiges"   # wasser, gas oder sonstiges
     betrag: float = 0.0            # Gesamtkosten des Hauses im Abrechnungszeitraum
     schluessel: str = "flaeche"
     einheit: str = ""              # z. B. m³ oder kWh
@@ -212,11 +219,11 @@ class Stammdaten:
 
 
 def standard_positionen() -> list[Position]:
-    """Die Kostenarten, die auf einen Mieter umgelegt werden dürfen (§ 2 BetrKV).
+    """Alles, was auf einen Mieter umgelegt werden darf (§ 2 BetrKV), nach Bereichen.
 
-    Der Hinweis sagt, welcher Beleg zu der Zeile gehört. Die Zähler sind für ein
-    Zweifamilienhaus vorbereitet und lassen sich in der App ändern, löschen und
-    ergänzen.
+    Aktiv ist, was in einem Zweifamilienhaus mit Gasheizung üblicherweise anfällt.
+    Der Rest steht bereit, ist aber abgewählt. Der Hinweis sagt, welcher Beleg
+    dazugehört und worauf zu achten ist.
     """
     wasserzaehler = [
         Zaehlerstand("Hauptzähler Wasser", "haus"),
@@ -227,15 +234,31 @@ def standard_positionen() -> list[Position]:
         Zaehlerstand("Außenzapfstelle / Garten", "vermieter"),
     ]
     return [
-        Position("Grundsteuer", schluessel="flaeche",
-                 hinweis="Grundsteuerbescheid der Gemeinde"),
-        Position("Wasser", schluessel="verbrauch", einheit="m³",
+        # --- Wasser und Abwasser ------------------------------------------
+        Position("Wasser", "wasser", schluessel="verbrauch", einheit="m³",
                  zaehler=wasserzaehler,
-                 hinweis="Jahresrechnung des Wasserversorgers"),
-        Position("Abwasser", schluessel="verbrauch", einheit="m³",
+                 hinweis="Jahresrechnung des Wasserversorgers (Verbrauchsgebühr)"),
+        Position("Abwasser", "wasser", schluessel="verbrauch", einheit="m³",
                  zaehler_von="Wasser",
-                 hinweis="Gebührenbescheid der Gemeinde; meist auf die Frischwassermenge"),
-        Position("Heizung (Gas)", schluessel="verbrauch", einheit="kWh",
+                 hinweis="Schmutzwassergebühr der Gemeinde, meist auf die Frischwassermenge"),
+        Position("Niederschlagswasser", "wasser", schluessel="flaeche",
+                 hinweis="Regenwassergebühr, meist nach versiegelter Fläche berechnet"),
+        Position("Grundgebühr Wasser / Zählermiete", "wasser", schluessel="flaeche", aktiv=False,
+                 hinweis="verbrauchsunabhängiger Teil der Wasserrechnung"),
+        Position("Eichung und Wartung der Wasserzähler", "wasser", schluessel="flaeche",
+                 aktiv=False,
+                 hinweis="§ 2 Nr. 2 BetrKV – Miete, Eichung und Ablesung der Zähler"),
+        Position("Wasseraufbereitung / Enthärtungsanlage", "wasser", schluessel="flaeche",
+                 aktiv=False,
+                 hinweis="§ 2 Nr. 2 BetrKV – Betrieb und Salz, keine Anschaffung"),
+        Position("Abwasserhebeanlage / Pumpe", "wasser", schluessel="flaeche", aktiv=False,
+                 hinweis="§ 2 Nr. 3 BetrKV – Strom und Wartung, keine Reparatur"),
+        Position("Legionellenprüfung", "wasser", schluessel="flaeche", aktiv=False,
+                 hinweis="nur bei zentraler Warmwasseranlage über 400 l Speicher; "
+                         "im Zweifamilienhaus meist nicht nötig"),
+
+        # --- Heizung und Warmwasser ---------------------------------------
+        Position("Heizung (Gas)", "gas", schluessel="verbrauch", einheit="kWh",
                  zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
                  zaehler=[
                      Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus"),
@@ -243,44 +266,66 @@ def standard_positionen() -> list[Position]:
                      Zaehlerstand("Wärmemenge Fußbodenheizung eigene Wohnung", "vermieter"),
                      Zaehlerstand("Wärmemenge Heizkörper eigene Wohnung", "vermieter"),
                  ],
-                 hinweis="Gasrechnung, Wartung, Betriebsstrom – verteilt nach den "
-                         "Wärmemengenzählern"),
-        Position("Warmwasser (Gas)", schluessel="verbrauch", einheit="m³",
+                 hinweis="Gasrechnung ohne den Warmwasseranteil – siehe Rechner im Tab Kosten"),
+        Position("Warmwasser (Gas)", "gas", schluessel="verbrauch", einheit="m³",
                  zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
                  zaehler=[
                      Zaehlerstand("Warmwasser Mieter", "mieter"),
                      Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
                  ],
-                 hinweis="Anteil der Gaskosten für die Warmwasserbereitung – "
-                         "verteilt nach den Warmwasserzählern"),
-        Position("Aufzug", schluessel="flaeche", aktiv=False,
-                 hinweis="Wartungsvertrag, Notruf, Strom"),
-        Position("Straßenreinigung und Winterdienst", schluessel="flaeche",
+                 hinweis="Anteil der Gaskosten für die Warmwasserbereitung"),
+        Position("Heizungswartung", "gas", schluessel="flaeche",
+                 hinweis="jährliche Wartung – Reparaturen auf derselben Rechnung müssen raus"),
+        Position("Schornsteinfeger", "gas", schluessel="flaeche",
+                 hinweis="Kehr- und Messgebühren, wenn nicht schon in der Heizung enthalten"),
+        Position("Betriebsstrom der Heizung", "gas", schluessel="flaeche", aktiv=False,
+                 hinweis="Strom für Brenner, Pumpen und Steuerung; oft pauschal geschätzt"),
+        Position("Miete und Eichung der Wärmezähler", "gas", schluessel="flaeche", aktiv=False,
+                 hinweis="§ 2 Nr. 4a BetrKV – Ausstattung zur Verbrauchserfassung"),
+        Position("Kosten der Heizkostenabrechnung", "gas", schluessel="flaeche", aktiv=False,
+                 hinweis="§ 2 Nr. 4a BetrKV – Ablesung, Berechnung und Aufteilung durch einen "
+                         "Abrechnungsdienst; ausdrücklich umlagefähig"),
+        Position("Tankreinigung / Immissionsmessung", "gas", schluessel="flaeche", aktiv=False,
+                 hinweis="§ 2 Nr. 4a BetrKV – bei Öl- oder Flüssiggasheizung"),
+
+        # --- Sonstige Betriebskosten --------------------------------------
+        Position("Grundsteuer", "sonstiges", schluessel="flaeche",
+                 hinweis="Grundsteuerbescheid der Gemeinde"),
+        Position("Müllabfuhr", "sonstiges", schluessel="personen",
+                 hinweis="Gebührenbescheid; bei eigener Tonne „nur der Mieter“ wählen"),
+        Position("Straßenreinigung und Winterdienst", "sonstiges", schluessel="flaeche",
                  hinweis="Gebührenbescheid oder Rechnung des Dienstleisters"),
-        Position("Müllabfuhr", schluessel="personen",
-                 hinweis="Gebührenbescheid der Gemeinde"),
-        Position("Gebäudereinigung", schluessel="flaeche", aktiv=False,
-                 hinweis="Rechnung der Reinigungsfirma, Treppenhausreinigung"),
-        Position("Ungezieferbekämpfung", schluessel="flaeche", aktiv=False,
-                 hinweis="nur laufende Bekämpfung, keine einmalige Beseitigung"),
-        Position("Gartenpflege", schluessel="flaeche",
-                 hinweis="Rechnungen der Gärtnerei; eigene Arbeit darf zum "
-                         "üblichen Preis ohne Mehrwertsteuer angesetzt werden"),
-        Position("Allgemeinstrom", schluessel="flaeche",
-                 hinweis="Stromrechnung für Flur, Keller, Außenbeleuchtung"),
-        Position("Schornsteinfeger", schluessel="flaeche",
-                 hinweis="Rechnung des Schornsteinfegers, wenn nicht schon in der Heizung enthalten"),
-        Position("Versicherungen", schluessel="flaeche",
-                 hinweis="Gebäude-, Haftpflicht- und Elementarversicherung; "
-                         "keine Rechtsschutz- oder Reparaturversicherung"),
-        Position("Hausmeister", schluessel="flaeche", aktiv=False,
+        Position("Gartenpflege", "sonstiges", schluessel="flaeche",
+                 hinweis="Rechnungen der Gärtnerei; eigene Arbeit darf zum üblichen Preis "
+                         "ohne Mehrwertsteuer angesetzt werden"),
+        Position("Allgemeinstrom", "sonstiges", schluessel="flaeche",
+                 hinweis="Strom für Flur, Keller, Außenbeleuchtung"),
+        Position("Versicherungen", "sonstiges", schluessel="flaeche",
+                 hinweis="Gebäude-, Haftpflicht- und Elementarversicherung; keine "
+                         "Rechtsschutz-, Reparatur- oder Mietausfallversicherung"),
+        Position("Gebäudereinigung", "sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="Treppenhaus, Keller, Zugänge"),
+        Position("Ungezieferbekämpfung", "sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="nur laufende Vorbeugung, keine einmalige Beseitigung"),
+        Position("Hausmeister", "sonstiges", schluessel="flaeche", aktiv=False,
                  hinweis="Lohn ohne Reparatur- und Verwaltungsanteil"),
-        Position("Kabelanschluss", schluessel="einheiten", aktiv=False,
-                 hinweis="seit 01.07.2024 nicht mehr über die Nebenkosten umlegbar"),
-        Position("Gemeinsame Waschmaschine", schluessel="einheiten", aktiv=False,
+        Position("Rauchwarnmelder – Wartung", "sonstiges", schluessel="einheiten", aktiv=False,
+                 hinweis="Wartung ist umlagefähig, wenn im Mietvertrag als sonstige "
+                         "Betriebskosten benannt; die Miete der Geräte ist es nicht (BGH 2022)"),
+        Position("Dachrinnenreinigung", "sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="nur wenn regelmäßig wiederkehrend und im Mietvertrag benannt"),
+        Position("Wartung der Lüftungsanlage", "sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="nur wenn im Mietvertrag als sonstige Betriebskosten benannt"),
+        Position("Prüfung der Elektroanlage", "sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="wiederkehrender E-Check; umstritten, nur mit Vereinbarung im Vertrag"),
+        Position("Aufzug", "sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="Wartung, Notruf, Strom"),
+        Position("Gemeinsame Waschmaschine", "sonstiges", schluessel="einheiten", aktiv=False,
                  hinweis="Strom und Wartung gemeinsam genutzter Geräte"),
-        Position("Sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="nur wenn diese Kosten im Mietvertrag ausdrücklich genannt sind"),
+        Position("Kabelanschluss", "sonstiges", schluessel="einheiten", aktiv=False,
+                 hinweis="seit 01.07.2024 nicht mehr über die Nebenkosten umlegbar"),
+        Position("Sonstiges", "sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="§ 2 Nr. 17 BetrKV – nur wenn im Mietvertrag ausdrücklich benannt"),
     ]
 
 

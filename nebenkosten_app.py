@@ -11,7 +11,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from nebenkosten.berechnung import berechne, eur, parse_datum, zahl
+from nebenkosten.berechnung import berechne, eur, menge, parse_datum, zahl
 from nebenkosten.modell import (
     SCHLUESSEL, Position, Stammdaten, as_dict, from_dict, standard_positionen,
 )
@@ -22,24 +22,31 @@ st.set_page_config(page_title="Nebenkostenabrechnung", page_icon="🏠", layout=
 SCHLUESSEL_LABELS = list(SCHLUESSEL.values())
 LABEL_ZU_KEY = {v: k for k, v in SCHLUESSEL.items()}
 
-SPALTEN = {
-    "aktiv": "Aktiv",
-    "bezeichnung": "Kostenart",
-    "betrag": "Gesamtkosten (€)",
-    "schluessel": "Verteilerschlüssel",
-    "verbrauch_gesamt": "Verbrauch Haus",
-    "verbrauch_mieter": "Verbrauch Mieter",
-    "einheit": "Einheit",
-    "arbeitskosten": "davon Arbeitskosten (€)",
-    "zeitanteilig": "zeitanteilig",
-    "hinweis": "Hinweis",
-}
+# Spalten der Kostentabelle
+SP_AKTIV = "Abrechnen"
+SP_NAME = "Kostenart"
+SP_BETRAG = "Kosten fürs ganze Haus (€)"
+SP_VERTEILUNG = "Verteilung"
+SP_LOHN = "davon Lohnkosten (€)"
+SP_ZEIT = "zeitanteilig"
+SP_BELEG = "Welcher Beleg?"
+
+SPALTEN_EINFACH = (SP_AKTIV, SP_NAME, SP_BETRAG, SP_VERTEILUNG, SP_BELEG)
+SPALTEN_ERWEITERT = (SP_AKTIV, SP_NAME, SP_BETRAG, SP_VERTEILUNG, SP_LOHN, SP_ZEIT, SP_BELEG)
+
+BEHALTEN = {"stamm", "positionen", "erweitert"}
 
 
 # --------------------------------------------------------------------------
 # Zustand
 # --------------------------------------------------------------------------
 def init_state() -> None:
+    # Nach dem Laden einer Datei müssen die Eingabefelder ihre alten Werte
+    # vergessen. Das passiert hier, bevor irgendein Feld gezeichnet wird.
+    if st.session_state.pop("_felder_leeren", False):
+        for schluessel in [k for k in st.session_state if k not in BEHALTEN]:
+            del st.session_state[schluessel]
+
     if "stamm" in st.session_state:
         return
     jahr = date.today().year - 1
@@ -52,46 +59,64 @@ def init_state() -> None:
     st.session_state.positionen = standard_positionen()
 
 
+def neu_zeichnen() -> None:
+    st.session_state["_felder_leeren"] = True
+    st.rerun()
+
+
 def positionen_als_df(positionen: list[Position]) -> pd.DataFrame:
     return pd.DataFrame([{
-        SPALTEN["aktiv"]: p.aktiv,
-        SPALTEN["bezeichnung"]: p.bezeichnung,
-        SPALTEN["betrag"]: float(p.betrag),
-        SPALTEN["schluessel"]: SCHLUESSEL.get(p.schluessel, SCHLUESSEL["flaeche"]),
-        SPALTEN["verbrauch_gesamt"]: float(p.verbrauch_gesamt),
-        SPALTEN["verbrauch_mieter"]: float(p.verbrauch_mieter),
-        SPALTEN["einheit"]: p.einheit,
-        SPALTEN["arbeitskosten"]: float(p.arbeitskosten),
-        SPALTEN["zeitanteilig"]: p.zeitanteilig,
-        SPALTEN["hinweis"]: p.hinweis,
+        SP_AKTIV: p.aktiv,
+        SP_NAME: p.bezeichnung,
+        SP_BETRAG: float(p.betrag),
+        SP_VERTEILUNG: SCHLUESSEL.get(p.schluessel, SCHLUESSEL["flaeche"]),
+        SP_LOHN: float(p.arbeitskosten),
+        SP_ZEIT: p.zeitanteilig,
+        SP_BELEG: p.hinweis,
     } for p in positionen])
 
 
-def df_als_positionen(df: pd.DataFrame) -> list[Position]:
+def df_als_positionen(df: pd.DataFrame, bestehend: list[Position]) -> list[Position]:
+    """Tabelle zurück in Positionen wandeln.
+
+    Zählerstände stehen nicht in der Tabelle, sondern im Tab „Zählerstände“ –
+    sie werden über den Namen der Kostenart mitgenommen.
+    """
+    vorrat: dict[str, list[Position]] = {}
+    for p in bestehend:
+        vorrat.setdefault(p.bezeichnung.strip().lower(), []).append(p)
+
     positionen: list[Position] = []
     for _, r in df.iterrows():
-        bezeichnung = str(r.get(SPALTEN["bezeichnung"]) or "").strip()
-        if not bezeichnung:
+        name = str(r.get(SP_NAME) or "").strip()
+        if not name:
             continue
 
-        def zahlwert(spalte: str) -> float:
-            wert = r.get(SPALTEN[spalte])
+        def zahlwert(spalte: str, standard: float = 0.0) -> float:
+            wert = r.get(spalte, standard)
             try:
-                return float(wert) if pd.notna(wert) else 0.0
+                return float(wert) if pd.notna(wert) else standard
             except (TypeError, ValueError):
-                return 0.0
+                return standard
+
+        alt = vorrat.get(name.lower(), [])
+        vorgaenger = alt.pop(0) if alt else None
 
         positionen.append(Position(
-            bezeichnung=bezeichnung,
-            betrag=zahlwert("betrag"),
-            schluessel=LABEL_ZU_KEY.get(str(r.get(SPALTEN["schluessel"])), "flaeche"),
-            verbrauch_gesamt=zahlwert("verbrauch_gesamt"),
-            verbrauch_mieter=zahlwert("verbrauch_mieter"),
-            einheit=str(r.get(SPALTEN["einheit"]) or ""),
-            arbeitskosten=zahlwert("arbeitskosten"),
-            zeitanteilig=bool(r.get(SPALTEN["zeitanteilig"], True)),
-            aktiv=bool(r.get(SPALTEN["aktiv"], True)),
-            hinweis=str(r.get(SPALTEN["hinweis"]) or ""),
+            bezeichnung=name,
+            betrag=zahlwert(SP_BETRAG),
+            schluessel=LABEL_ZU_KEY.get(str(r.get(SP_VERTEILUNG)), "flaeche"),
+            verbrauch_gesamt=vorgaenger.verbrauch_gesamt if vorgaenger else 0.0,
+            verbrauch_mieter=vorgaenger.verbrauch_mieter if vorgaenger else 0.0,
+            zaehler_haus_alt=vorgaenger.zaehler_haus_alt if vorgaenger else 0.0,
+            zaehler_haus_neu=vorgaenger.zaehler_haus_neu if vorgaenger else 0.0,
+            zaehler_mieter_alt=vorgaenger.zaehler_mieter_alt if vorgaenger else 0.0,
+            zaehler_mieter_neu=vorgaenger.zaehler_mieter_neu if vorgaenger else 0.0,
+            einheit=vorgaenger.einheit if vorgaenger else "",
+            arbeitskosten=zahlwert(SP_LOHN, vorgaenger.arbeitskosten if vorgaenger else 0.0),
+            zeitanteilig=bool(r.get(SP_ZEIT, vorgaenger.zeitanteilig if vorgaenger else True)),
+            aktiv=bool(r.get(SP_AKTIV, True)),
+            hinweis=str(r.get(SP_BELEG) or ""),
         ))
     return positionen
 
@@ -106,32 +131,38 @@ init_state()
 stamm: Stammdaten = st.session_state.stamm
 
 # --------------------------------------------------------------------------
-# Seitenleiste: Speichern / Laden
+# Seitenleiste
 # --------------------------------------------------------------------------
 with st.sidebar:
-    st.header("Daten sichern")
+    erweitert = st.toggle(
+        "Mehr Einstellungen anzeigen", key="erweitert",
+        help="Zeigt zusätzliche Felder: Lohnkosten für die Steuererklärung des "
+             "Mieters, anteilige Abrechnung bei Ein- oder Auszug, Anschreiben.")
+
+    st.header("Speichern")
     st.download_button(
-        "💾 Eingaben speichern (JSON)",
+        "💾 Eingaben als Datei sichern",
         data=json.dumps(as_dict(stamm, st.session_state.positionen),
                         ensure_ascii=False, indent=2).encode("utf-8"),
         file_name=f"nebenkosten_{(parse_datum(stamm.zeitraum_bis) or date.today()).year}.json",
         mime="application/json",
         width="stretch",
+        help="Damit du im nächsten Jahr nicht alles neu tippen musst.",
     )
-    hochgeladen = st.file_uploader("📂 Gespeicherte Daten laden", type="json")
-    if hochgeladen is not None and st.button("Geladene Daten übernehmen", width="stretch"):
+    hochgeladen = st.file_uploader("📂 Gesicherte Datei öffnen", type="json")
+    if hochgeladen is not None and st.button("Daten übernehmen", width="stretch"):
         try:
             neu_stamm, neu_pos = from_dict(json.load(hochgeladen))
             st.session_state.stamm = neu_stamm
             st.session_state.positionen = neu_pos
-            st.success("Daten geladen.")
-            st.rerun()
+            neu_zeichnen()
         except Exception as fehler:  # noqa: BLE001 – Nutzerdatei kann alles enthalten
             st.error(f"Datei konnte nicht gelesen werden: {fehler}")
 
     st.divider()
-    if st.button("📅 Für nächstes Jahr vorbereiten", width="stretch",
-                 help="Zeitraum um ein Jahr weiterschieben, Beträge und Zählerstände leeren."):
+    if st.button("📅 Nächstes Jahr vorbereiten", width="stretch",
+                 help="Schiebt den Zeitraum um ein Jahr weiter und leert Beträge "
+                      "und Zählerstände. Namen und Flächen bleiben stehen."):
         for feld in ("zeitraum_von", "zeitraum_bis", "nutzung_von", "nutzung_bis"):
             d = parse_datum(getattr(stamm, feld))
             if d:
@@ -140,102 +171,160 @@ with st.sidebar:
                 except ValueError:  # 29.02.
                     setattr(stamm, feld, d.replace(year=d.year + 1, day=28).isoformat())
         for p in st.session_state.positionen:
-            p.betrag = 0.0
-            p.verbrauch_gesamt = p.verbrauch_mieter = p.arbeitskosten = 0.0
-        st.rerun()
+            p.betrag = p.arbeitskosten = 0.0
+            p.verbrauch_gesamt = p.verbrauch_mieter = 0.0
+            p.zaehler_haus_alt = p.zaehler_haus_neu = p.zaehler_haus_alt = 0.0
+            p.zaehler_mieter_alt = p.zaehler_mieter_neu = 0.0
+        stamm.datum = date.today().isoformat()
+        neu_zeichnen()
 
     if st.button("🗑️ Alles zurücksetzen", width="stretch"):
-        for schluessel in ("stamm", "positionen"):
-            st.session_state.pop(schluessel, None)
-        st.rerun()
+        st.session_state.pop("stamm", None)
+        st.session_state.pop("positionen", None)
+        neu_zeichnen()
 
     st.divider()
     st.caption(
-        "Diese App erstellt ein Abrechnungsdokument, sie ersetzt keine Rechtsberatung. "
-        "Prüfe vor dem Versand, ob der Mietvertrag die Umlage der Betriebskosten "
-        "tatsächlich vereinbart und welche Verteilerschlüssel dort stehen."
+        "Die App erstellt das Abrechnungsschreiben, sie ist keine Rechtsberatung. "
+        "Bei Streit mit dem Mieter hilft der Haus- und Grundbesitzerverein oder "
+        "ein Anwalt für Mietrecht."
     )
 
 st.title("🏠 Nebenkostenabrechnung")
-st.caption("Betriebskostenabrechnung für eine vermietete Wohnung – Eingabe, Berechnung, PDF.")
 
-tab_stamm, tab_kosten, tab_vz, tab_ergebnis = st.tabs(
-    ["1 · Stammdaten", "2 · Kosten", "3 · Vorauszahlungen", "4 · Abrechnung & PDF"]
+with st.expander("So geht's – bitte einmal lesen",
+                 expanded=not (stamm.mieter_name or stamm.flaeche_gesamt)):
+    st.markdown(
+        """
+**Was die App macht:** Sie verteilt die Kosten des Hauses auf dich und deinen Mieter,
+zieht ab, was er schon vorausgezahlt hat, und schreibt daraus ein fertiges PDF.
+
+**Was die App nicht weiß:** wie hoch deine Rechnungen waren. Die Beträge musst du
+eintippen – die App kennt weder deinen Grundsteuerbescheid noch deine Gasrechnung.
+
+**Das brauchst du dafür (aus dem abzurechnenden Jahr):**
+
+* Grundsteuerbescheid, Müllgebühren, Wasser-/Abwasserrechnung
+* Rechnungen für Gas, Öl oder Pellets, Schornsteinfeger, Wartung
+* Gebäude- und Haftpflichtversicherung, Allgemeinstrom, Gartenpflege
+* Zählerstände vom Anfang und vom Ende des Jahres (Haus und Mieterwohnung)
+* was dein Mieter monatlich an Nebenkostenvorauszahlung überwiesen hat
+
+**Ablauf:** Angaben → Kosten → Zählerstände → Vorauszahlungen → PDF herunterladen.
+
+**Zwei Dinge, die du vorher wissen solltest:**
+
+1. In deinem Mietvertrag muss stehen, dass der Mieter die Nebenkosten trägt.
+   Steht da nichts, darfst du ihm auch nichts berechnen.
+2. Die Abrechnung muss innerhalb von 12 Monaten nach dem Ende des Abrechnungsjahres
+   bei ihm ankommen. Für 2025 also bis zum 31.12.2026. Danach kannst du nichts mehr
+   nachfordern – ein Guthaben musst du ihm trotzdem auszahlen.
+        """
+    )
+
+tab_angaben, tab_kosten, tab_zaehler, tab_vz, tab_ergebnis = st.tabs(
+    ["1 · Angaben", "2 · Kosten", "3 · Zählerstände", "4 · Vorauszahlungen", "5 · Abrechnung & PDF"]
 )
 
 # --------------------------------------------------------------------------
-# 1 Stammdaten
+# 1 Angaben
 # --------------------------------------------------------------------------
-with tab_stamm:
+with tab_angaben:
     links, rechts = st.columns(2)
     with links:
-        st.subheader("Vermieter")
-        stamm.vermieter_name = st.text_input("Name", stamm.vermieter_name, key="v_name")
+        st.subheader("Du als Vermieter")
+        stamm.vermieter_name = st.text_input("Dein Name", stamm.vermieter_name, key="v_name")
         stamm.vermieter_strasse = st.text_input("Straße und Hausnummer", stamm.vermieter_strasse, key="v_str")
         stamm.vermieter_plz_ort = st.text_input("PLZ und Ort", stamm.vermieter_plz_ort, key="v_ort")
-        stamm.vermieter_iban = st.text_input("IBAN (für Nachzahlungen)", stamm.vermieter_iban, key="v_iban")
-        stamm.vermieter_bank = st.text_input("Bank (optional)", stamm.vermieter_bank, key="v_bank")
+        stamm.vermieter_iban = st.text_input(
+            "Deine IBAN", stamm.vermieter_iban, key="v_iban",
+            help="Steht im PDF, falls dein Mieter etwas nachzahlen muss.")
+        if erweitert:
+            stamm.vermieter_bank = st.text_input("Bank", stamm.vermieter_bank, key="v_bank")
 
     with rechts:
-        st.subheader("Mieter und Wohnung")
+        st.subheader("Dein Mieter")
         stamm.mieter_name = st.text_input("Name des Mieters", stamm.mieter_name, key="m_name")
-        stamm.anrede = st.text_input("Anrede im Anschreiben", stamm.anrede, key="m_anrede")
-        stamm.mieter_wohnung = st.text_input("Bezeichnung der Wohnung", stamm.mieter_wohnung, key="m_wohnung")
-        stamm.objekt_strasse = st.text_input("Objekt: Straße und Hausnummer", stamm.objekt_strasse, key="o_str")
-        stamm.objekt_plz_ort = st.text_input("Objekt: PLZ und Ort", stamm.objekt_plz_ort, key="o_ort")
+        stamm.mieter_wohnung = st.text_input(
+            "Welche Wohnung?", stamm.mieter_wohnung, key="m_wohnung",
+            help="Zum Beispiel „Wohnung Obergeschoss“.")
+        stamm.objekt_strasse = st.text_input("Haus: Straße und Hausnummer", stamm.objekt_strasse, key="o_str")
+        stamm.objekt_plz_ort = st.text_input("Haus: PLZ und Ort", stamm.objekt_plz_ort, key="o_ort")
+        if erweitert:
+            stamm.anrede = st.text_input(
+                "Anrede im Brief", stamm.anrede, key="m_anrede",
+                help="Zum Beispiel „Sehr geehrter Herr Müller,“.")
 
     st.divider()
-    st.subheader("Abrechnungszeitraum")
-    s1, s2, s3, s4 = st.columns(4)
+    st.subheader("Welches Jahr wird abgerechnet?")
+    s1, s2 = st.columns(2)
     with s1:
-        stamm.zeitraum_von = datum_feld("Zeitraum von", stamm.zeitraum_von, "z_von")
+        stamm.zeitraum_von = datum_feld("Vom", stamm.zeitraum_von, "z_von")
     with s2:
-        stamm.zeitraum_bis = datum_feld("Zeitraum bis", stamm.zeitraum_bis, "z_bis",
-                                        "Höchstens 12 Monate (§ 556 Abs. 3 BGB).")
-    with s3:
-        stamm.nutzung_von = datum_feld("Mietzeit von", stamm.nutzung_von, "n_von",
-                                       "Nur ändern, wenn der Mieter unterjährig ein- oder ausgezogen ist.")
-    with s4:
-        stamm.nutzung_bis = datum_feld("Mietzeit bis", stamm.nutzung_bis, "n_bis")
+        stamm.zeitraum_bis = datum_feld(
+            "Bis", stamm.zeitraum_bis, "z_bis",
+            "Normalerweise ein volles Kalenderjahr, also 01.01. bis 31.12.")
+
+    if erweitert:
+        st.caption("Nur nötig, wenn der Mieter mitten im Jahr ein- oder ausgezogen ist:")
+        m1, m2 = st.columns(2)
+        with m1:
+            stamm.nutzung_von = datum_feld("Mieter wohnt hier seit", stamm.nutzung_von, "n_von")
+        with m2:
+            stamm.nutzung_bis = datum_feld("Mieter wohnt hier bis", stamm.nutzung_bis, "n_bis")
+    else:
+        stamm.nutzung_von, stamm.nutzung_bis = stamm.zeitraum_von, stamm.zeitraum_bis
 
     st.divider()
-    st.subheader("Umlagegrundlagen")
+    st.subheader("Wohnfläche und Personen")
+    st.caption("Danach werden die meisten Kosten verteilt. Die Wohnfläche steht im Mietvertrag.")
     g1, g2, g3 = st.columns(3)
     with g1:
-        stamm.flaeche_gesamt = st.number_input("Gesamtwohnfläche des Hauses (m²)",
-                                               min_value=0.0, step=1.0, value=float(stamm.flaeche_gesamt))
-        stamm.flaeche_mieter = st.number_input("davon Wohnfläche des Mieters (m²)",
-                                               min_value=0.0, step=1.0, value=float(stamm.flaeche_mieter))
+        stamm.flaeche_gesamt = st.number_input(
+            "Wohnfläche des ganzen Hauses (m²)", min_value=0.0, step=1.0,
+            value=float(stamm.flaeche_gesamt), key="f_gesamt",
+            help="Deine Wohnung plus die Wohnung des Mieters.")
+        stamm.flaeche_mieter = st.number_input(
+            "davon Wohnung des Mieters (m²)", min_value=0.0, step=1.0,
+            value=float(stamm.flaeche_mieter), key="f_mieter")
     with g2:
-        stamm.personen_gesamt = st.number_input("Personen im Haus (gesamt)",
-                                                min_value=0.0, step=1.0, value=float(stamm.personen_gesamt))
-        stamm.personen_mieter = st.number_input("davon in der Mietwohnung",
-                                                min_value=0.0, step=1.0, value=float(stamm.personen_mieter))
+        stamm.personen_gesamt = st.number_input(
+            "Personen im Haus insgesamt", min_value=0.0, step=1.0,
+            value=float(stamm.personen_gesamt), key="p_gesamt",
+            help="Alle Bewohner zusammen, deine Familie mitgezählt.")
+        stamm.personen_mieter = st.number_input(
+            "davon beim Mieter", min_value=0.0, step=1.0,
+            value=float(stamm.personen_mieter), key="p_mieter")
     with g3:
-        stamm.einheiten_gesamt = st.number_input("Wohneinheiten im Haus",
-                                                 min_value=1.0, step=1.0, value=float(stamm.einheiten_gesamt))
-        stamm.einheiten_mieter = st.number_input("davon vermietet an diesen Mieter",
-                                                 min_value=0.0, step=1.0, value=float(stamm.einheiten_mieter))
+        stamm.einheiten_gesamt = st.number_input(
+            "Wohnungen im Haus", min_value=1.0, step=1.0,
+            value=float(stamm.einheiten_gesamt), key="e_gesamt")
+        stamm.einheiten_mieter = st.number_input(
+            "davon vermietet", min_value=0.0, step=1.0,
+            value=float(stamm.einheiten_mieter), key="e_mieter")
 
-    st.divider()
-    st.subheader("Anschreiben")
-    a1, a2, a3 = st.columns(3)
-    with a1:
-        stamm.ort = st.text_input("Ort für die Datumszeile", stamm.ort, key="s_ort")
-    with a2:
-        stamm.datum = datum_feld("Datum der Abrechnung", stamm.datum, "s_datum")
-    with a3:
-        stamm.zahlungsfrist_tage = int(st.number_input("Zahlungsfrist (Tage)", min_value=0, max_value=90,
-                                                       step=1, value=int(stamm.zahlungsfrist_tage)))
+    if erweitert:
+        st.divider()
+        st.subheader("Anschreiben")
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            stamm.ort = st.text_input("Ort für die Datumszeile", stamm.ort, key="s_ort")
+        with a2:
+            stamm.datum = datum_feld("Datum der Abrechnung", stamm.datum, "s_datum")
+        with a3:
+            stamm.zahlungsfrist_tage = int(st.number_input(
+                "Zahlungsfrist (Tage)", min_value=0, max_value=90, step=1,
+                value=int(stamm.zahlungsfrist_tage), key="s_frist"))
 
 # --------------------------------------------------------------------------
 # 2 Kosten
 # --------------------------------------------------------------------------
 with tab_kosten:
-    st.subheader("Kostenpositionen des Abrechnungszeitraums")
+    st.subheader("Was hat das Haus im Abrechnungsjahr gekostet?")
     st.caption(
-        "Trage die **Gesamtkosten des Hauses** ein – die App verteilt sie nach dem gewählten "
-        "Schlüssel. Nicht benötigte Zeilen einfach abwählen; neue Zeilen unten anfügen."
+        "Trag pro Zeile ein, was **für das ganze Haus** angefallen ist – die App rechnet "
+        "aus, welcher Anteil auf den Mieter entfällt. Zeilen, die es bei dir nicht gibt, "
+        "einfach links abwählen. Eigene Zeilen unten anfügen."
     )
 
     bearbeitet = st.data_editor(
@@ -244,93 +333,176 @@ with tab_kosten:
         num_rows="dynamic",
         width="stretch",
         hide_index=True,
+        column_order=SPALTEN_ERWEITERT if erweitert else SPALTEN_EINFACH,
         column_config={
-            SPALTEN["aktiv"]: st.column_config.CheckboxColumn(width="small", default=True),
-            SPALTEN["bezeichnung"]: st.column_config.TextColumn(width="medium", required=True),
-            SPALTEN["betrag"]: st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=10.0),
-            SPALTEN["schluessel"]: st.column_config.SelectboxColumn(
-                options=SCHLUESSEL_LABELS, default=SCHLUESSEL["flaeche"], width="medium"),
-            SPALTEN["verbrauch_gesamt"]: st.column_config.NumberColumn(
-                format="%.3f", min_value=0.0, help="Nur beim Schlüssel „Verbrauch“: Zählerwert für das ganze Haus."),
-            SPALTEN["verbrauch_mieter"]: st.column_config.NumberColumn(
-                format="%.3f", min_value=0.0, help="Nur beim Schlüssel „Verbrauch“: Zählerwert der Mietwohnung."),
-            SPALTEN["einheit"]: st.column_config.TextColumn(width="small", help="z. B. m³ oder kWh"),
-            SPALTEN["arbeitskosten"]: st.column_config.NumberColumn(
+            SP_AKTIV: st.column_config.CheckboxColumn(width="small", default=True),
+            SP_NAME: st.column_config.TextColumn(width="medium", required=True),
+            SP_BETRAG: st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=10.0),
+            SP_VERTEILUNG: st.column_config.SelectboxColumn(
+                options=SCHLUESSEL_LABELS, default=SCHLUESSEL["flaeche"], width="medium",
+                help="Wie sollen die Kosten aufgeteilt werden? Nach Wohnfläche ist der "
+                     "Normalfall. „Nach Zählerstand“ nur, wenn es einen eigenen Zähler "
+                     "für die Wohnung gibt. „Nur der Mieter“ heißt: die Kosten trägt er allein."),
+            SP_LOHN: st.column_config.NumberColumn(
                 format="%.2f", min_value=0.0,
-                help="Im Betrag enthaltene Lohn-/Arbeitskosten – für die Bescheinigung nach § 35a EStG."),
-            SPALTEN["zeitanteilig"]: st.column_config.CheckboxColumn(
+                help="Der Lohnanteil auf der Rechnung (z. B. Gärtner, Schornsteinfeger). "
+                     "Dein Mieter kann ihn von der Steuer absetzen; die App bescheinigt ihn im PDF."),
+            SP_ZEIT: st.column_config.CheckboxColumn(
                 width="small", default=True,
-                help="Bei unterjähriger Mietzeit anteilig nach Tagen kürzen."),
-            SPALTEN["hinweis"]: st.column_config.TextColumn(width="large"),
+                help="Bei Ein- oder Auszug mitten im Jahr nur für die Tage abrechnen, "
+                     "die der Mieter da war."),
+            SP_BELEG: st.column_config.TextColumn(width="large"),
         },
     )
-    st.session_state.positionen = df_als_positionen(bearbeitet)
+    st.session_state.positionen = df_als_positionen(bearbeitet, st.session_state.positionen)
 
-    with st.expander("Was darf umgelegt werden?"):
+    summe = sum(p.betrag for p in st.session_state.positionen if p.aktiv)
+    st.info(f"Kosten des Hauses insgesamt: **{eur(summe)} €**")
+
+    with st.expander("Was darfst du überhaupt abrechnen?"):
         st.markdown(
             """
-**Umlagefähig** sind nur die in § 2 BetrKV aufgezählten laufenden Betriebskosten –
-und nur, wenn der Mietvertrag ihre Umlage vereinbart.
+**Ja:** laufende Kosten, die jedes Jahr wieder anfallen – Grundsteuer, Wasser, Abwasser,
+Müll, Heizung, Schornsteinfeger, Gebäude- und Haftpflichtversicherung, Allgemeinstrom,
+Gartenpflege, Straßenreinigung, Winterdienst, Hausmeisterlohn.
 
-**Nicht umlagefähig** und deshalb Sache des Vermieters:
+**Nein:** alles, was das Haus in Ordnung hält oder deine eigene Verwaltung betrifft –
+Reparaturen, neue Fenster, Heizungsaustausch, Rücklagen, Kontogebühren, dein Aufwand
+fürs Abrechnen, Rechtsschutz- und Mietausfallversicherung.
 
-* Reparaturen, Instandhaltung und Instandsetzung (auch der Heizung)
-* Verwaltungskosten, Kontoführung, Porto, Steuerberatung
-* Rücklagen, Mietausfallwagnis, Rechtsschutz- und Reparaturversicherung
-* Kabelanschluss / Gemeinschaftsantenne: seit dem 01.07.2024 nicht mehr über die
-  Nebenkosten umlegbar (Ende des Nebenkostenprivilegs)
-* „Sonstige Betriebskosten“ nur, wenn sie im Mietvertrag konkret benannt sind
+**Aufpassen bei Wartungsrechnungen:** Steht auf der Rechnung Wartung *und* Reparatur,
+darf nur der Wartungsanteil in die Abrechnung.
 
-Bei einer Wartungsrechnung, die Wartung **und** Reparatur enthält, darf nur der
-Wartungsanteil in die Abrechnung.
+**Kabelanschluss** darf seit dem 01.07.2024 nicht mehr über die Nebenkosten abgerechnet
+werden.
+
+**Eigene Arbeit** (du mähst den Rasen, räumst Schnee) darfst du ansetzen – mit dem
+Betrag, den eine Firma dafür nehmen würde, aber ohne Mehrwertsteuer.
             """
         )
 
 # --------------------------------------------------------------------------
-# 3 Vorauszahlungen
+# 3 Zählerstände
+# --------------------------------------------------------------------------
+with tab_zaehler:
+    st.subheader("Zählerstände")
+    verbrauchszeilen = [(i, p) for i, p in enumerate(st.session_state.positionen)
+                        if p.aktiv and p.schluessel == "verbrauch"]
+    if not verbrauchszeilen:
+        st.info(
+            "Hier erscheint jede Kostenart, die du im Tab „Kosten“ auf **nach Zählerstand** "
+            "gestellt hast. Typisch sind Wasser und Abwasser, manchmal auch Strom oder Gas."
+        )
+    else:
+        st.caption(
+            "**Hauszähler** ist der Zähler, über den das ganze Haus läuft. "
+            "**Wohnungszähler** ist der Zähler in der Wohnung deines Mieters. "
+            "Trag jeweils den Stand am Anfang und am Ende des Abrechnungsjahres ein – "
+            "den Verbrauch rechnet die App selbst aus."
+        )
+    for i, p in verbrauchszeilen:
+        with st.container(border=True):
+            kopf, einheit_spalte = st.columns([3, 1])
+            kopf.markdown(f"**{p.bezeichnung}**")
+            p.einheit = einheit_spalte.text_input(
+                "Einheit", p.einheit or "m³", key=f"zae{i}_einheit",
+                help="Was zählt der Zähler? Bei Wasser m³, bei Strom kWh.")
+
+            haus, wohnung = st.columns(2)
+            with haus:
+                st.markdown("Hauszähler")
+                h1, h2 = st.columns(2)
+                p.zaehler_haus_alt = h1.number_input(
+                    "Stand am Jahresanfang", min_value=0.0, step=1.0,
+                    value=float(p.zaehler_haus_alt), key=f"zae{i}_haus_alt")
+                p.zaehler_haus_neu = h2.number_input(
+                    "Stand am Jahresende", min_value=0.0, step=1.0,
+                    value=float(p.zaehler_haus_neu), key=f"zae{i}_haus_neu")
+            with wohnung:
+                st.markdown("Wohnungszähler des Mieters")
+                w1, w2 = st.columns(2)
+                p.zaehler_mieter_alt = w1.number_input(
+                    "Stand am Jahresanfang ", min_value=0.0, step=1.0,
+                    value=float(p.zaehler_mieter_alt), key=f"zae{i}_m_alt")
+                p.zaehler_mieter_neu = w2.number_input(
+                    "Stand am Jahresende ", min_value=0.0, step=1.0,
+                    value=float(p.zaehler_mieter_neu), key=f"zae{i}_m_neu")
+
+            with st.expander("Kein Zähler vorhanden? Verbrauch direkt eintragen"):
+                d1, d2 = st.columns(2)
+                p.verbrauch_gesamt = d1.number_input(
+                    "Verbrauch des ganzen Hauses", min_value=0.0, step=1.0,
+                    value=float(p.verbrauch_gesamt), key=f"zae{i}_v_haus",
+                    help="Steht auf der Jahresrechnung des Versorgers.")
+                p.verbrauch_mieter = d2.number_input(
+                    "davon die Mieterwohnung", min_value=0.0, step=1.0,
+                    value=float(p.verbrauch_mieter), key=f"zae{i}_v_mieter")
+                st.caption("Diese Felder werden nur benutzt, wenn oben keine Zählerstände stehen.")
+
+            if p.verbrauch_haus > 0:
+                anteil = p.verbrauch_wohnung / p.verbrauch_haus * 100
+                st.success(
+                    f"Verbrauch Haus **{menge(p.verbrauch_haus)} {p.einheit}**, "
+                    f"davon Mieter **{menge(p.verbrauch_wohnung)} {p.einheit}** "
+                    f"= **{zahl(anteil)} %**"
+                )
+            else:
+                st.warning("Noch kein Verbrauch erkennbar – bitte die Zählerstände eintragen.")
+
+# --------------------------------------------------------------------------
+# 4 Vorauszahlungen
 # --------------------------------------------------------------------------
 with tab_vz:
-    st.subheader("Geleistete Vorauszahlungen")
+    st.subheader("Was hat dein Mieter schon gezahlt?")
+    st.caption(
+        "Die monatliche Nebenkostenvorauszahlung aus dem Mietvertrag – der Betrag, den "
+        "er zusätzlich zur Kaltmiete überweist."
+    )
     v1, v2 = st.columns(2)
     with v1:
         stamm.vorauszahlung_monatlich = st.number_input(
-            "Monatliche Vorauszahlung (€)", min_value=0.0, step=10.0,
-            value=float(stamm.vorauszahlung_monatlich))
+            "Vorauszahlung pro Monat (€)", min_value=0.0, step=10.0,
+            value=float(stamm.vorauszahlung_monatlich), key="vz_monat")
         stamm.vorauszahlung_monate = int(st.number_input(
-            "Anzahl der Monate", min_value=0, max_value=12, step=1,
-            value=int(stamm.vorauszahlung_monate)))
-        st.info(f"Rechnerisch: **{eur(stamm.vorauszahlung_monatlich * stamm.vorauszahlung_monate)} €**")
+            "Für wie viele Monate?", min_value=0, max_value=12, step=1,
+            value=int(stamm.vorauszahlung_monate), key="vz_monate"))
+        st.info(f"Zusammen: **{eur(stamm.vorauszahlung_monatlich * stamm.vorauszahlung_monate)} €**")
     with v2:
         abweichend = st.checkbox(
-            "Tatsächlich gezahlte Summe abweichend eintragen",
+            "Er hat tatsächlich etwas anderes gezahlt", key="vz_abweichend",
             value=stamm.vorauszahlung_manuell is not None,
-            help="Zum Beispiel, wenn der Mieter unterjährig eine andere Vorauszahlung geleistet hat.")
+            help="Zum Beispiel, wenn sich die Vorauszahlung im Jahr geändert hat oder "
+                 "eine Zahlung ausgefallen ist.")
         if abweichend:
             stamm.vorauszahlung_manuell = st.number_input(
-                "Tatsächlich gezahlte Vorauszahlungen (€)", min_value=0.0, step=10.0,
-                value=float(stamm.vorauszahlung_manuell or 0.0))
+                "Tatsächlich gezahlt (€)", min_value=0.0, step=10.0,
+                value=float(stamm.vorauszahlung_manuell or 0.0), key="vz_manuell")
         else:
             stamm.vorauszahlung_manuell = None
 
     st.divider()
-    st.subheader("CO2-Kosten und Anpassung")
+    st.subheader("Heizt du mit Gas oder Öl?")
+    st.caption(
+        "Dann trägst du seit 2023 einen Teil der CO2-Abgabe selbst – je schlechter das "
+        "Haus gedämmt ist, desto mehr. Den Betrag findest du in der Jahresrechnung deines "
+        "Gas- oder Öllieferanten (Stichwort „CO2-Kosten“ oder „CO2-Kostenaufteilung“). "
+        "Steht dort nichts, frag beim Versorger nach. Bei Fernwärme oder Wärmepumpe: 0 lassen."
+    )
     c1, c2 = st.columns(2)
     with c1:
         stamm.co2_abzug = st.number_input(
-            "CO2-Kostenanteil des Vermieters (€, wird abgezogen)",
-            min_value=0.0, step=1.0, value=float(stamm.co2_abzug),
-            help="Bei Erdgas- oder Ölheizung muss sich der Vermieter seit 2023 nach dem "
-                 "Stufenmodell des CO2KostAufG an den CO2-Kosten beteiligen. Der Anteil steht "
-                 "in der Rechnung des Energieversorgers bzw. lässt sich mit dem Rechner des "
-                 "Bundeswirtschaftsministeriums ermitteln.")
+            "Dein Anteil an den CO2-Kosten (€)", min_value=0.0, step=1.0,
+            value=float(stamm.co2_abzug), key="co2",
+            help="Wird vom Anteil des Mieters abgezogen.")
     with c2:
         stamm.anpassung_vorschlagen = st.checkbox(
-            "Anpassung der monatlichen Vorauszahlung im PDF ankündigen",
-            value=stamm.anpassung_vorschlagen,
-            help="§ 560 Abs. 4 BGB – zulässig nach einer Abrechnung, in angemessener Höhe.")
+            "Im PDF ankündigen, dass die Vorauszahlung angepasst wird",
+            value=stamm.anpassung_vorschlagen, key="anpassung",
+            help="Sinnvoll, wenn die bisherige Vorauszahlung deutlich zu niedrig oder "
+                 "zu hoch war. Die App schlägt einen Betrag vor.")
 
 # --------------------------------------------------------------------------
-# 4 Ergebnis
+# 5 Ergebnis
 # --------------------------------------------------------------------------
 with tab_ergebnis:
     ergebnis = berechne(stamm, st.session_state.positionen)
@@ -342,55 +514,63 @@ with tab_ergebnis:
 
     k1, k2, k3 = st.columns(3)
     k1.metric("Anteil des Mieters", f"{eur(ergebnis.umlage)} €")
-    k2.metric("Vorauszahlungen", f"{eur(ergebnis.vorauszahlungen)} €")
+    k2.metric("Schon gezahlt", f"{eur(ergebnis.vorauszahlungen)} €")
     k3.metric("Nachzahlung" if ergebnis.ist_nachzahlung else "Guthaben",
-              f"{eur(ergebnis.betrag_absolut)} €",
-              delta=("Mieter zahlt" if ergebnis.ist_nachzahlung else "Mieter erhält"),
-              delta_color="inverse" if ergebnis.ist_nachzahlung else "normal")
+              f"{eur(ergebnis.betrag_absolut)} €")
 
     if ergebnis.zeilen:
+        if ergebnis.betrag_absolut < 0.01:
+            st.success("Die Vorauszahlungen decken die Kosten genau – niemand zahlt etwas nach.")
+        elif ergebnis.ist_nachzahlung:
+            st.success(f"Dein Mieter muss **{eur(ergebnis.betrag_absolut)} €** nachzahlen.")
+        else:
+            st.success(f"Du musst deinem Mieter **{eur(ergebnis.betrag_absolut)} €** erstatten.")
+
         st.dataframe(
             pd.DataFrame([{
                 "Kostenart": z.bezeichnung,
-                "Gesamtkosten (€)": z.gesamtkosten,
-                "Verteilerschlüssel": z.schluessel_text,
+                "Kosten Haus (€)": z.gesamtkosten,
+                "So wurde verteilt": z.schluessel_text,
                 "Anteil Mieter (€)": z.anteil,
             } for z in ergebnis.zeilen]),
             width="stretch", hide_index=True,
             column_config={
-                "Gesamtkosten (€)": st.column_config.NumberColumn(format="%.2f"),
+                "Kosten Haus (€)": st.column_config.NumberColumn(format="%.2f"),
                 "Anteil Mieter (€)": st.column_config.NumberColumn(format="%.2f"),
             },
         )
     else:
-        st.info("Noch keine Kostenpositionen mit Beträgen erfasst.")
+        st.info("Trag im Tab „Kosten“ ein, was das Haus gekostet hat.")
 
     e1, e2 = st.columns(2)
     with e1:
         if ergebnis.arbeitskosten_mieter:
-            st.caption(f"Bescheinigung § 35a EStG: **{eur(ergebnis.arbeitskosten_mieter)} €** "
-                       "anteilige Lohn- und Arbeitskosten.")
+            st.caption(f"Für die Steuererklärung deines Mieters: **{eur(ergebnis.arbeitskosten_mieter)} €** "
+                       "Lohnkosten stehen im PDF.")
         if ergebnis.tage_nutzung and ergebnis.tage_nutzung < ergebnis.tage_zeitraum:
-            st.caption(f"Zeitanteil: {ergebnis.tage_nutzung} von {ergebnis.tage_zeitraum} Tagen "
-                       f"({zahl(ergebnis.tage_nutzung / ergebnis.tage_zeitraum * 100)} %).")
+            st.caption(f"Der Mieter hat {ergebnis.tage_nutzung} von {ergebnis.tage_zeitraum} Tagen "
+                       "hier gewohnt – so viel wurde berechnet.")
     with e2:
         if ergebnis.empfehlung_vorauszahlung:
-            st.caption(f"Rechnerisch angemessene neue Vorauszahlung: "
-                       f"**{eur(ergebnis.empfehlung_vorauszahlung)} €** im Monat.")
+            st.caption(f"Passende Vorauszahlung ab jetzt: **{eur(ergebnis.empfehlung_vorauszahlung)} €** "
+                       "im Monat.")
 
     st.divider()
     if ergebnis.fehler:
-        st.error("Bitte zuerst die oben genannten Punkte korrigieren – dann lässt sich das PDF erstellen.")
+        st.error("Bitte die roten Punkte oben korrigieren, dann gibt es das PDF.")
     elif not ergebnis.zeilen:
-        st.info("Ohne Kostenpositionen gibt es nichts abzurechnen.")
+        st.info("Ohne Kosten gibt es nichts abzurechnen.")
     else:
-        pdf_bytes = erzeuge_pdf(stamm, ergebnis)
         st.download_button(
             "📄 Abrechnung als PDF herunterladen",
-            data=pdf_bytes,
+            data=erzeuge_pdf(stamm, ergebnis),
             file_name=dateiname(stamm),
             mime="application/pdf",
             type="primary",
             width="stretch",
         )
-        st.caption("Vor dem Aushändigen prüfen: Namen, Zeitraum, Beträge und Kontodaten.")
+        st.caption(
+            "Vor dem Aushändigen kurz prüfen: Namen, Jahr, Beträge, IBAN. "
+            "Das PDF ausdrucken, unterschreiben und dem Mieter geben – "
+            "am besten mit Kopien der Rechnungen."
+        )

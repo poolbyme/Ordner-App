@@ -12,11 +12,11 @@ from datetime import date
 # Verteilerschlüssel (§ 556a BGB). Ohne abweichende Vereinbarung im
 # Mietvertrag gilt die Wohnfläche als gesetzlicher Standardschlüssel.
 SCHLUESSEL = {
-    "flaeche": "Wohnfläche",
-    "personen": "Personenzahl",
-    "einheiten": "Wohneinheiten",
-    "verbrauch": "Verbrauch (Zähler)",
-    "direkt": "direkt zugeordnet",
+    "flaeche": "nach Wohnfläche",
+    "personen": "nach Personenzahl",
+    "einheiten": "je Wohnung",
+    "verbrauch": "nach Zählerstand",
+    "direkt": "nur der Mieter",
 }
 
 # Positionen, die nach herrschender Rechtsprechung nicht auf den Mieter
@@ -38,11 +38,33 @@ class Position:
     schluessel: str = "flaeche"
     verbrauch_gesamt: float = 0.0  # nur bei schluessel == "verbrauch"
     verbrauch_mieter: float = 0.0
+    # Zählerstände; sind sie gefüllt, ergibt die Differenz den Verbrauch
+    zaehler_haus_alt: float = 0.0
+    zaehler_haus_neu: float = 0.0
+    zaehler_mieter_alt: float = 0.0
+    zaehler_mieter_neu: float = 0.0
     einheit: str = ""              # z. B. m³, kWh
     arbeitskosten: float = 0.0     # im Betrag enthaltene Lohnkosten (§ 35a EStG)
     zeitanteilig: bool = True      # bei unterjähriger Nutzung anteilig kürzen
     aktiv: bool = True
     hinweis: str = ""
+
+    @property
+    def verbrauch_haus(self) -> float:
+        """Verbrauch des Hauses: aus den Zählerständen, sonst direkt eingetragen."""
+        differenz = self.zaehler_haus_neu - self.zaehler_haus_alt
+        return differenz if differenz > 0 else float(self.verbrauch_gesamt)
+
+    @property
+    def verbrauch_wohnung(self) -> float:
+        """Verbrauch der Mietwohnung: aus den Zählerständen, sonst direkt eingetragen."""
+        differenz = self.zaehler_mieter_neu - self.zaehler_mieter_alt
+        return differenz if differenz > 0 else float(self.verbrauch_mieter)
+
+    @property
+    def hat_zaehlerstaende(self) -> bool:
+        return any([self.zaehler_haus_alt, self.zaehler_haus_neu,
+                    self.zaehler_mieter_alt, self.zaehler_mieter_neu])
 
 
 @dataclass
@@ -95,48 +117,51 @@ class Stammdaten:
 
 
 def standard_positionen() -> list[Position]:
-    """Katalog der umlagefähigen Betriebskosten nach § 2 BetrKV.
+    """Die Kostenarten, die auf einen Mieter umgelegt werden dürfen (§ 2 BetrKV).
 
-    Voreingestellt ist, was in einem Zweifamilienhaus typischerweise anfällt;
-    alles Weitere ist enthalten, aber deaktiviert.
+    Der Hinweis sagt, welcher Beleg zu der Zeile gehört. Voreingestellt ist,
+    was in einem Zweifamilienhaus üblicherweise anfällt; der Rest ist
+    vorhanden, aber abgewählt.
     """
     return [
         Position("Grundsteuer", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 1 BetrKV"),
-        Position("Wasserversorgung (Frischwasser)", schluessel="verbrauch", einheit="m³",
-                 hinweis="§ 2 Nr. 2 BetrKV – nach Zählerstand, sonst Wohnfläche"),
-        Position("Entwässerung / Abwasser", schluessel="verbrauch", einheit="m³",
-                 hinweis="§ 2 Nr. 3 BetrKV"),
-        Position("Heizung (Brennstoff, Betriebsstrom, Wartung)", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 4 BetrKV – HeizkostenV beachten"),
-        Position("Warmwasser", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 5 BetrKV"),
+                 hinweis="Grundsteuerbescheid der Gemeinde"),
+        Position("Wasser", schluessel="verbrauch", einheit="m³",
+                 hinweis="Jahresrechnung des Wasserversorgers"),
+        Position("Abwasser", schluessel="verbrauch", einheit="m³",
+                 hinweis="Gebührenbescheid der Gemeinde oder Stadtwerke"),
+        Position("Heizung", schluessel="flaeche",
+                 hinweis="Rechnungen für Gas, Öl oder Pellets, Wartung, Betriebsstrom"),
+        Position("Warmwasser", schluessel="flaeche", aktiv=False,
+                 hinweis="nur nötig, wenn getrennt von der Heizung abgerechnet wird"),
         Position("Aufzug", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 7 BetrKV"),
-        Position("Straßenreinigung / Winterdienst", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 8 BetrKV"),
-        Position("Müllbeseitigung", schluessel="personen",
-                 hinweis="§ 2 Nr. 8 BetrKV"),
+                 hinweis="Wartungsvertrag, Notruf, Strom"),
+        Position("Straßenreinigung und Winterdienst", schluessel="flaeche",
+                 hinweis="Gebührenbescheid oder Rechnung des Dienstleisters"),
+        Position("Müllabfuhr", schluessel="personen",
+                 hinweis="Gebührenbescheid der Gemeinde"),
         Position("Gebäudereinigung", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 9 BetrKV"),
+                 hinweis="Rechnung der Reinigungsfirma, Treppenhausreinigung"),
         Position("Ungezieferbekämpfung", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 9 BetrKV"),
+                 hinweis="nur laufende Bekämpfung, keine einmalige Beseitigung"),
         Position("Gartenpflege", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 10 BetrKV"),
-        Position("Allgemeinstrom / Beleuchtung", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 11 BetrKV"),
+                 hinweis="Rechnungen der Gärtnerei; eigene Arbeit darf zum "
+                         "üblichen Preis ohne Mehrwertsteuer angesetzt werden"),
+        Position("Allgemeinstrom", schluessel="flaeche",
+                 hinweis="Stromrechnung für Flur, Keller, Außenbeleuchtung"),
         Position("Schornsteinfeger", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 12 BetrKV – soweit nicht in der Heizung enthalten"),
-        Position("Sach- und Haftpflichtversicherung", schluessel="flaeche",
-                 hinweis="§ 2 Nr. 13 BetrKV – Gebäude-, Haftpflicht-, Elementarversicherung"),
-        Position("Hauswart / Hausmeister", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 14 BetrKV – ohne Instandhaltungs- und Verwaltungsanteil"),
-        Position("Gemeinschaftsantenne / Kabelanschluss", schluessel="einheiten", aktiv=False,
-                 hinweis="§ 2 Nr. 15 BetrKV – seit 01.07.2024 nicht mehr über die Nebenkosten umlegbar"),
-        Position("Wascheinrichtungen", schluessel="einheiten", aktiv=False,
-                 hinweis="§ 2 Nr. 16 BetrKV"),
-        Position("Sonstige Betriebskosten", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 17 BetrKV – nur wenn im Mietvertrag konkret benannt"),
+                 hinweis="Rechnung des Schornsteinfegers, wenn nicht schon in der Heizung enthalten"),
+        Position("Versicherungen", schluessel="flaeche",
+                 hinweis="Gebäude-, Haftpflicht- und Elementarversicherung; "
+                         "keine Rechtsschutz- oder Reparaturversicherung"),
+        Position("Hausmeister", schluessel="flaeche", aktiv=False,
+                 hinweis="Lohn ohne Reparatur- und Verwaltungsanteil"),
+        Position("Kabelanschluss", schluessel="einheiten", aktiv=False,
+                 hinweis="seit 01.07.2024 nicht mehr über die Nebenkosten umlegbar"),
+        Position("Gemeinsame Waschmaschine", schluessel="einheiten", aktiv=False,
+                 hinweis="Strom und Wartung gemeinsam genutzter Geräte"),
+        Position("Sonstiges", schluessel="flaeche", aktiv=False,
+                 hinweis="nur wenn diese Kosten im Mietvertrag ausdrücklich genannt sind"),
     ]
 
 

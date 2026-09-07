@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nebenkosten.berechnung import berechne, eur, tage  # noqa: E402
+from nebenkosten.berechnung import berechne, eur, menge, tage  # noqa: E402
 from nebenkosten.modell import (  # noqa: E402
     Position, Stammdaten, as_dict, from_dict, standard_positionen,
 )
@@ -162,6 +162,69 @@ def test_pdf_wird_erzeugt():
     daten = erzeuge_pdf(s, e)
     assert daten.startswith(b"%PDF") and len(daten) > 1000
     assert dateiname(s).endswith(".pdf") and "2025" in dateiname(s)
+
+
+def test_zaehlerstaende_ergeben_den_verbrauch():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³",
+                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1400.0,
+                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
+    assert pos.verbrauch_haus == 200.0 and pos.verbrauch_wohnung == 50.0
+    e = berechne(basis_stammdaten(), [pos])
+    assert e.summe_anteil == 150.0
+    assert e.zeilen[0].zaehler is not None
+    assert e.zeilen[0].zaehler.haus_verbrauch == 200.0
+
+
+def test_zaehlerstand_hat_vorrang_vor_direktem_verbrauch():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
+                   verbrauch_gesamt=999.0, verbrauch_mieter=999.0,
+                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1400.0,
+                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
+    assert berechne(basis_stammdaten(), [pos]).summe_anteil == 150.0
+
+
+def test_verbrauch_ohne_zaehler_bleibt_moeglich():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
+                   verbrauch_gesamt=200.0, verbrauch_mieter=50.0)
+    e = berechne(basis_stammdaten(), [pos])
+    assert e.summe_anteil == 150.0 and e.zeilen[0].zaehler is None
+
+
+def test_fehler_bei_ruecklaeufigem_zaehler():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
+                   zaehler_haus_alt=1400.0, zaehler_haus_neu=1200.0,
+                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
+    assert any("kleiner als der Anfangsstand" in f
+               for f in berechne(basis_stammdaten(), [pos]).fehler)
+
+
+def test_fehler_wenn_wohnung_mehr_verbraucht_als_haus():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
+                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1250.0,
+                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=500.0)
+    assert any("mehr als das ganze Haus" in f
+               for f in berechne(basis_stammdaten(), [pos]).fehler)
+
+
+def test_fehlender_verbrauch_wird_gemeldet():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch")
+    assert any("Verbrauch des Hauses fehlt" in f
+               for f in berechne(basis_stammdaten(), [pos]).fehler)
+
+
+def test_mengenformat():
+    assert menge(88.0) == "88"
+    assert menge(12.345) == "12,345"
+    assert menge(210.5) == "210,5"
+
+
+def test_pdf_mit_zaehlerstaenden():
+    s = basis_stammdaten()
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³",
+                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1400.0,
+                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
+    daten = erzeuge_pdf(s, berechne(s, [pos, Position("Grundsteuer", betrag=500.0)]))
+    assert daten.startswith(b"%PDF") and len(daten) > 1000
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 
-from .berechnung import Ergebnis, eur, parse_datum, zahl
+from .berechnung import Ergebnis, eur, menge, parse_datum, zahl
 from .modell import Stammdaten
 
 # Falls eine Unicode-Schrift verfügbar ist, wird sie benutzt (echtes €-Zeichen).
@@ -52,6 +52,7 @@ class Abrechnung(FPDF):
                 self.font_family = "body"
                 self.unicode = True
                 break
+        self.abschnitt = 0
         self.set_title("Betriebskostenabrechnung")
 
     # --- Hilfen -----------------------------------------------------------
@@ -77,6 +78,10 @@ class Abrechnung(FPDF):
 
     def abstand(self, h: float = 3.0) -> None:
         self.ln(h)
+
+    def abschnitt_ueberschrift(self, text: str, platzbedarf: float = 32.0) -> None:
+        self.abschnitt += 1
+        self.ueberschrift(f"{self.abschnitt}. {text}", platzbedarf)
 
     def ueberschrift(self, text: str, platzbedarf: float = 32.0) -> None:
         # Keine Überschrift am Seitenfuß stehen lassen
@@ -162,7 +167,7 @@ def _objektdaten(pdf: Abrechnung, e: Ergebnis) -> None:
 
 
 def _kostentabelle(pdf: Abrechnung, e: Ergebnis) -> None:
-    pdf.ueberschrift("1. Zusammenstellung der Gesamtkosten und Verteilung")
+    pdf.abschnitt_ueberschrift("Zusammenstellung der Gesamtkosten und Verteilung")
     waehrung = "€" if pdf.unicode else "EUR"
     pdf.font(8.5)
     kopf = FontFace(emphasis="BOLD", fill_color=GRAU, size_pt=8)
@@ -191,9 +196,41 @@ def _kostentabelle(pdf: Abrechnung, e: Ergebnis) -> None:
         summe.cell(eur(e.summe_anteil))
 
 
+def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
+    zeilen = [z for z in e.zeilen if z.zaehler]
+    if not zeilen:
+        return
+    pdf.abschnitt_ueberschrift("Zählerstände")
+    pdf.font(8.5)
+    kopf = FontFace(emphasis="BOLD", fill_color=GRAU, size_pt=8)
+    with pdf.table(
+        col_widths=(46, 20, 20, 20, 22, 22, 20),
+        text_align=("LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"),
+        headings_style=kopf,
+        line_height=4.4,
+        padding=(1.3, 1.6, 1.3, 1.6),
+        borders_layout="HORIZONTAL_LINES",
+    ) as tabelle:
+        kopfzeile = tabelle.row()
+        for titel in ("Zähler", "Haus\nAnfang", "Haus\nEnde", "Haus\nVerbrauch",
+                      "Wohnung\nAnfang", "Wohnung\nEnde", "Wohnung\nVerbrauch"):
+            kopfzeile.cell(pdf.t(titel))
+        for z in zeilen:
+            zae = z.zaehler
+            einheit = f" {zae.einheit}" if zae.einheit else ""
+            reihe = tabelle.row()
+            reihe.cell(pdf.t(z.bezeichnung))
+            reihe.cell(menge(zae.haus_alt))
+            reihe.cell(menge(zae.haus_neu))
+            reihe.cell(pdf.t(menge(zae.haus_verbrauch) + einheit))
+            reihe.cell(menge(zae.mieter_alt))
+            reihe.cell(menge(zae.mieter_neu))
+            reihe.cell(pdf.t(menge(zae.mieter_verbrauch) + einheit))
+
+
 def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
     s = pdf.s
-    pdf.ueberschrift("2. Abrechnung")
+    pdf.abschnitt_ueberschrift("Abrechnung")
     pdf.betragszeile("Auf den Mieter entfallende Betriebskosten", e.summe_anteil)
     if e.co2_abzug > 0:
         pdf.betragszeile("abzüglich CO2-Kostenanteil des Vermieters (CO2KostAufG)",
@@ -249,7 +286,7 @@ def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
 
 def _erlaeuterungen(pdf: Abrechnung, e: Ergebnis) -> None:
     s = pdf.s
-    pdf.ueberschrift("3. Erläuterungen")
+    pdf.abschnitt_ueberschrift("Erläuterungen")
     punkte = [
         "Die Umlage erfolgt auf Grundlage des Mietvertrags und der Betriebskostenverordnung "
         "(§ 2 BetrKV). Nicht umlagefähige Kosten (Instandhaltung, Reparaturen, Verwaltung) "
@@ -307,6 +344,7 @@ def erzeuge_pdf(stammdaten: Stammdaten, ergebnis: Ergebnis) -> bytes:
     _kopf(pdf)
     _objektdaten(pdf, ergebnis)
     _kostentabelle(pdf, ergebnis)
+    _zaehlerstaende(pdf, ergebnis)
     _abrechnung(pdf, ergebnis)
     _erlaeuterungen(pdf, ergebnis)
     _unterschrift(pdf)

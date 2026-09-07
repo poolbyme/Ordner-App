@@ -11,9 +11,9 @@ Dieses Repository enthält zwei eigenständige Streamlit-Apps:
 
 ## Nebenkostenabrechnung
 
-Eingeben, was im Abrechnungsjahr angefallen ist – die App verteilt die Kosten auf
-den Mieter, zieht die Vorauszahlungen ab und erzeugt daraus ein fertiges PDF zum
-Aushändigen.
+Zählerstände und Rechnungsbeträge eintragen – die App verteilt die Kosten auf den
+Mieter, zieht seine Vorauszahlungen ab und erzeugt daraus ein fertiges PDF zum
+Ausdrucken und Aushändigen.
 
 ### Starten
 
@@ -22,57 +22,65 @@ pip install -r requirements.txt
 streamlit run nebenkosten_app.py
 ```
 
-Für den Betrieb in der Streamlit Community Cloud dieselbe Datei als „Main file
-path" eintragen. Die App braucht weder Google-Zugang noch Secrets; alle Eingaben
-bleiben in der Sitzung und lassen sich über die Seitenleiste als JSON-Datei
-sichern und wieder laden.
+Für die Streamlit Community Cloud dieselbe Datei als „Main file path" eintragen.
+Die App braucht weder Google-Zugang noch Secrets. Alle Eingaben bleiben in der
+Sitzung und lassen sich über die Seitenleiste als Datei sichern und wieder laden.
 
 ### Ablauf
 
-1. **Stammdaten** – Vermieter, Mieter, Objekt, Abrechnungszeitraum, Wohnflächen,
-   Personenzahl. Bei unterjährigem Ein- oder Auszug zusätzlich die Mietzeit
-   eintragen, dann wird zeitanteilig nach Tagen umgelegt.
-2. **Kosten** – die Positionen nach § 2 BetrKV sind vorbereitet. Eingetragen
-   werden immer die **Gesamtkosten des Hauses**; die Verteilung übernimmt die App.
-   Pro Zeile wählbar: Wohnfläche, Personenzahl, Wohneinheiten, Verbrauch
-   (Zählerstände) oder direkte Zuordnung. In der Spalte „davon Arbeitskosten"
-   den Lohnanteil erfassen – daraus entsteht die Bescheinigung nach § 35a EStG.
-3. **Vorauszahlungen** – monatlicher Betrag × Monate oder die tatsächlich
-   gezahlte Summe; optional der CO2-Kostenanteil des Vermieters.
-4. **Abrechnung & PDF** – Ergebnis prüfen, PDF herunterladen.
+1. **Angaben** – Vermieter, Mieter, Haus, Abrechnungsjahr, Wohnflächen und
+   Personenzahl. Danach werden die meisten Kosten verteilt.
+2. **Kosten** – pro Zeile eintragen, was **für das ganze Haus** angefallen ist.
+   Die üblichen Kostenarten sind vorbereitet, jede mit dem Hinweis, welcher Beleg
+   dazugehört. Pro Zeile wählbar, wie verteilt wird: nach Wohnfläche, nach
+   Personenzahl, je Wohnung, nach Zählerstand oder allein auf den Mieter.
+3. **Zählerstände** – für jede Zeile, die auf „nach Zählerstand" steht: Stand am
+   Jahresanfang und am Jahresende, jeweils für den Hauszähler und den
+   Wohnungszähler. Den Verbrauch rechnet die App aus. Wo es keinen eigenen Zähler
+   gibt, lässt sich der Verbrauch auch direkt eintragen.
+4. **Vorauszahlungen** – der monatliche Betrag des Mieters; dazu der eigene Anteil
+   an den CO2-Kosten, falls mit Gas oder Öl geheizt wird.
+5. **Abrechnung & PDF** – Ergebnis prüfen, PDF herunterladen.
+
+Über „Mehr Einstellungen anzeigen" in der Seitenleiste kommen die selteneren
+Felder dazu: Lohnkosten für die Steuererklärung des Mieters, anteilige Abrechnung
+bei Ein- oder Auszug mitten im Jahr, Anrede und Datum des Anschreibens.
 
 ### Was die App prüft
 
-* Abrechnungszeitraum länger als 12 Monate (§ 556 Abs. 3 S. 1 BGB)
-* Abrechnungsfrist: Zugang beim Mieter innerhalb von 12 Monaten nach Ende des
-  Zeitraums, sonst ist die Nachforderung in der Regel ausgeschlossen
-  (§ 556 Abs. 3 S. 3 BGB) – ein Guthaben bleibt trotzdem auszuzahlen
-* Mieteranteile über 100 % (Fläche, Personen, Verbrauch)
-* Positionen, deren Bezeichnung nach nicht umlagefähigen Kosten klingt
-  (Reparatur, Instandhaltung, Verwaltung)
-* Heiz-/Warmwasserkosten nach Fläche bei mehr als zwei Wohneinheiten
+* Zählerstände, die rückwärts laufen, und Wohnungen, die mehr verbrauchen als das
+  ganze Haus
+* Anteile über 100 % bei Fläche und Personenzahl
+* Abrechnungszeitraum länger als 12 Monate
+* Abrechnungsfrist: Die Abrechnung muss den Mieter innerhalb von 12 Monaten nach
+  Ende des Zeitraums erreichen, sonst ist eine Nachforderung in der Regel
+  ausgeschlossen – ein Guthaben bleibt trotzdem auszuzahlen
+* Kostenarten, deren Bezeichnung nach Reparatur, Instandhaltung oder Verwaltung
+  klingt – das darf nicht auf den Mieter umgelegt werden
+* Heiz- und Warmwasserkosten nach Fläche bei mehr als zwei Wohnungen
 
-### Rechtliche Hinweise für das selbst bewohnte Zweifamilienhaus
+### Worauf es rechtlich ankommt
 
-* **Umlage muss vereinbart sein.** Ohne Klausel im Mietvertrag, die die
-  Betriebskosten auf den Mieter überträgt, gibt es nichts umzulegen. Steht dort
-  ein bestimmter Verteilerschlüssel, geht er dem gesetzlichen Flächenschlüssel
-  des § 556a BGB vor.
-* **Heizkosten.** Die Heizkostenverordnung verlangt sonst 50–70 % verbrauchs­-
-  abhängige Abrechnung. Nach § 2 HeizkostenV gilt sie **nicht** in Gebäuden mit
-  höchstens zwei Wohnungen, von denen der Vermieter eine selbst bewohnt – dort
-  ist die Verteilung nach Wohnfläche zulässig, sofern der Mietvertrag nichts
-  anderes vorschreibt.
-* **CO2-Kosten.** Bei Erdgas- oder Ölheizung trägt der Vermieter seit 2023 nach
-  dem Stufenmodell des CO2KostAufG einen Teil der CO2-Abgabe. Der Betrag lässt
-  sich aus der Rechnung des Energieversorgers ermitteln und wird im Feld
-  „CO2-Kostenanteil des Vermieters" abgezogen.
-* **Kabelanschluss.** Seit dem 01.07.2024 sind Kabel-/Antennengebühren nicht
-  mehr über die Nebenkosten umlagefähig (Ende des Nebenkostenprivilegs).
-* **Nicht umlagefähig** bleiben Instandhaltung und Reparaturen, Verwaltungs- und
-  Kontoführungskosten, Rücklagen sowie Rechtsschutz- und Mietausfallversicherung.
+* **Umlage muss im Mietvertrag stehen.** Ohne eine Klausel, die die Betriebskosten
+  auf den Mieter überträgt, gibt es nichts abzurechnen. Nennt der Vertrag einen
+  bestimmten Verteilerschlüssel, gilt dieser vor dem gesetzlichen Flächenschlüssel
+  (§ 556a BGB).
+* **Heizkosten.** Normalerweise müssen 50–70 % verbrauchsabhängig abgerechnet
+  werden. Im Gebäude mit höchstens zwei Wohnungen, von denen der Vermieter eine
+  selbst bewohnt, gilt diese Pflicht nicht (§ 2 HeizkostenV) – dort ist die
+  Verteilung nach Wohnfläche zulässig, sofern der Mietvertrag nichts anderes sagt.
+* **CO2-Kosten.** Bei Gas- oder Ölheizung trägt der Vermieter seit 2023 einen Teil
+  der CO2-Abgabe selbst (CO2KostAufG). Der Betrag steht in der Jahresrechnung des
+  Versorgers und wird in der App abgezogen.
+* **Kabelanschluss** ist seit dem 01.07.2024 nicht mehr umlagefähig.
+* **Nicht umlagefähig** sind außerdem Reparaturen und Instandhaltung,
+  Verwaltungs- und Kontoführungskosten, Rücklagen sowie Rechtsschutz- und
+  Mietausfallversicherung.
+* **Eigenleistung** des Vermieters (Rasen mähen, Schnee räumen) darf mit dem
+  ortsüblichen Preis einer Firma ohne Mehrwertsteuer angesetzt werden
+  (§ 1 Abs. 1 S. 2 BetrKV).
 
-Die App erstellt ein Abrechnungsdokument, keine Rechtsberatung.
+Die App erstellt ein Abrechnungsschreiben, keine Rechtsberatung.
 
 ### Tests
 
@@ -85,7 +93,7 @@ python tests/test_nebenkosten.py     # oder: python -m pytest tests/
 ```
 nebenkosten_app.py        Streamlit-Oberfläche
 nebenkosten/modell.py     Datenmodell, Katalog der Betriebskosten nach § 2 BetrKV
-nebenkosten/berechnung.py Umlage, Zeitanteil, Saldo, Plausibilitätsprüfungen
+nebenkosten/berechnung.py Verteilung, Zählerstände, Zeitanteil, Saldo, Prüfungen
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)
 tests/                    Tests der Berechnung und der PDF-Ausgabe
 ```

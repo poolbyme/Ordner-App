@@ -32,6 +32,25 @@ def zahl(wert: float, nachkomma: int = 2) -> str:
     return f"{wert:,.{nachkomma}f}".replace(",", "#").replace(".", ",").replace("#", ".")
 
 
+def menge(wert: float) -> str:
+    """Mengen ohne überflüssige Nullen: 88.0 -> '88', 12.345 -> '12,345'."""
+    text = zahl(wert, 3)
+    return text.rstrip("0").rstrip(",") if "," in text else text
+
+
+@dataclass
+class Zaehler:
+    """Abgelesene Zählerstände einer verbrauchsabhängigen Position."""
+
+    einheit: str
+    haus_alt: float
+    haus_neu: float
+    haus_verbrauch: float
+    mieter_alt: float
+    mieter_neu: float
+    mieter_verbrauch: float
+
+
 @dataclass
 class Zeile:
     bezeichnung: str
@@ -42,6 +61,7 @@ class Zeile:
     anteil: float
     arbeitskosten_anteil: float
     hinweis: str = ""
+    zaehler: Zaehler | None = None
 
 
 @dataclass
@@ -91,12 +111,13 @@ def _quote(pos: Position, s: Stammdaten) -> tuple[float, str, str | None]:
         return q, f"Wohneinheiten {zahl(s.einheiten_mieter, 0)}/{zahl(s.einheiten_gesamt, 0)} = {zahl(q * 100)} %", None
 
     if pos.schluessel == "verbrauch":
-        if pos.verbrauch_gesamt <= 0:
-            return 0.0, "", f"„{pos.bezeichnung}“: Gesamtverbrauch fehlt."
-        q = pos.verbrauch_mieter / pos.verbrauch_gesamt
+        haus, wohnung = pos.verbrauch_haus, pos.verbrauch_wohnung
+        if haus <= 0:
+            return 0.0, "", (f"„{pos.bezeichnung}“: Der Verbrauch des Hauses fehlt – "
+                             "bitte die Zählerstände eintragen.")
+        q = wohnung / haus
         einheit = pos.einheit or "Einheiten"
-        return q, (f"Verbrauch {zahl(pos.verbrauch_mieter, 3).rstrip('0').rstrip(',')}/"
-                   f"{zahl(pos.verbrauch_gesamt, 3).rstrip('0').rstrip(',')} {einheit} "
+        return q, (f"Verbrauch {menge(wohnung)}/{menge(haus)} {einheit} "
                    f"= {zahl(q * 100)} %"), None
 
     if pos.schluessel == "direkt":
@@ -163,8 +184,25 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
             anteil=anteil,
             arbeitskosten_anteil=arbeit,
             hinweis=pos.hinweis,
+            zaehler=Zaehler(
+                einheit=pos.einheit or "",
+                haus_alt=pos.zaehler_haus_alt, haus_neu=pos.zaehler_haus_neu,
+                haus_verbrauch=pos.verbrauch_haus,
+                mieter_alt=pos.zaehler_mieter_alt, mieter_neu=pos.zaehler_mieter_neu,
+                mieter_verbrauch=pos.verbrauch_wohnung,
+            ) if pos.schluessel == "verbrauch" and pos.hat_zaehlerstaende else None,
         ))
 
+        if pos.schluessel == "verbrauch":
+            if pos.zaehler_haus_neu and pos.zaehler_haus_neu < pos.zaehler_haus_alt:
+                e.fehler.append(f"„{pos.bezeichnung}“: Der Endstand des Hauszählers ist "
+                                "kleiner als der Anfangsstand.")
+            if pos.zaehler_mieter_neu and pos.zaehler_mieter_neu < pos.zaehler_mieter_alt:
+                e.fehler.append(f"„{pos.bezeichnung}“: Der Endstand des Wohnungszählers ist "
+                                "kleiner als der Anfangsstand.")
+            if pos.verbrauch_haus > 0 and pos.verbrauch_wohnung > pos.verbrauch_haus:
+                e.fehler.append(f"„{pos.bezeichnung}“: Die Wohnung verbraucht mehr als das "
+                                "ganze Haus – bitte die Zählerstände prüfen.")
         if quote > 1.0001:
             e.fehler.append(f"„{pos.bezeichnung}“: Der Anteil des Mieters ist größer als 100 %.")
         if any(w in pos.bezeichnung.lower() for w in NICHT_UMLAGEFAEHIG_STICHWORTE):

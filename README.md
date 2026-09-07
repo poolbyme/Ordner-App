@@ -131,15 +131,18 @@ fertige Abrechnung. Fehlen die Angaben oder ist die Tabelle nicht erreichbar,
 schreibt die App wie gehabt in eine Datei und sagt das in der Seitenleiste.
 
 **Als App ablegen.** Die App meldet ein Symbol, einen Namen und eine Farbe für den
-Startbildschirm an (`static/manifest.json`, ausgeliefert über `/app/static/`). Damit
-landet sie mit eigenem Icon und ohne Adresszeile auf dem Handy:
+Startbildschirm an. Manifest und Symbole baut `nebenkosten/design.py` zur Laufzeit als
+Datenadresse und schreibt sie in den Kopf der Seite (`_startbildschirm`) – es braucht
+also keine ausgelieferten Dateien und kein `enableStaticServing`. `start_url` und
+`scope` trägt erst das Skript ein: In einer Datenadresse sind relative Angaben
+ungültig, und der Browser wirft das ganze Manifest weg. Damit landet die App mit
+eigenem Icon und ohne Adresszeile auf dem Handy:
 
 * **iPhone/iPad:** in **Safari** öffnen → Teilen → *Zum Home-Bildschirm*
 * **Android:** in **Chrome** öffnen → drei Punkte → *App installieren*
 
 Die Anleitung steht auch in der App selbst (Seitenleiste → „App auf den Startbildschirm
-legen"). Voraussetzung ist `enableStaticServing = true` in `.streamlit/config.toml` –
-das ist eingerichtet.
+legen").
 
 In beiden Fällen hilft der Schalter **📱 Handy-Ansicht** in der Seitenleiste: Statt
 breiter Tabellen erscheinen einzelne Eingabefelder untereinander, die sich mit dem
@@ -511,7 +514,7 @@ nebenkosten/hilfe.py      Erklärungen je Bereich und die Suche
 nebenkosten/pruefung.py   Vollständigkeitsprüfung vor dem Abschließen
 nebenkosten/katalog.py    alle abrechenbaren Kostenarten und die Sperrliste
 nebenkosten/zugang.py     Passwortabfrage für den Betrieb im Internet
-static/                   App-Symbol und manifest.json
+static/                   App-Symbol (wird in die Seite eingebettet)
 werkzeuge/icon_erzeugen.py  erzeugt das App-Symbol neu
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)
 tests/                    Tests der Berechnung und der PDF-Ausgabe

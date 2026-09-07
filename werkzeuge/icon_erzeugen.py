@@ -3,7 +3,7 @@
     python werkzeuge/icon_erzeugen.py
 
 Legt static/app-icon.png (512 px) und app-icon-180.png an – der Ordner static/
-wird von Streamlit unter /app/static/ ausgeliefert.
+wird von nebenkosten/design.py in die Seite eingebettet.
 """
 
 from __future__ import annotations

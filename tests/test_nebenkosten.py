@@ -714,15 +714,25 @@ def test_gestaltung_laesst_sich_laden():
 
 
 def test_symbol_und_manifest_liegen_bereit():
-    import json
     from pathlib import Path
 
+    from nebenkosten import design
+
     statisch = Path(__file__).resolve().parents[1] / "static"
-    for name in ("app-icon.png", "app-icon-180.png", "manifest.json"):
+    for name in ("app-icon.png", "app-icon-180.png"):
         assert (statisch / name).exists(), name
-    manifest = json.loads((statisch / "manifest.json").read_text(encoding="utf-8"))
+
+    # Manifest und Symbole stecken direkt in der Seite. Nur so funktioniert die
+    # Anmeldung auf dem Startbildschirm auch ohne enableStaticServing.
+    angaben = design._startbildschirm_angaben()
+    manifest = angaben["manifest"]
     assert manifest["display"] == "standalone"
-    assert all(s["src"].startswith("/app/static/") for s in manifest["icons"])
+    assert manifest["icons"], "ohne Symbol kein Startbildschirm-Eintrag"
+    assert all(s["src"].startswith("data:image/png;base64,") for s in manifest["icons"])
+    assert angaben["symbol"].startswith("data:image/png;base64,")
+    # start_url und scope traegt erst das Skript ein - relative Angaben waeren
+    # in einer Datenadresse ungueltig und der Browser wuerde das Manifest wegwerfen.
+    assert "start_url" not in manifest and "scope" not in manifest
 
 
 # --- Gas: Kubikmeter in Kilowattstunden ------------------------------------

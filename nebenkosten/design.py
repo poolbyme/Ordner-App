@@ -7,6 +7,7 @@ Namen ändert, sieht die App schlichter aus – funktionieren tut sie weiter.
 from __future__ import annotations
 
 import base64
+import json
 from functools import lru_cache
 from pathlib import Path
 
@@ -26,6 +27,7 @@ if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
 
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"
+ICON_GROSS = STATISCH / "app-icon.png"
 
 # Farben: einmal für hell, einmal für dunkel – die App folgt dem Gerät.
 FARBEN_HELL = {
@@ -224,31 +226,79 @@ input, textarea, [data-baseweb="select"] > div, [data-baseweb="input"] {{
 """
 
 
+def _startbildschirm_angaben() -> dict:
+    """Manifest und Symbole – alles als Datenadresse, ohne eigene Dateiablage.
+
+    Früher lagen Manifest und Symbol unter /app/static/. Das setzt voraus, dass
+    in .streamlit/config.toml enableStaticServing eingeschaltet ist. Fehlt diese
+    Datei – etwa weil das Projekt über die GitHub-Oberfläche hochgeladen wurde,
+    die versteckte Ordner gern übergeht –, blieb die App ohne Symbol und ohne
+    Namen auf dem Startbildschirm. Hier steckt beides direkt in der Seite.
+    """
+    gross = _bild_als_datenadresse(str(ICON_GROSS)) if ICON_GROSS.exists() else ""
+    klein = _bild_als_datenadresse(str(ICON)) if ICON.exists() else gross
+    symbole = []
+    if klein:
+        symbole.append({"src": klein, "sizes": "180x180", "type": "image/png"})
+    if gross:
+        symbole.append({"src": gross, "sizes": "512x512", "type": "image/png"})
+        symbole.append({"src": gross, "sizes": "512x512", "type": "image/png",
+                        "purpose": "maskable"})
+    return {
+        "manifest": {
+            "name": "Nebenkostenabrechnung",
+            "short_name": "Nebenkosten",
+            "description": "Betriebskostenabrechnung für die vermietete Wohnung",
+            "display": "standalone",
+            "orientation": "portrait",
+            "background_color": "#f6f8fb",
+            "theme_color": "#0e2b47",
+            "lang": "de",
+            "icons": symbole,
+        },
+        "symbol": klein,
+    }
+
+
 def _startbildschirm() -> None:
     """Symbol, Name und Farbe für „Zum Startbildschirm hinzufügen" hinterlegen.
 
     Die Angaben gehören in den Kopf der Seite. Streamlit rendert Bausteine in
     einem eigenen Rahmen, deshalb schreibt dieses Schnipsel sie von dort aus in
     die umgebende Seite – einmal, danach ist alles schon vorhanden.
+
+    start_url und scope trägt erst das Skript ein: In einer Datenadresse sind
+    relative Angaben ungültig und der Browser wirft das Manifest weg.
     """
     if _html_baustein is None:
         return
+    angaben = json.dumps(_startbildschirm_angaben())
     _html_baustein(
         """
 <script>
 (function () {
   const kopf = window.parent.document.head;
   if (!kopf || kopf.querySelector('link[rel="manifest"]')) return;
+  const angaben = ANGABEN;
+  const ort = window.parent.location;
+  const manifest = Object.assign({}, angaben.manifest, {
+    start_url: ort.origin + ort.pathname,
+    scope: ort.origin + ort.pathname.replace(/[^/]*$/, ''),
+  });
+  const alsAdresse = 'data:application/manifest+json;base64,' +
+    btoa(unescape(encodeURIComponent(JSON.stringify(manifest))));
   const eintraege = [
-    ['link', {rel: 'manifest', href: '/app/static/manifest.json'}],
-    ['link', {rel: 'apple-touch-icon', href: '/app/static/app-icon-180.png'}],
-    ['link', {rel: 'icon', type: 'image/png', href: '/app/static/app-icon-180.png'}],
+    ['link', {rel: 'manifest', href: alsAdresse}],
     ['meta', {name: 'apple-mobile-web-app-capable', content: 'yes'}],
     ['meta', {name: 'apple-mobile-web-app-title', content: 'Nebenkosten'}],
     ['meta', {name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent'}],
     ['meta', {name: 'theme-color', content: '#0e2b47'}],
     ['meta', {name: 'mobile-web-app-capable', content: 'yes'}],
   ];
+  if (angaben.symbol) {
+    eintraege.push(['link', {rel: 'apple-touch-icon', href: angaben.symbol}]);
+    eintraege.push(['link', {rel: 'icon', type: 'image/png', href: angaben.symbol}]);
+  }
   for (const [art, eigenschaften] of eintraege) {
     const knoten = window.parent.document.createElement(art);
     for (const [name, wert] of Object.entries(eigenschaften)) knoten.setAttribute(name, wert);
@@ -256,7 +306,7 @@ def _startbildschirm() -> None:
   }
 })();
 </script>
-""",
+""".replace("ANGABEN", angaben),
         height=_html_hoehe,
     )
 

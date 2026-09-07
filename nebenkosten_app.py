@@ -89,23 +89,45 @@ def init_state() -> None:
 
 
 def ablage_einrichten() -> None:
-    """Falls Zugangsdaten hinterlegt sind, in die Google-Tabelle speichern."""
+    """Falls Zugangsdaten hinterlegt sind, in die Google-Tabelle speichern.
+
+    Schlaegt das fehl, sagt die App warum. Frueher schwieg sie einfach und
+    schrieb weiter in die fluechtige Datei - man sah nur, dass die Daten nach
+    einem Neustart weg waren, aber nicht, woran es lag.
+    """
     if st.session_state.get("_ablage_geprueft"):
         return
     st.session_state["_ablage_geprueft"] = True
     try:
         zugang = st.secrets.get("gcp_json")
         adresse = st.secrets.get("nebenkosten_sheet_url")
-    except Exception:  # noqa: BLE001 – ohne secrets.toml wirft st.secrets
+    except Exception as fehler:  # noqa: BLE001 – ohne oder mit kaputter secrets.toml
+        st.session_state["_ablagegrund"] = (
+            "Die Zugangsdaten (Secrets) lassen sich nicht lesen. Meistens ist ein "
+            "Zeichen zu viel oder zu wenig drin – häufig drei Anführungsstriche "
+            f"an der falschen Stelle. Meldung: {fehler}")
         return
-    if not zugang or not adresse:
+    fehlend = [name for name, wert in (("nebenkosten_sheet_url", adresse),
+                                       ("gcp_json", zugang)) if not wert]
+    if fehlend:
+        st.session_state["_ablagegrund"] = (
+            "In den Secrets fehlt: " + " und ".join(f"`{n}`" for n in fehlend))
         return
     try:
         from nebenkosten.cloud import TabellenSpeicher
 
         daten = json.loads(zugang) if isinstance(zugang, str) else dict(zugang)
         speicher.konfiguriere(TabellenSpeicher(str(adresse), daten))
+    except json.JSONDecodeError as fehler:
+        st.session_state["_ablagegrund"] = (
+            "Der Google-Schlüssel in `gcp_json` ist unvollständig oder verstümmelt. "
+            f"Meldung: {fehler}")
     except Exception as fehler:  # noqa: BLE001 – Netz, Rechte, Tabelle fehlt
+        st.session_state["_ablagegrund"] = (
+            "Google lässt die App nicht an die Tabelle. Häufigste Ursachen: die "
+            "Tabelle ist nicht für die Dienstkonto-Adresse als **Bearbeiter** "
+            "freigegeben, oder im Google-Projekt sind Google Sheets API und "
+            f"Google Drive API nicht eingeschaltet. Meldung: {fehler}")
         st.session_state["_ablagefehler"] = str(fehler)
 
 
@@ -365,11 +387,13 @@ design.kopfzeile("Nebenkostenabrechnung",
 # Ob die Eingaben einen Neustart ueberleben, entscheidet alles - deshalb steht
 # das hier oben und nicht in der Seitenleiste, wo es niemand sucht.
 if speicher.beschreibung() == "Datei auf diesem Gerät":
+    _grund = st.session_state.get("_ablagegrund")
     st.warning(
         "**Deine Eingaben sind noch nicht dauerhaft gespeichert.** Startet die App "
         "neu, ist alles weg. Mach deine Abrechnung deshalb in einem Rutsch fertig "
         "und lade am Ende in der Seitenleiste die **Sicherungskopie** herunter – "
-        "die kannst du jederzeit wieder einlesen.",
+        "die kannst du jederzeit wieder einlesen."
+        + (f"\n\nWarum der dauerhafte Speicher nicht greift: {_grund}" if _grund else ""),
         icon="⚠️",
     )
 

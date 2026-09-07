@@ -105,6 +105,17 @@ hinzufügen" wird daraus ein Symbol wie bei einer App.
 
 **B · Streamlit Community Cloud** (überall erreichbar, Rechner kann aus bleiben)
 
+**Vorher ein Passwort setzen.** Im Netz ist die App sonst für jeden erreichbar, der die
+Adresse kennt – mitsamt Namen, Anschriften, IBAN und Zählerständen. In den
+Streamlit-Secrets genügt eine Zeile:
+
+```toml
+passwort = "einGutesWort"
+```
+
+Dann fragt die App danach, bevor sie irgendetwas anzeigt. Ohne diese Zeile bleibt sie
+offen – richtig so, solange sie nur auf dem eigenen Rechner läuft.
+
 Dort ist der Dateispeicher flüchtig. Damit die Daten einen Neustart überleben,
 speichert die App in eine Google-Tabelle, sobald in den Streamlit-Secrets steht:
 
@@ -499,6 +510,7 @@ nebenkosten/design.py     Aussehen und Anmeldung als App auf dem Startbildschirm
 nebenkosten/hilfe.py      Erklärungen je Bereich und die Suche
 nebenkosten/pruefung.py   Vollständigkeitsprüfung vor dem Abschließen
 nebenkosten/katalog.py    alle abrechenbaren Kostenarten und die Sperrliste
+nebenkosten/zugang.py     Passwortabfrage für den Betrieb im Internet
 static/                   App-Symbol und manifest.json
 werkzeuge/icon_erzeugen.py  erzeugt das App-Symbol neu
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)

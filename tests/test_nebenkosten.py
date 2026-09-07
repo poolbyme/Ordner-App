@@ -972,6 +972,13 @@ def test_sonstige_betriebskosten_brauchen_eine_vereinbarung():
         assert "Nr. 17" in art.nummer, art.name
 
 
+def test_ohne_hinterlegtes_passwort_bleibt_die_app_offen():
+    """Auf dem eigenen Rechner soll kein Passwort im Weg stehen."""
+    from nebenkosten import zugang
+
+    assert zugang._hinterlegtes_passwort() == ""    # keine secrets.toml in den Tests
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

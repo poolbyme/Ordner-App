@@ -15,7 +15,7 @@ from nebenkosten.berechnung import (
     berechne, co2_vermieteranteil, eur, gas_kwh, menge, parse_datum,
     verbrauchsaufteilung, warmwasser_kwh, zaehlerquelle, zahl,
 )
-from nebenkosten import design, hilfe, katalog, pruefung, speicher
+from nebenkosten import design, hilfe, katalog, pruefung, speicher, zugang
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
@@ -232,8 +232,10 @@ def datum_feld(label: str, wert: str, key: str, hilfe: str | None = None) -> str
                          help=hilfe).isoformat()
 
 
-init_state()
 design.anwenden()
+zugang.pruefen()
+
+init_state()
 stamm: Stammdaten = st.session_state.stamm
 
 # --------------------------------------------------------------------------

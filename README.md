@@ -251,6 +251,18 @@ Bei Heizung und Warmwasser sind 30 % Grundkosten üblich. Im PDF erscheinen dann
 Zeilen, „Heizung – Grundkosten 30 %" und „Heizung – Verbrauchskosten 70 %", wie in
 einer professionellen Abrechnung.
 
+**Gaszähler in Kilowattstunden umrechnen (Tab Kosten).** Der Gaszähler zählt Kubikmeter,
+abgerechnet wird in Kilowattstunden:
+
+**kWh = m³ × Zustandszahl × Brennwert**
+
+Beide Faktoren stehen auf der Gasrechnung. Die **Zustandszahl** (meist 0,90 bis 1,00)
+rechnet Druck und Temperatur am Zähler auf Normbedingungen um, der **Brennwert**
+(meist 9,8 bis 11,5 kWh/m³) sagt, wie viel Energie in einem Kubikmeter steckt. Beide
+ändern sich jedes Jahr etwas und werden mitgespeichert. Die Kubikmeter holt sich die App
+aus dem Gaszähler im Tab „Zählerstände“, sofern er dort steht. Der Rechenweg steht später
+auch in den Erläuterungen des PDF.
+
 **Gasrechnung aufteilen (Tab Kosten).** Messen die Wärmemengenzähler nur die Heizung,
 steckt im Gas auch das Warmwasser. Der Rechner benutzt die Formel des § 9 Abs. 2
 HeizkostenV – Q = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur − 10 °C), plus

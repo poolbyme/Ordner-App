@@ -440,6 +440,16 @@ def _erlaeuterungen(pdf: Abrechnung, e: Ergebnis) -> None:
         )
     if any("Verbrauch" in z.schluessel_text or "Zähler" in z.schluessel_text for z in e.zeilen):
         punkte.append("Verbrauchsabhängige Positionen wurden nach den abgelesenen Zählerständen verteilt.")
+    gaszaehler = [m for z in e.zeilen if z.zaehler and z.kategorie == "gas"
+                  for m in z.zaehler.messungen
+                  if m.partei == "haus" and m.verbrauch > 0]
+    if gaszaehler and s.gas_zustandszahl > 0 and s.gas_brennwert > 0:
+        verbrauch = gaszaehler[0].verbrauch
+        punkte.append(
+            f"Der Gaszähler zeigt {menge(verbrauch)} m³. Umgerechnet mit der Zustandszahl "
+            f"{zahl(s.gas_zustandszahl, 4)} und dem Brennwert {zahl(s.gas_brennwert, 4)} kWh/m³ "
+            f"laut Gasrechnung ergibt das "
+            f"{menge(round(verbrauch * s.gas_zustandszahl * s.gas_brennwert))} kWh.")
     if any(z.zaehler and z.zaehler.mit_gemeinsam for z in e.zeilen):
         punkte.append(
             "Gemeinsam genutzte Zapfstellen (zum Beispiel im Außenbereich) laufen über einen "

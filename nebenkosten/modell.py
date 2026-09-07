@@ -180,6 +180,11 @@ class Stammdaten:
     # Verteilung der Differenz zwischen Hauptzähler und Wohnungszählern
     zaehlerdifferenz: str = "verbrauch"  # "verbrauch" oder "flaeche"
 
+    # Umrechnung des Gaszählers von Kubikmetern in Kilowattstunden.
+    # Beide Werte stehen auf der Gasrechnung und ändern sich jedes Jahr etwas.
+    gas_zustandszahl: float = 0.95
+    gas_brennwert: float = 10.5
+
     # Vorauszahlungen
     vorauszahlung_monatlich: float = 0.0
     vorauszahlung_monate: int = 12

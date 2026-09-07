@@ -12,8 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from nebenkosten.berechnung import (
-    berechne, co2_vermieteranteil, eur, menge, parse_datum, verbrauchsaufteilung,
-    warmwasser_kwh, zaehlerquelle, zahl,
+    berechne, co2_vermieteranteil, eur, gas_kwh, menge, parse_datum,
+    verbrauchsaufteilung, warmwasser_kwh, zaehlerquelle, zahl,
 )
 from nebenkosten import design, speicher
 from nebenkosten.modell import (
@@ -650,6 +650,7 @@ with tab_kosten:
             "**Q = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur − 10 °C)**, plus Zuschlag "
             "für die Verluste der Anlage."
         )
+        st.markdown("**Warmwasser**")
         w1, w2, w3 = st.columns(3)
         ww_menge = w1.number_input("Warmwasser im ganzen Haus (m³)", min_value=0.0, step=1.0,
                                    value=float(st.session_state.get("ww_menge", 0.0)),
@@ -664,16 +665,57 @@ with tab_kosten:
             value=float(st.session_state.get("ww_nutzung", 1.11)), key="ww_nutzung",
             help="1,11 entspricht einem Nutzungsgrad von 90 % – der übliche Wert.")
 
+        st.markdown("**Gasverbrauch**")
+        st.caption(
+            "Der Gaszähler zählt Kubikmeter, abgerechnet wird in Kilowattstunden. "
+            "Umgerechnet wird mit **Zustandszahl** und **Brennwert** – beide stehen auf "
+            "deiner Gasrechnung und ändern sich jedes Jahr ein wenig."
+        )
+        # Kubikmeter aus dem Gaszähler der Heizung holen, falls vorhanden
+        gemessen_m3 = 0.0
+        for p_gas in st.session_state.positionen:
+            if p_gas.kategorie == "gas" and p_gas.zaehler:
+                gemessen_m3 = max(gemessen_m3, p_gas.verbrauch_haus)
+        u1, u2, u3 = st.columns(3)
+        gas_m3 = u1.number_input(
+            "Gasverbrauch (m³)", min_value=0.0, step=10.0,
+            value=float(st.session_state.get("gas_m3", gemessen_m3)), key="gas_m3",
+            help="Endstand minus Anfangsstand des Gaszählers. Steht der Zähler im Tab "
+                 "„Zählerstände“, ist der Wert schon eingetragen.")
+        stamm.gas_zustandszahl = u2.number_input(
+            "Zustandszahl", min_value=0.0, max_value=2.0, step=0.0001, format="%.4f",
+            value=float(stamm.gas_zustandszahl), key="z_zahl",
+            help="Rechnet Druck und Temperatur am Zähler auf Normbedingungen um. "
+                 "Meist zwischen 0,90 und 1,00.")
+        stamm.gas_brennwert = u3.number_input(
+            "Brennwert (kWh/m³)", min_value=0.0, max_value=20.0, step=0.01, format="%.4f",
+            value=float(stamm.gas_brennwert), key="brennwert",
+            help="Energiegehalt eines Kubikmeters Gas. Meist zwischen 9,8 und 11,5.")
+
+        umgerechnet = gas_kwh(gas_m3, stamm.gas_zustandszahl, stamm.gas_brennwert)
+        if umgerechnet:
+            st.info(f"{menge(gas_m3)} m³ × {zahl(stamm.gas_zustandszahl, 4)} × "
+                    f"{zahl(stamm.gas_brennwert, 4)} = **{menge(round(umgerechnet))} kWh**")
+            if umgerechnet > 100000:
+                st.warning(
+                    "Das sind ungewöhnlich viele Kilowattstunden für ein Wohnhaus. Zählt dein "
+                    "Zähler vielleicht schon in kWh? Dann gehört der Wert direkt ins Feld "
+                    "„Gasverbrauch im Zeitraum (kWh)“, ohne Umrechnung.")
+
         g1, g2 = st.columns(2)
-        gas_kwh = g1.number_input("Gasverbrauch im Zeitraum (kWh)", min_value=0.0, step=100.0,
-                                  value=float(st.session_state.get("gas_kwh", 0.0)), key="gas_kwh")
+        verbrauch_kwh = g1.number_input(
+            "Gasverbrauch im Zeitraum (kWh)", min_value=0.0, step=100.0,
+            value=float(st.session_state.get("gas_kwh", round(umgerechnet, 1))), key="gas_kwh",
+            help="Wird aus der Umrechnung oben vorbelegt. Steht auf deiner Rechnung eine "
+                 "andere Kilowattstundenzahl, hat die Rechnung Vorrang.")
         gas_kosten = g2.number_input("Gaskosten im Zeitraum (€)", min_value=0.0, step=10.0,
                                      value=float(st.session_state.get("gas_kosten", 0.0)),
                                      key="gas_kosten")
 
-        if ww_menge > 0 and gas_kwh > 0 and gas_kosten > 0:
+        st.markdown("**Aufteilung**")
+        if ww_menge > 0 and verbrauch_kwh > 0 and gas_kosten > 0:
             ww_bedarf = warmwasser_kwh(ww_menge, ww_temp, ww_nutzung)
-            anteil = min(ww_bedarf / gas_kwh, 1.0)
+            anteil = min(ww_bedarf / verbrauch_kwh, 1.0)
             kosten_ww = round(gas_kosten * anteil, 2)
             kosten_heizung = round(gas_kosten - kosten_ww, 2)
             st.success(
@@ -697,8 +739,8 @@ with tab_kosten:
                 else:
                     st.warning("Keine Zeile mit „Heizung“ oder „Warmwasser“ gefunden.")
         else:
-            st.caption("Trag Warmwassermenge, Gasverbrauch und Gaskosten ein, dann rechnet die "
-                       "App die Aufteilung aus.")
+            st.caption("Trag Warmwassermenge, Gasverbrauch und Gaskosten ein, dann rechnet "
+                       "die App die Aufteilung aus.")
 
     with st.expander("Was darfst du überhaupt abrechnen?"):
         st.markdown(

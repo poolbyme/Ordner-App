@@ -161,6 +161,19 @@ def zaehlerquelle(pos: Position, positionen: list[Position] | None) -> Position:
     return pos
 
 
+def gas_kwh(kubikmeter: float, zustandszahl: float, brennwert: float) -> float:
+    """Gasverbrauch von Kubikmetern in Kilowattstunden umrechnen.
+
+    kWh = m³ × Zustandszahl × Brennwert. Beide Faktoren stehen auf der
+    Gasrechnung: die Zustandszahl rechnet Druck und Temperatur am Zähler auf
+    Normbedingungen um (meist um 0,95), der Brennwert sagt, wie viel Energie in
+    einem Kubikmeter steckt (meist 9,8 bis 11,5 kWh/m³).
+    """
+    if kubikmeter <= 0 or zustandszahl <= 0 or brennwert <= 0:
+        return 0.0
+    return kubikmeter * zustandszahl * brennwert
+
+
 def warmwasser_kwh(volumen: float, temperatur: float = 60.0,
                    nutzungsgrad: float = 1.11) -> float:
     """Wärmemenge für die Warmwasserbereitung nach § 9 Abs. 2 HeizkostenV.

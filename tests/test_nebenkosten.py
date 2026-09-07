@@ -722,6 +722,35 @@ def test_symbol_und_manifest_liegen_bereit():
     assert all(s["src"].startswith("/app/static/") for s in manifest["icons"])
 
 
+# --- Gas: Kubikmeter in Kilowattstunden ------------------------------------
+
+def test_gasumrechnung():
+    from nebenkosten.berechnung import gas_kwh
+
+    # 2.440 m³ mit Zustandszahl 0,95 und Brennwert 10,5 kWh/m³
+    assert round(gas_kwh(2440.0, 0.95, 10.5)) == 24339
+    assert gas_kwh(0.0, 0.95, 10.5) == 0.0
+    assert gas_kwh(2440.0, 0.0, 10.5) == 0.0     # fehlende Zustandszahl
+    assert gas_kwh(2440.0, 0.95, 0.0) == 0.0     # fehlender Brennwert
+
+
+def test_pdf_erklaert_die_gasumrechnung():
+    s = basis_stammdaten(gas_zustandszahl=0.9563, gas_brennwert=11.024)
+    heizung = Position("Heizung (Gas)", "gas", betrag=2000.0, schluessel="verbrauch",
+                       einheit="kWh", zaehler_grundlage="unterzaehler", zaehler=[
+                           Zaehlerstand("Gaszähler Haus", "haus", 18450.0, 20890.0),
+                           Zaehlerstand("Wärmemenge Mieter", "mieter", 0.0, 4000.0),
+                           Zaehlerstand("Wärmemenge eigene", "vermieter", 0.0, 6000.0)])
+    daten = erzeuge_pdf(s, berechne(s, [heizung]))
+    assert daten.startswith(b"%PDF")
+
+
+def test_umrechnungswerte_werden_mitgespeichert():
+    s = basis_stammdaten(gas_zustandszahl=0.9563, gas_brennwert=11.024)
+    wieder = from_dict(as_dict(s, standard_positionen()))[0]
+    assert wieder.gas_zustandszahl == 0.9563 and wieder.gas_brennwert == 11.024
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

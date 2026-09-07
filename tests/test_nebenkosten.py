@@ -732,13 +732,20 @@ def test_symbol_und_manifest_liegen_bereit():
     assert "start_url" not in manifest and "scope" not in manifest
 
 
-def test_symboladresse_bevorzugt_die_echte_adresse():
+def test_manifest_symbole_haengen_an_keiner_dateiablage():
+    """Die Streamlit Community Cloud liefert static/ nicht aus."""
+    from nebenkosten import design
+
+    manifest = design._startbildschirm_angaben()["manifest"]
+    assert all(s["src"].startswith("data:image/png;base64,") for s in manifest["icons"])
+
+
+def test_symboladresse_nur_wenn_ausgeliefert_wird():
     """iOS nimmt fuer den Startbildschirm keine Datenadresse, nur eine URL."""
     from nebenkosten import design
 
     assert design._symboladresse(design.ICON_APPLE, True) == "/app/static/app-icon-apple.png"
-    ohne = design._symboladresse(design.ICON_APPLE, False)
-    assert ohne.startswith("data:image/png;base64,")
+    assert design._symboladresse(design.ICON_APPLE, False) == ""
     assert design._symboladresse(design.STATISCH / "gibt-es-nicht.png", True) == ""
 
 

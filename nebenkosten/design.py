@@ -237,26 +237,31 @@ def _statisch_wird_ausgeliefert() -> bool:
 
 
 def _symboladresse(datei: Path, ausgeliefert: bool) -> str:
-    """Echte Adresse, wenn möglich – sonst das Bild direkt in der Seite.
+    """Echte Adresse, wenn der Ordner static/ ausgeliefert wird – sonst leer.
 
-    Für das apple-touch-icon zählt der Unterschied: iOS nimmt für den
-    Startbildschirm keine Datenadresse an, sondern nur eine echte URL. Wo
-    static/ ausgeliefert wird, ist die echte Adresse also Pflicht; nur wo sie
-    fehlt, bleibt die Datenadresse als Notnagel (Chrome kommt damit zurecht).
+    Nur das apple-touch-icon braucht das: iOS nimmt für den Startbildschirm
+    keine Datenadresse an, sondern ausschließlich eine echte URL. Auf der
+    Streamlit Community Cloud wird static/ aber nicht zuverlässig ausgeliefert,
+    auch mit enableStaticServing nicht – deshalb ist das hier ein Angebot und
+    keine Zusage, und alles andere kommt ohne aus.
     """
-    if not datei.exists():
+    if not datei.exists() or not ausgeliefert:
         return ""
-    if ausgeliefert:
-        return "/app/static/" + datei.name
-    return _bild_als_datenadresse(str(datei))
+    return "/app/static/" + datei.name
 
 
 def _startbildschirm_angaben() -> dict:
-    """Manifest und Symbole für den Startbildschirm."""
-    ausgeliefert = _statisch_wird_ausgeliefert()
-    gross = _symboladresse(ICON_GROSS, ausgeliefert)
-    klein = _symboladresse(ICON, ausgeliefert) or gross
-    apfel = _symboladresse(ICON_APPLE, ausgeliefert) or klein
+    """Manifest und Symbole für den Startbildschirm.
+
+    Die Symbole stecken als Datenadresse direkt in der Seite. Damit hängt das
+    Bild auf dem Startbildschirm an nichts weiter – weder an einer Einstellung
+    in .streamlit/config.toml noch daran, ob der Betreiber Dateien ausliefert.
+    """
+    def daten(datei: Path) -> str:
+        return _bild_als_datenadresse(str(datei)) if datei.exists() else ""
+
+    gross = daten(ICON_GROSS)
+    klein = daten(ICON) or gross
     symbole = []
     if klein:
         symbole.append({"src": klein, "sizes": "180x180", "type": "image/png"})
@@ -264,6 +269,9 @@ def _startbildschirm_angaben() -> dict:
         symbole.append({"src": gross, "sizes": "512x512", "type": "image/png"})
         symbole.append({"src": gross, "sizes": "512x512", "type": "image/png",
                         "purpose": "maskable"})
+    # Fürs iPhone die echte Adresse, wenn es sie gibt; sonst bleibt nur die
+    # Datenadresse, mit der iOS zwar nichts anfängt, Chrome aber schon.
+    apfel = _symboladresse(ICON_APPLE, _statisch_wird_ausgeliefert()) or daten(ICON_APPLE) or klein
     return {
         "manifest": {
             "name": "Nebenkostenabrechnung",

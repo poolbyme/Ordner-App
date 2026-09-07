@@ -12,10 +12,17 @@ from pathlib import Path
 
 import streamlit as st
 
-try:  # Der Baustein für eigenes HTML heißt je nach Streamlit-Fassung anders.
-    from streamlit.components.v1 import html as _html_baustein
-except ImportError:  # pragma: no cover - nur bei sehr alten Fassungen
-    _html_baustein = None
+# Der Baustein für eigenes HTML heißt je nach Streamlit-Fassung anders: seit
+# 1.63 st.iframe, davor st.components.v1.html (das wird abgekündigt). st.iframe
+# lässt die Höhe 0 nicht zu, deshalb ist die kleinste erlaubte Höhe hinterlegt.
+_html_baustein = getattr(st, "iframe", None)
+_html_hoehe = 1
+if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
+    _html_hoehe = 0
+    try:
+        from streamlit.components.v1 import html as _html_baustein
+    except ImportError:
+        _html_baustein = None
 
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"
@@ -208,6 +215,11 @@ input, textarea, [data-baseweb="select"] > div, [data-baseweb="input"] {{
     [data-testid="stMetricValue"] {{ font-size: 1.3rem !important; }}
     input, .stButton button, .stDownloadButton button {{ min-height: 44px; }}
 }}
+
+/* Der Rahmen, der die Startbildschirm-Angaben einträgt, ist 1px hoch, weil
+   Streamlit die Höhe 0 nicht mehr zulässt. Hier nimmt er keinen Platz ein.
+   Kein display:none - dann führen manche Browser das Skript darin nicht aus. */
+[data-testid="stIFrame"] {{ height: 0 !important; min-height: 0 !important; }}
 </style>
 """
 
@@ -245,7 +257,7 @@ def _startbildschirm() -> None:
 })();
 </script>
 """,
-        height=0,
+        height=_html_hoehe,
     )
 
 

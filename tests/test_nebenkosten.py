@@ -811,8 +811,10 @@ def test_suche_sortiert_genaue_treffer_nach_vorne():
 # --- Prüfung vor dem Abschließen -------------------------------------------
 
 def vollstaendige_daten():
-    s = basis_stammdaten(vermieter_name="Andreas Komjagin", vermieter_plz_ort="66903 Gries",
-                         objekt_strasse="Raiffeisenring 27", mieter_name="Familie Zotov",
+    # Erfundene Angaben. Echte Namen, Anschriften und Kontodaten gehoeren nicht
+    # ins Repository, sondern nur in die gespeicherten Daten der laufenden App.
+    s = basis_stammdaten(vermieter_name="Max Mustermann", vermieter_plz_ort="12345 Musterstadt",
+                         objekt_strasse="Musterweg 1", mieter_name="Familie Beispiel",
                          vermieter_iban="DE02 1203 0000 0000 2020 51")
     positionen = [Position("Grundsteuer", "sonstiges", betrag=421.44),
                   Position("Versicherungen", "sonstiges", betrag=388.12),

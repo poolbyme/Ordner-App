@@ -26,6 +26,31 @@ Für die Streamlit Community Cloud dieselbe Datei als „Main file path" eintrag
 Die App braucht weder Google-Zugang noch Secrets. Alle Eingaben bleiben in der
 Sitzung und lassen sich über die Seitenleiste als Datei sichern und wieder laden.
 
+### Abschließen und prüfen
+
+Im Bereich „Fertige Abrechnung“ steht unter dem Ergebnis der Knopf **„Abrechnung
+abschließen und prüfen“**. Die Prüfung (`nebenkosten/pruefung.py`) trennt drei Arten von
+Meldungen:
+
+* **Muss** – ohne diese Angaben rechnet die App falsch oder die Abrechnung ist formal
+  unbrauchbar: Name und Anschrift von Vermieter und Mieter, Adresse des Hauses,
+  Wohnflächen, mindestens eine Kostenart mit Betrag, fehlende Zählerstände. Solange
+  hier etwas offen ist, gibt es kein PDF.
+* **Kann** – Dinge, die man üblicherweise abrechnet, dieses Jahr aber vielleicht gar
+  nicht hatte: angehakte Zeilen ohne Betrag, übliche Kostenarten, die fehlen (Grundsteuer,
+  Versicherung, Müll, Niederschlagswasser, Allgemeinstrom, Schornsteinfeger,
+  Straßenreinigung, Heizungswartung), die IBAN bei einer Nachzahlung. Nur eine
+  Erinnerung, blockiert nichts.
+* **Achtung** – Zeilen, die so nicht hineingehören: Renovierung, Reparatur,
+  Instandhaltung, Verwaltung, Rücklagen, Kaution. Diese Kosten trägt der Vermieter
+  (§ 1 Abs. 2 BetrKV), sie gehören nicht in eine Betriebskostenabrechnung.
+
+Liegt eine abgelegte Abrechnung des Vorjahres im Archiv, vergleicht die Prüfung
+zusätzlich: Was damals einen Betrag hatte und diesmal fehlt, wird mit dem alten Betrag
+genannt („Gartenpflege fehlt gegenüber der letzten Abrechnung – damals 450,00 €“).
+
+Jede Meldung hat einen Knopf, der direkt an die Stelle springt, an der sie nachzutragen ist.
+
 ### Hilfe und Suche
 
 **Fragezeichen.** Neben der Überschrift jedes Bereichs sitzt ein rundes **?**. Ein Klick
@@ -420,6 +445,7 @@ nebenkosten/speicher.py   dauerhaftes Speichern und Archiv
 nebenkosten/cloud.py      Ablage in einer Google-Tabelle (für den Cloud-Betrieb)
 nebenkosten/design.py     Aussehen und Anmeldung als App auf dem Startbildschirm
 nebenkosten/hilfe.py      Erklärungen je Bereich und die Suche
+nebenkosten/pruefung.py   Vollständigkeitsprüfung vor dem Abschließen
 static/                   App-Symbol und manifest.json
 werkzeuge/icon_erzeugen.py  erzeugt das App-Symbol neu
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)

@@ -15,7 +15,7 @@ from nebenkosten.berechnung import (
     berechne, co2_vermieteranteil, eur, gas_kwh, menge, parse_datum,
     verbrauchsaufteilung, warmwasser_kwh, zaehlerquelle, zahl,
 )
-from nebenkosten import design, hilfe, speicher
+from nebenkosten import design, hilfe, pruefung, speicher
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
@@ -1150,7 +1150,68 @@ if bereich == "ergebnis":
                        "im Monat.")
 
     st.divider()
-    if ergebnis.fehler:
+
+    # --- Abschließen: prüfen, was fehlt ---------------------------------
+    pflicht_offen = False
+    if not st.session_state.get("geprueft"):
+        st.caption("Wenn du fertig bist, prüft die App, ob etwas fehlt.")
+        if st.button("✅ Abrechnung abschließen und prüfen", type="primary", width="stretch"):
+            st.session_state["geprueft"] = True
+            st.rerun()
+    else:
+        vorjahr = None
+        jahr = (parse_datum(stamm.zeitraum_bis) or date.today()).year
+        merker = f"_vorjahr_{jahr}"
+        if merker not in st.session_state:
+            try:
+                geladen = speicher.vorjahr(stamm)
+            except Exception:  # noqa: BLE001 – Archiv kann fehlen oder unlesbar sein
+                geladen = None
+            st.session_state[merker] = geladen[1] if geladen else []
+        vorjahr = st.session_state[merker]
+
+        bericht = pruefung.pruefe(stamm, st.session_state.positionen, ergebnis, vorjahr)
+
+        def punkte(titel: str, liste, kennung: str) -> None:
+            with st.container(border=True):
+                if titel:
+                    st.markdown(f"**{titel}**")
+                for nummer, punkt in enumerate(liste):
+                    zeile, sprung = st.columns([5, 2], vertical_alignment="center")
+                    with zeile:
+                        st.markdown(punkt.was + (f"  \n_{punkt.warum}_" if punkt.warum else ""))
+                    with sprung:
+                        if st.button(f"→ {hilfe.BEREICHE[punkt.bereich]}",
+                                     key=f"{kennung}_{nummer}", width="stretch"):
+                            st.session_state["_ziel_bereich"] = punkt.bereich
+                            st.rerun()
+
+        pflicht_offen = bool(bericht.pflicht)
+        if bericht.pflicht:
+            st.error(f"**{len(bericht.pflicht)} Angaben fehlen noch.** Ohne sie kann die "
+                     "Abrechnung nicht erstellt werden.")
+            punkte("Das muss noch eingetragen werden", bericht.pflicht, "pf")
+        else:
+            st.success("**Alles da, was gebraucht wird.** Das PDF kann erstellt werden.")
+
+        if bericht.achtung:
+            st.warning("**Bitte einmal anschauen** – das gehört so vermutlich nicht hinein.")
+            punkte("Prüfen", bericht.achtung, "ac")
+
+        if bericht.kann:
+            with st.expander(f"Könnte noch fehlen ({len(bericht.kann)}) – kein Muss", expanded=False):
+                st.caption(
+                    "Sachen, die man üblicherweise abrechnet. Hattest du sie dieses Jahr "
+                    "nicht, ist das in Ordnung – dann einfach ignorieren."
+                )
+                punkte("", bericht.kann, "ka")
+
+        if st.button("Prüfung schließen"):
+            st.session_state.pop("geprueft", None)
+            st.rerun()
+
+    st.divider()
+    if ergebnis.fehler or pflicht_offen:
         st.error("Bitte die roten Punkte oben korrigieren, dann gibt es das PDF.")
     elif not ergebnis.zeilen:
         st.info("Ohne Kosten gibt es nichts abzurechnen.")

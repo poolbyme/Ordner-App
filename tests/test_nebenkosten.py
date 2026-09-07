@@ -805,6 +805,105 @@ def test_suche_sortiert_genaue_treffer_nach_vorne():
     assert treffer and treffer[0][1].titel == "Zustandszahl und Brennwert"
 
 
+# --- Prüfung vor dem Abschließen -------------------------------------------
+
+def vollstaendige_daten():
+    s = basis_stammdaten(vermieter_name="Andreas Komjagin", vermieter_plz_ort="66903 Gries",
+                         objekt_strasse="Raiffeisenring 27", mieter_name="Familie Zotov",
+                         vermieter_iban="DE02 1203 0000 0000 2020 51")
+    positionen = [Position("Grundsteuer", "sonstiges", betrag=421.44),
+                  Position("Versicherungen", "sonstiges", betrag=388.12),
+                  Position("Müllabfuhr", "sonstiges", betrag=188.0),
+                  Position("Niederschlagswasser", "wasser", betrag=135.70),
+                  Position("Allgemeinstrom", "sonstiges", betrag=210.0),
+                  Position("Schornsteinfeger", "gas", betrag=95.0),
+                  Position("Straßenreinigung und Winterdienst", "sonstiges", betrag=120.0),
+                  Position("Heizungswartung", "gas", betrag=180.0)]
+    return s, positionen
+
+
+def test_pruefung_meldet_fehlende_pflichtangaben():
+    from nebenkosten import pruefung
+
+    s = basis_stammdaten(vermieter_name="", mieter_name="", objekt_strasse="",
+                         flaeche_gesamt=0.0, flaeche_mieter=0.0)
+    positionen = [Position("Grundsteuer", "sonstiges", betrag=500.0)]
+    bericht = pruefung.pruefe(s, positionen, berechne(s, positionen))
+    fehlt = {p.was for p in bericht.pflicht}
+    assert "Dein Name" in fehlt
+    assert "Name des Mieters" in fehlt
+    assert "Adresse des Hauses" in fehlt
+    assert "Wohnfläche des ganzen Hauses" in fehlt
+    assert not bericht.vollstaendig
+    # jeder Punkt sagt, wo er nachzutragen ist
+    assert all(p.bereich in ("haus", "diese", "kosten", "zaehler", "vz", "ergebnis")
+               for p in bericht.pflicht)
+
+
+def test_pruefung_ist_zufrieden_wenn_alles_da_ist():
+    from nebenkosten import pruefung
+
+    s, positionen = vollstaendige_daten()
+    bericht = pruefung.pruefe(s, positionen, berechne(s, positionen))
+    assert bericht.vollstaendig and not bericht.achtung
+
+
+def test_pruefung_trennt_muss_von_kann():
+    """Fehlende Kostenarten sind kein Grund, die Abrechnung zu blockieren."""
+    from nebenkosten import pruefung
+
+    s, positionen = vollstaendige_daten()
+    ohne_versicherung = [p for p in positionen if p.bezeichnung != "Versicherungen"]
+    bericht = pruefung.pruefe(s, ohne_versicherung, berechne(s, ohne_versicherung))
+    assert bericht.vollstaendig                      # PDF bleibt möglich
+    assert any("Versicherungen" in p.was for p in bericht.kann)
+
+
+def test_pruefung_meldet_zeilen_ohne_betrag():
+    from nebenkosten import pruefung
+
+    s, positionen = vollstaendige_daten()
+    positionen.append(Position("Gartenpflege", "sonstiges", betrag=0.0))
+    bericht = pruefung.pruefe(s, positionen, berechne(s, positionen))
+    assert any("Gartenpflege" in p.was and "ohne Betrag" in p.warum for p in bericht.kann)
+
+
+def test_pruefung_warnt_vor_renovierungskosten():
+    """Renovierung und Reparatur sind nicht umlagefähig."""
+    from nebenkosten import pruefung
+
+    s, positionen = vollstaendige_daten()
+    for name in ("Renovierung Treppenhaus", "Reparatur Heizung", "Schönheitsreparaturen"):
+        pruefling = positionen + [Position(name, "sonstiges", betrag=800.0)]
+        bericht = pruefung.pruefe(s, pruefling, berechne(s, pruefling))
+        assert any(name in p.was for p in bericht.achtung), name
+        assert bericht.vollstaendig      # blockiert nicht, weist nur hin
+
+
+def test_pruefung_vermisst_zeilen_aus_dem_vorjahr():
+    from nebenkosten import pruefung
+
+    s, positionen = vollstaendige_daten()
+    vorjahr = positionen + [Position("Gartenpflege", "sonstiges", betrag=450.0)]
+    bericht = pruefung.pruefe(s, positionen, berechne(s, positionen), vorjahr)
+    treffer = [p for p in bericht.kann if "Gartenpflege" in p.was]
+    assert treffer and "450,00" in treffer[0].warum
+
+
+def test_pruefung_erinnert_an_die_iban_nur_bei_nachzahlung():
+    from nebenkosten import pruefung
+
+    s, positionen = vollstaendige_daten()
+    s.vermieter_iban = ""
+    s.vorauszahlung_monatlich = 10.0        # zu wenig -> Nachzahlung
+    bericht = pruefung.pruefe(s, positionen, berechne(s, positionen))
+    assert any("IBAN" in p.was for p in bericht.kann)
+
+    s.vorauszahlung_monatlich = 500.0       # Guthaben -> keine IBAN nötig
+    bericht = pruefung.pruefe(s, positionen, berechne(s, positionen))
+    assert not any("IBAN" in p.was for p in bericht.kann)
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

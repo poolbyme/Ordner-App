@@ -118,6 +118,24 @@ def archivname(eintrag) -> str:
     return name.removesuffix(".json").replace("_", " ")
 
 
+def vorjahr(stammdaten: Stammdaten):
+    """Die abgelegte Abrechnung des Vorjahres, falls es eine gibt."""
+    from .berechnung import parse_datum
+
+    bis = parse_datum(stammdaten.zeitraum_bis)
+    if not bis:
+        return None
+    gesucht = bis.year - 1
+    for eintrag in archiv():
+        geladen = aus_archiv(eintrag)
+        if not geladen:
+            continue
+        alt_bis = parse_datum(geladen[0].zeitraum_bis)
+        if alt_bis and alt_bis.year == gesucht:
+            return geladen
+    return None
+
+
 def aus_archiv(eintrag) -> tuple[Stammdaten, list[Position]] | None:
     if _ablage is not None:
         daten = _ablage.lesen(str(eintrag))

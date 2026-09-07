@@ -49,6 +49,8 @@ NICHT_UMLAGEFAEHIG_STICHWORTE = [
     "verwaltung", "verwalter", "kontoführung", "kontofuehrung", "porto",
     "rücklage", "ruecklage", "anwalt", "rechtsschutz", "mietausfall",
     "modernisierung", "sanierung", "neuanschaffung", "bankgebühr",
+    "renovierung", "renovieren", "schönheitsrepar", "schoenheitsrepar",
+    "malerarbeit", "tapezier", "streichen", "kaution", "leerstand",
 ]
 
 

@@ -28,6 +28,8 @@ if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"
 ICON_GROSS = STATISCH / "app-icon.png"
+# Randfüllend und ohne Durchsichtigkeit – iOS füllt durchsichtige Ecken schwarz.
+ICON_APPLE = STATISCH / "app-icon-apple.png"
 
 # Farben: einmal für hell, einmal für dunkel – die App folgt dem Gerät.
 FARBEN_HELL = {
@@ -226,17 +228,35 @@ input, textarea, [data-baseweb="select"] > div, [data-baseweb="input"] {{
 """
 
 
-def _startbildschirm_angaben() -> dict:
-    """Manifest und Symbole – alles als Datenadresse, ohne eigene Dateiablage.
+def _statisch_wird_ausgeliefert() -> bool:
+    """Liefert Streamlit den Ordner static/ unter /app/static/ aus?"""
+    try:
+        return bool(st.get_option("server.enableStaticServing"))
+    except Exception:  # pragma: no cover - je nach Streamlit-Fassung
+        return False
 
-    Früher lagen Manifest und Symbol unter /app/static/. Das setzt voraus, dass
-    in .streamlit/config.toml enableStaticServing eingeschaltet ist. Fehlt diese
-    Datei – etwa weil das Projekt über die GitHub-Oberfläche hochgeladen wurde,
-    die versteckte Ordner gern übergeht –, blieb die App ohne Symbol und ohne
-    Namen auf dem Startbildschirm. Hier steckt beides direkt in der Seite.
+
+def _symboladresse(datei: Path, ausgeliefert: bool) -> str:
+    """Echte Adresse, wenn möglich – sonst das Bild direkt in der Seite.
+
+    Für das apple-touch-icon zählt der Unterschied: iOS nimmt für den
+    Startbildschirm keine Datenadresse an, sondern nur eine echte URL. Wo
+    static/ ausgeliefert wird, ist die echte Adresse also Pflicht; nur wo sie
+    fehlt, bleibt die Datenadresse als Notnagel (Chrome kommt damit zurecht).
     """
-    gross = _bild_als_datenadresse(str(ICON_GROSS)) if ICON_GROSS.exists() else ""
-    klein = _bild_als_datenadresse(str(ICON)) if ICON.exists() else gross
+    if not datei.exists():
+        return ""
+    if ausgeliefert:
+        return "/app/static/" + datei.name
+    return _bild_als_datenadresse(str(datei))
+
+
+def _startbildschirm_angaben() -> dict:
+    """Manifest und Symbole für den Startbildschirm."""
+    ausgeliefert = _statisch_wird_ausgeliefert()
+    gross = _symboladresse(ICON_GROSS, ausgeliefert)
+    klein = _symboladresse(ICON, ausgeliefert) or gross
+    apfel = _symboladresse(ICON_APPLE, ausgeliefert) or klein
     symbole = []
     if klein:
         symbole.append({"src": klein, "sizes": "180x180", "type": "image/png"})
@@ -257,6 +277,7 @@ def _startbildschirm_angaben() -> dict:
             "icons": symbole,
         },
         "symbol": klein,
+        "apfel": apfel,
     }
 
 
@@ -281,9 +302,14 @@ def _startbildschirm() -> None:
   if (!kopf || kopf.querySelector('link[rel="manifest"]')) return;
   const angaben = ANGABEN;
   const ort = window.parent.location;
+  // Im Manifest muss jede Adresse vollstaendig sein: es haengt selbst in einer
+  // Datenadresse, und dagegen laesst sich nichts Relatives aufloesen.
+  const voll = (a) => (a && a.startsWith('/') ? ort.origin + a : a);
   const manifest = Object.assign({}, angaben.manifest, {
     start_url: ort.origin + ort.pathname,
     scope: ort.origin + ort.pathname.replace(/[^/]*$/, ''),
+    icons: (angaben.manifest.icons || []).map(
+      (s) => Object.assign({}, s, {src: voll(s.src)})),
   });
   const alsAdresse = 'data:application/manifest+json;base64,' +
     btoa(unescape(encodeURIComponent(JSON.stringify(manifest))));
@@ -295,8 +321,11 @@ def _startbildschirm() -> None:
     ['meta', {name: 'theme-color', content: '#0e2b47'}],
     ['meta', {name: 'mobile-web-app-capable', content: 'yes'}],
   ];
+  if (angaben.apfel) {
+    for (const alt of kopf.querySelectorAll('link[rel="apple-touch-icon"]')) alt.remove();
+    eintraege.push(['link', {rel: 'apple-touch-icon', sizes: '180x180', href: angaben.apfel}]);
+  }
   if (angaben.symbol) {
-    eintraege.push(['link', {rel: 'apple-touch-icon', href: angaben.symbol}]);
     eintraege.push(['link', {rel: 'icon', type: 'image/png', href: angaben.symbol}]);
   }
   for (const [art, eigenschaften] of eintraege) {

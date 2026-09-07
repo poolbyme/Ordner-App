@@ -719,20 +719,44 @@ def test_symbol_und_manifest_liegen_bereit():
     from nebenkosten import design
 
     statisch = Path(__file__).resolve().parents[1] / "static"
-    for name in ("app-icon.png", "app-icon-180.png"):
+    for name in ("app-icon.png", "app-icon-180.png", "app-icon-apple.png"):
         assert (statisch / name).exists(), name
 
-    # Manifest und Symbole stecken direkt in der Seite. Nur so funktioniert die
-    # Anmeldung auf dem Startbildschirm auch ohne enableStaticServing.
     angaben = design._startbildschirm_angaben()
     manifest = angaben["manifest"]
     assert manifest["display"] == "standalone"
     assert manifest["icons"], "ohne Symbol kein Startbildschirm-Eintrag"
-    assert all(s["src"].startswith("data:image/png;base64,") for s in manifest["icons"])
-    assert angaben["symbol"].startswith("data:image/png;base64,")
+    assert angaben["apfel"], "ohne apple-touch-icon bleibt das iPhone beim Streamlit-Symbol"
     # start_url und scope traegt erst das Skript ein - relative Angaben waeren
     # in einer Datenadresse ungueltig und der Browser wuerde das Manifest wegwerfen.
     assert "start_url" not in manifest and "scope" not in manifest
+
+
+def test_symboladresse_bevorzugt_die_echte_adresse():
+    """iOS nimmt fuer den Startbildschirm keine Datenadresse, nur eine URL."""
+    from nebenkosten import design
+
+    assert design._symboladresse(design.ICON_APPLE, True) == "/app/static/app-icon-apple.png"
+    ohne = design._symboladresse(design.ICON_APPLE, False)
+    assert ohne.startswith("data:image/png;base64,")
+    assert design._symboladresse(design.STATISCH / "gibt-es-nicht.png", True) == ""
+
+
+def test_apple_symbol_ist_randfuellend_und_undurchsichtig():
+    """iOS rundet selbst ab und faerbt alles Durchsichtige schwarz."""
+    from PIL import Image
+
+    bild = Image.open(design_pfad()).convert("RGBA")
+    ecken = [(0, 0), (bild.width - 1, 0), (0, bild.height - 1),
+             (bild.width - 1, bild.height - 1)]
+    for x, y in ecken:
+        assert bild.getpixel((x, y))[3] == 255, "durchsichtige Ecke wird auf dem iPhone schwarz"
+
+
+def design_pfad():
+    from nebenkosten import design
+
+    return design.ICON_APPLE
 
 
 # --- Gas: Kubikmeter in Kilowattstunden ------------------------------------

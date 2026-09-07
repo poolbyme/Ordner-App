@@ -2,8 +2,16 @@
 
     python werkzeuge/icon_erzeugen.py
 
-Legt static/app-icon.png (512 px) und app-icon-180.png an – der Ordner static/
-wird von nebenkosten/design.py in die Seite eingebettet.
+Legt drei Dateien in static/ an:
+
+    app-icon.png          512 px, abgerundet, durchsichtige Ecken – fürs Manifest
+    app-icon-180.png      180 px, ebenso – fürs Manifest und die Kopfzeile
+    app-icon-apple.png    180 px, randfüllend und ohne Durchsichtigkeit
+
+Die dritte Datei ist für das apple-touch-icon auf dem iPhone. iOS rundet die
+Ecken selbst ab und füllt alles Durchsichtige mit Schwarz – ein abgerundetes
+Bild mit durchsichtigen Ecken landet dort als schwarzes Eck auf dem
+Startbildschirm.
 """
 
 from __future__ import annotations
@@ -75,8 +83,18 @@ def erzeuge(groesse: int) -> Image.Image:
     return abgerundet(bild).resize((groesse, groesse), Image.LANCZOS)
 
 
+def erzeuge_randlos(groesse: int) -> Image.Image:
+    """Randfüllend und ohne Durchsichtigkeit – so will iOS es haben."""
+    gross = groesse * 4
+    bild = verlauf(gross)
+    haus(ImageDraw.Draw(bild), gross)
+    return bild.resize((groesse, groesse), Image.LANCZOS)
+
+
 if __name__ == "__main__":
     ZIEL.mkdir(parents=True, exist_ok=True)
     for groesse, name in ((512, "app-icon.png"), (180, "app-icon-180.png")):
         erzeuge(groesse).save(ZIEL / name)
         print("geschrieben:", ZIEL / name)
+    erzeuge_randlos(180).save(ZIEL / "app-icon-apple.png")
+    print("geschrieben:", ZIEL / "app-icon-apple.png")

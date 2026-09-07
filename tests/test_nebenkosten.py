@@ -567,6 +567,52 @@ def test_warnung_bei_sehr_grosser_zaehlerdifferenz():
     assert any("ungewöhnlich groß" in w for w in e.warnungen)
 
 
+# --- Gemeinsam genutzte Zähler (Außenzapfstelle) ---------------------------
+
+def wasser_mit_garten(garten_partei: str = "gemeinsam") -> Position:
+    return Position("Wasser", betrag=922.0, schluessel="verbrauch", einheit="m³", zaehler=[
+        Zaehlerstand("Hauptzähler", "haus", 0.0, 188.0),
+        Zaehlerstand("Mieter", "mieter", 0.0, 60.0),
+        Zaehlerstand("eigene Wohnung", "vermieter", 0.0, 110.0),
+        Zaehlerstand("Außenzapfstelle", garten_partei, 0.0, 15.0)])
+
+
+def test_gartenwasser_dem_vermieter_zugeordnet():
+    """Nutzt nur der Vermieter den Außenhahn, zahlt der Mieter nichts davon."""
+    e = berechne(basis_stammdaten(), [wasser_mit_garten("vermieter")])
+    z = e.zeilen[0].zaehler
+    assert z.gemeinsam_verbrauch == 0.0
+    assert z.differenz == 3.0                    # 188 - (60 + 110 + 15)
+    assert z.menge_mieter == 60.0 + round(3.0 * 60 / 185, 2)
+
+
+def test_gartenwasser_gemeinsam_wird_verteilt():
+    e = berechne(basis_stammdaten(), [wasser_mit_garten("gemeinsam")])
+    z = e.zeilen[0].zaehler
+    assert z.gemeinsam_verbrauch == 15.0
+    assert z.gemeinsam_anteil == round(15.0 * 60 / 170, 2)   # nach gemessenem Verbrauch
+    assert z.differenz == 3.0
+    assert z.menge_mieter > 60.0
+
+
+def test_gartenzaehler_senkt_den_mieteranteil():
+    """Ohne eigenen Zähler steckt das Gartenwasser in der Differenz."""
+    ohne = Position("Wasser", betrag=922.0, schluessel="verbrauch", einheit="m³", zaehler=[
+        Zaehlerstand("Hauptzähler", "haus", 0.0, 188.0),
+        Zaehlerstand("Mieter", "mieter", 0.0, 60.0),
+        Zaehlerstand("eigene Wohnung", "vermieter", 0.0, 110.0)])
+    mit = wasser_mit_garten("vermieter")
+    assert berechne(basis_stammdaten(), [ohne]).summe_anteil > \
+           berechne(basis_stammdaten(), [mit]).summe_anteil
+
+
+def test_gemeinsame_menge_nach_wohnflaeche():
+    s = basis_stammdaten(zaehlerdifferenz="flaeche")     # Mieter 80 von 200 m² = 40 %
+    z = berechne(s, [wasser_mit_garten("gemeinsam")]).zeilen[0].zaehler
+    assert z.gemeinsam_anteil == 6.0                     # 15 × 40 %
+    assert "Wohnfläche" in z.verteiltext
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

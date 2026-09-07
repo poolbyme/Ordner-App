@@ -61,6 +61,7 @@ PARTEIEN = {
     "haus": "Hauptzähler (ganzes Haus)",
     "mieter": "Wohnung des Mieters",
     "vermieter": "Deine Wohnung",
+    "gemeinsam": "gemeinsam genutzt (wird verteilt)",
 }
 
 # Woraus sich der Anteil des Mieters ergibt
@@ -122,6 +123,11 @@ class Position:
     @property
     def verbrauch_eigen(self) -> float:
         return self._summe("vermieter") or float(self.verbrauch_eigen_direkt)
+
+    @property
+    def verbrauch_gemeinsam(self) -> float:
+        """Zähler, die keiner Wohnung allein gehören – etwa die Außenzapfstelle."""
+        return self._summe("gemeinsam")
 
     @property
     def hat_zaehlerstaende(self) -> bool:
@@ -218,6 +224,7 @@ def standard_positionen() -> list[Position]:
         Zaehlerstand("Warmwasser Mieter", "mieter"),
         Zaehlerstand("Kaltwasser eigene Wohnung", "vermieter"),
         Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
+        Zaehlerstand("Außenzapfstelle / Garten", "vermieter"),
     ]
     return [
         Position("Grundsteuer", schluessel="flaeche",

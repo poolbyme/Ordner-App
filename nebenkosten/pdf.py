@@ -222,7 +222,8 @@ def _kostentabelle(pdf: Abrechnung, e: Ergebnis) -> None:
         summe.cell(eur(e.summe_anteil))
 
 
-PARTEI_KURZ = {"haus": "Haus gesamt", "mieter": "Mieter", "vermieter": "Vermieter"}
+PARTEI_KURZ = {"haus": "Haus gesamt", "mieter": "Mieter", "vermieter": "Vermieter",
+               "gemeinsam": "gemeinsam"}
 
 
 def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
@@ -233,21 +234,21 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
     pdf.abschnitt_ueberschrift("Zählerstände")
     breite = pdf.w - pdf.l_margin - pdf.r_margin
 
+    def passend(text: str, platz: float, bold: bool = False) -> str:
+        """Text so setzen, dass er in die Spalte passt – notfalls kleiner oder gekürzt."""
+        text = pdf.t(text)
+        for groesse in (9, 8.5, 8, 7.5, 7):
+            pdf.font(groesse, bold)
+            if pdf.get_string_width(text) <= platz - 1:
+                return text
+        while text and pdf.get_string_width(text + "...") > platz - 1:
+            text = text[:-1]
+        return text + "..."
+
     def messzeile(name: str, partei: str, alt: float, neu: float, verbrauch: float,
                   einheit: str) -> None:
-        pdf.font(9)
         namensbreite = breite - 110
-        text = pdf.t(name)
-        # Lange Zählernamen kleiner setzen, damit sie die Spalte nicht überlaufen
-        for groesse in (9, 8.5, 8, 7.5, 7):
-            pdf.font(groesse)
-            if pdf.get_string_width(text) <= namensbreite - 1:
-                break
-        else:
-            while text and pdf.get_string_width(text + "...") > namensbreite - 1:
-                text = text[:-1]
-            text += "..."
-        pdf.cell(namensbreite, 5, text)
+        pdf.cell(namensbreite, 5, passend(name, namensbreite))
         pdf.font(9)
         pdf.set_text_color(90, 90, 90)
         pdf.cell(30, 5, pdf.t(partei))
@@ -258,8 +259,8 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     def summenzeile(name: str, wert: str, bold: bool = False) -> None:
+        pdf.cell(breite - 30, 5, passend(name, breite - 30, bold))
         pdf.font(9, bold)
-        pdf.cell(breite - 30, 5, pdf.t(name))
         pdf.cell(30, 5, pdf.t(wert), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     for zeile in eigene:
@@ -290,12 +291,15 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
                 partei, zeileneinheit = "nachrichtlich", ""
             messzeile(m.name or "Zähler", partei, m.alt, m.neu, m.verbrauch, zeileneinheit)
 
+        if zae.mit_gemeinsam:
+            summenzeile(f"davon aus gemeinsamer Nutzung angerechnet ({zae.verteiltext})",
+                        f"{menge(zae.gemeinsam_anteil)} {einheit}".strip())
         if zae.mit_differenz:
-            summenzeile("Summe der Wohnungszähler",
+            summenzeile("Summe aller Unterzähler",
                         f"{menge(zae.gemessen)} {einheit}".strip())
-            summenzeile("nicht durch Wohnungszähler erfasste Differenz",
+            summenzeile("nicht durch Unterzähler erfasste Differenz",
                         f"{menge(zae.differenz)} {einheit}".strip())
-            summenzeile(f"davon auf den Mieter entfallend ({zae.differenz_text})",
+            summenzeile(f"davon angerechnet ({zae.differenz_text})",
                         f"{menge(zae.differenz_mieter)} {einheit}".strip())
         elif nur_unterzaehler:
             summenzeile("Summe der Unterzähler", f"{menge(zae.basis)} {einheit}".strip())
@@ -423,6 +427,11 @@ def _erlaeuterungen(pdf: Abrechnung, e: Ergebnis) -> None:
         )
     if any("Verbrauch" in z.schluessel_text or "Zähler" in z.schluessel_text for z in e.zeilen):
         punkte.append("Verbrauchsabhängige Positionen wurden nach den abgelesenen Zählerständen verteilt.")
+    if any(z.zaehler and z.zaehler.mit_gemeinsam for z in e.zeilen):
+        punkte.append(
+            "Gemeinsam genutzte Zapfstellen (zum Beispiel im Außenbereich) laufen über einen "
+            "eigenen Zähler und wurden nach dem oben genannten Maßstab auf beide Wohnungen "
+            "verteilt.")
     if any(z.zaehler and z.zaehler.mit_differenz for z in e.zeilen):
         punkte.append(
             "Der Hauptzähler des Hauses weist regelmäßig einen höheren Verbrauch aus als die "

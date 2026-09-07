@@ -228,6 +228,23 @@ das ist der Leerstandsanteil, den der Vermieter trägt.
 Für Kosten, die nur eine Seite betreffen, gibt es die Verteilungen **„nur der Mieter"**
 und **„nur ich selbst"** – etwa für getrennte Mülltonnen.
 
+### Außenzapfstelle und andere gemeinsame Zähler
+
+Ein Zähler kann auch **„gemeinsam genutzt"** sein – typisch die Außenzapfstelle für
+den Garten. Seine Menge gehört keiner Wohnung allein und wird nach demselben Maßstab
+geteilt wie die Zählerdifferenz. Nutzt den Außenhahn nur eine Seite, wird der Zähler
+einfach dieser Wohnung zugeordnet.
+
+Das ist mehr als Kosmetik: Ohne eigenen Zähler steckt das Gartenwasser in der Differenz
+zum Hauptzähler und wird stillschweigend mitverteilt – der Mieter zahlt dann für die
+Gartenbewässerung mit. Mit Zähler steht im PDF, wie viel gemeinsam verbraucht und wie
+viel davon angerechnet wurde.
+
+Ein Hinweis zur Abwassergebühr: Wasser, das in den Garten geht, landet nicht im Kanal.
+Viele Gemeinden erlauben deshalb einen **angemeldeten Gartenwasserzähler**, dessen Menge
+von der Schmutzwassergebühr abgezogen wird. Ein nicht angemeldeter Zähler taugt für die
+interne Verteilung, spart aber keine Gebühren.
+
 ### Differenz zwischen Hauptzähler und Wohnungszählern
 
 Der Hauptzähler zeigt fast immer mehr an als die Wohnungszähler zusammen –

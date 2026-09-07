@@ -62,16 +62,23 @@ class Zaehler:
     haus_verbrauch: float = 0.0
     mieter_verbrauch: float = 0.0
     vermieter_verbrauch: float = 0.0
-    gemessen: float = 0.0             # Mieter + Vermieter
+    gemeinsam_verbrauch: float = 0.0  # z. B. Außenzapfstelle, Garten
+    gemeinsam_anteil: float = 0.0     # davon auf diese Partei entfallend
+    gemessen: float = 0.0             # Mieter + Vermieter + gemeinsam
     basis: float = 0.0                # Nenner für den Anteil des Mieters
     differenz: float = 0.0            # Hauptzähler minus Unterzähler
     differenz_mieter: float = 0.0
     differenz_text: str = ""
+    verteiltext: str = ""             # Maßstab für gemeinsame Menge und Differenz
     menge_mieter: float = 0.0
 
     @property
     def mit_differenz(self) -> bool:
         return self.differenz > 0
+
+    @property
+    def mit_gemeinsam(self) -> bool:
+        return self.gemeinsam_verbrauch > 0
 
     @property
     def quote(self) -> float:
@@ -190,6 +197,8 @@ def verbrauchsaufteilung(pos: Position, s: Stammdaten,
     else:
         mieter, vermieter = quelle.verbrauch_wohnung, quelle.verbrauch_eigen
 
+    gemeinsam = quelle.verbrauch_gemeinsam
+
     zaehler = Zaehler(
         einheit=pos.einheit or quelle.einheit or "",
         messungen=[Messung(z.name, z.partei, z.alt, z.neu, z.verbrauch)
@@ -199,9 +208,28 @@ def verbrauchsaufteilung(pos: Position, s: Stammdaten,
         haus_verbrauch=haus,
         mieter_verbrauch=mieter,
         vermieter_verbrauch=vermieter,
-        gemessen=round(mieter + vermieter, 2),
+        gemeinsam_verbrauch=gemeinsam,
+        gemessen=round(mieter + vermieter + gemeinsam, 2),
         menge_mieter=mieter,
     )
+
+    # Maßstab, nach dem gemeinsame Mengen und die Differenz geteilt werden
+    eigen = mieter + vermieter
+    nach_verbrauch = s.zaehlerdifferenz != "flaeche" or s.flaeche_gesamt <= 0
+    if nach_verbrauch and eigen > 0:
+        quote = mieter / eigen
+        zaehler.verteiltext = (f"nach gemessenem Verbrauch {menge(mieter)}/"
+                               f"{menge(eigen)} = {zahl(quote * 100)} %")
+    elif s.flaeche_gesamt > 0:
+        quote = s.flaeche_mieter / s.flaeche_gesamt
+        zaehler.verteiltext = (f"nach Wohnfläche {zahl(s.flaeche_mieter)}/"
+                               f"{zahl(s.flaeche_gesamt)} m² = {zahl(quote * 100)} %")
+    else:
+        quote = 0.0
+
+    if gemeinsam > 0:
+        zaehler.gemeinsam_anteil = round(gemeinsam * quote, 2)
+        zaehler.menge_mieter = round(mieter + zaehler.gemeinsam_anteil, 2)
 
     nach_hauptzaehler = pos.zaehler_grundlage != "unterzaehler" and haus > 0
     if not nach_hauptzaehler:
@@ -215,17 +243,9 @@ def verbrauchsaufteilung(pos: Position, s: Stammdaten,
         return zaehler
 
     zaehler.differenz = round(haus - zaehler.gemessen, 2)
-    nach_verbrauch = s.zaehlerdifferenz != "flaeche" or s.flaeche_gesamt <= 0
-    if nach_verbrauch:
-        quote = mieter / zaehler.gemessen
-        zaehler.differenz_text = (f"nach gemessenem Verbrauch {menge(mieter)}/"
-                                  f"{menge(zaehler.gemessen)} = {zahl(quote * 100)} %")
-    else:
-        quote = s.flaeche_mieter / s.flaeche_gesamt
-        zaehler.differenz_text = (f"nach Wohnfläche {zahl(s.flaeche_mieter)}/"
-                                  f"{zahl(s.flaeche_gesamt)} m² = {zahl(quote * 100)} %")
+    zaehler.differenz_text = zaehler.verteiltext
     zaehler.differenz_mieter = round(zaehler.differenz * quote, 2)
-    zaehler.menge_mieter = round(mieter + zaehler.differenz_mieter, 2)
+    zaehler.menge_mieter = round(zaehler.menge_mieter + zaehler.differenz_mieter, 2)
     return zaehler
 
 
@@ -257,11 +277,16 @@ def _quote(pos: Position, s: Stammdaten, positionen: list[Position] | None = Non
                              "lässt sich der Anteil nicht ausrechnen.")
         einheit = aufteilung.einheit or "Einheiten"
         q = aufteilung.quote
-        if aufteilung.mit_differenz:
-            text = (f"Zähler {menge(aufteilung.mieter_verbrauch)} + "
-                    f"{menge(aufteilung.differenz_mieter)} Anteil an "
-                    f"{menge(aufteilung.differenz)} {einheit} Differenz = "
-                    f"{menge(aufteilung.menge_mieter)}/{menge(aufteilung.basis)} {einheit} "
+        if aufteilung.mit_differenz or aufteilung.mit_gemeinsam:
+            zusatz = []
+            if aufteilung.mit_gemeinsam:
+                zusatz.append(f"{menge(aufteilung.gemeinsam_anteil)} Anteil an "
+                              f"{menge(aufteilung.gemeinsam_verbrauch)} gemeinsam")
+            if aufteilung.mit_differenz:
+                zusatz.append(f"{menge(aufteilung.differenz_mieter)} Anteil an "
+                              f"{menge(aufteilung.differenz)} Differenz")
+            text = (f"Zähler {menge(aufteilung.mieter_verbrauch)} + " + " + ".join(zusatz) +
+                    f" = {menge(aufteilung.menge_mieter)}/{menge(aufteilung.basis)} {einheit} "
                     f"= {zahl(q * 100)} %")
         else:
             text = (f"Verbrauch {menge(aufteilung.menge_mieter)}/"

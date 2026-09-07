@@ -817,7 +817,11 @@ und der Heizungsanteil nach den Wärmemengenzählern.
                         column_config={
                             ZAE_NAME: st.column_config.TextColumn(width="medium", required=True),
                             ZAE_WER: st.column_config.SelectboxColumn(
-                                options=PARTEI_LABELS, default=PARTEIEN["mieter"], width="medium"),
+                                options=PARTEI_LABELS, default=PARTEIEN["mieter"], width="medium",
+                        help="„Gemeinsam genutzt“ ist für Zähler, die keiner Wohnung allein "
+                             "gehören – etwa die Außenzapfstelle. Die Menge wird dann nach "
+                             "demselben Maßstab geteilt wie die Differenz. Nutzt den "
+                             "Außenhahn nur eine Seite, gehört der Zähler zu dieser Wohnung."),
                             ZAE_ALT: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
                             ZAE_NEU: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
                             ZAE_VERBRAUCH: st.column_config.NumberColumn(
@@ -853,6 +857,9 @@ und der Heizungsanteil nach den Wärmemengenzählern.
                                       f"**{menge(aufteilung.haus_verbrauch)}**")
                 zeilen.append(f"Mieter **{menge(aufteilung.mieter_verbrauch)}**")
                 zeilen.append(f"du **{menge(aufteilung.vermieter_verbrauch)}**")
+                if aufteilung.mit_gemeinsam:
+                    zeilen.append(f"gemeinsam **{menge(aufteilung.gemeinsam_verbrauch)}**, "
+                                  f"davon {menge(aufteilung.gemeinsam_anteil)} für den Mieter")
                 if aufteilung.mit_differenz:
                     zeilen.append(
                         f"Differenz **{menge(aufteilung.differenz)}**, davon "

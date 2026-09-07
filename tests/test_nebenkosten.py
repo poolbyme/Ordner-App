@@ -868,9 +868,9 @@ def test_gespeicherte_daten_bekommen_die_einheit_je_zaehler():
     assert einheiten["Wärmemenge Fußbodenheizung Mieter"] == "kWh"
 
 
-def test_eingetragene_zaehlerstaende_werden_nicht_angetastet():
-    """Lieber ein alter Aufbau als veraenderte Zahlen in einer Abrechnung,
-    die vielleicht schon beim Mieter liegt."""
+def test_eingetippte_staende_wandern_mit_hinueber():
+    """Nur beim Warmwasser eingetragen, beim Wasser leer: Der Stand darf beim
+    Zusammenlegen nicht verlorengehen."""
     from nebenkosten.modell import from_dict
 
     daten = _alter_stand()
@@ -878,9 +878,64 @@ def test_eingetragene_zaehlerstaende_werden_nicht_angetastet():
     warm["zaehler"][0]["alt"], warm["zaehler"][0]["neu"] = 100, 148
 
     _, positionen = from_dict(daten)
-    gewandert = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
-    assert len(gewandert.zaehler) == 2, "eingetippte Staende duerfen nicht verschwinden"
-    assert gewandert.zaehler_von == ""
+    nach_name = {p.bezeichnung: p for p in positionen}
+    assert nach_name["Warmwasser (Gas)"].zaehler == []
+    uebernommen = next(z for z in nach_name["Wasser"].zaehler
+                       if z.name == "Warmwasser Mieter")
+    assert (uebernommen.alt, uebernommen.neu) == (100, 148)
+
+
+def test_gleiche_staende_werden_einfach_zusammengelegt():
+    from nebenkosten.modell import from_dict
+
+    daten = _alter_stand()
+    for eintrag in (daten["positionen"][0]["zaehler"][1], daten["positionen"][1]["zaehler"][0]):
+        eintrag["alt"], eintrag["neu"] = 100, 148
+
+    _, positionen = from_dict(daten)
+    warm = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
+    assert warm.zaehler == [] and warm.zaehler_von == "Wasser"
+
+
+def test_widersprechende_staende_bleiben_beide_stehen():
+    """Zwei verschiedene Zahlen fuer denselben Zaehler: Da darf sich die App
+    nicht stillschweigend fuer eine entscheiden."""
+    from nebenkosten.modell import from_dict
+
+    daten = _alter_stand()
+    daten["positionen"][0]["zaehler"][1]["alt"] = 100
+    daten["positionen"][0]["zaehler"][1]["neu"] = 148
+    daten["positionen"][1]["zaehler"][0]["alt"] = 100
+    daten["positionen"][1]["zaehler"][0]["neu"] = 184   # Zahlendreher
+
+    _, positionen = from_dict(daten)
+    warm = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
+    assert len(warm.zaehler) == 2, "widersprechende Staende duerfen nicht verschwinden"
+    assert warm.zaehler_von == ''
+
+
+def test_derselbe_zaehler_mit_zwei_staenden_wird_gemeldet():
+    from nebenkosten.modell import Position, Zaehlerstand
+
+    a = Position("Wasser", "wasser", betrag=400.0, schluessel="verbrauch", einheit="m³",
+                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 148)])
+    b = Position("Warmwasser (Gas)", "gas", betrag=600.0, schluessel="verbrauch",
+                 einheit="m³",
+                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 184)])
+    e = berechne(basis_stammdaten(), [a, b])
+    assert any("verschiedenen Ständen" in w for w in e.warnungen)
+
+
+def test_derselbe_zaehler_mit_gleichem_stand_ist_kein_fehler():
+    from nebenkosten.modell import Position, Zaehlerstand
+
+    a = Position("Wasser", "wasser", betrag=400.0, schluessel="verbrauch", einheit="m³",
+                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 148)])
+    b = Position("Warmwasser (Gas)", "gas", betrag=600.0, schluessel="verbrauch",
+                 einheit="m³",
+                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 148)])
+    e = berechne(basis_stammdaten(), [a, b])
+    assert not any("verschiedenen Ständen" in w for w in e.warnungen)
 
 
 # --- Gas: Kubikmeter in Kilowattstunden ------------------------------------

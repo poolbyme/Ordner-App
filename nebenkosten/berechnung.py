@@ -516,10 +516,37 @@ def berechne(s: Stammdaten, positionen: list[Position],
         e.empfehlung_vorauszahlung = float(math.ceil(e.umlage / e.monate_nutzung))
         e.hochrechnung_jahr = round(e.umlage / e.tage_nutzung * 365, 2)
 
+    _doppelte_zaehler(positionen, e)
     _plausibilitaet(s, e, bis)
     e.fehler = list(dict.fromkeys(e.fehler))
     e.warnungen = list(dict.fromkeys(e.warnungen))
     return e
+
+
+def _doppelte_zaehler(positionen: list[Position], e: Ergebnis) -> None:
+    """Denselben Zaehler an zwei Stellen mit verschiedenen Staenden melden.
+
+    Steht ein Zaehler unter zwei Kostenarten und wurden die Staende unabhaengig
+    eingetippt, genuegt ein Zahlendreher an einer Stelle - und die App rechnet
+    an zwei Stellen mit verschiedenen Zahlen, ohne dass es jemandem auffaellt.
+    """
+    gesehen: dict[str, tuple[str, float, float]] = {}
+    for pos in positionen:
+        if not pos.aktiv:
+            continue
+        for z in pos.zaehler:
+            name = z.name.strip().lower()
+            if not name or (not z.alt and not z.neu):
+                continue
+            frueher = gesehen.get(name)
+            if frueher is None:
+                gesehen[name] = (pos.bezeichnung, float(z.alt), float(z.neu))
+            elif (frueher[1], frueher[2]) != (float(z.alt), float(z.neu)):
+                e.warnungen.append(
+                    f"Der Zähler „{z.name}“ steht bei „{frueher[0]}“ und bei "
+                    f"„{pos.bezeichnung}“ mit verschiedenen Ständen "
+                    f"({menge(frueher[2] - frueher[1])} gegenüber "
+                    f"{menge(z.verbrauch)} Verbrauch). Einer der beiden ist falsch.")
 
 
 def _plausibilitaet(s: Stammdaten, e: Ergebnis, bis: date | None) -> None:

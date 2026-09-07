@@ -362,6 +362,42 @@ def _zaehler_aus_dict(daten: dict) -> list[Zaehlerstand]:
     return uebernommen
 
 
+def _gleicher_stand(a: "Zaehlerstand", b: "Zaehlerstand") -> bool:
+    return float(a.alt) == float(b.alt) and float(a.neu) == float(b.neu)
+
+
+def _leer(z: "Zaehlerstand") -> bool:
+    return not float(z.alt) and not float(z.neu)
+
+
+def _warmwasser_zusammenlegen(wasser: Position, warm: Position) -> bool:
+    """Die doppelt gefuehrten Warmwasserzaehler auf die des Wassers zurueckfuehren.
+
+    Uebernommen wird nur, wenn dabei keine Zahl verlorengeht: Der Zaehler beim
+    Warmwasser ist leer, er steht ohnehin gleich wie beim Wasser, oder der beim
+    Wasser ist leer und bekommt den Stand uebertragen. Widersprechen sich zwei
+    Staende, bleibt alles stehen - dann sollen beide Zahlen sichtbar bleiben,
+    statt dass die App sich stillschweigend fuer eine entscheidet.
+    """
+    nach_name = {z.name.strip().lower(): z for z in wasser.zaehler}
+    paare = []
+    for z in warm.zaehler:
+        gegenstueck = nach_name.get(z.name.strip().lower())
+        if gegenstueck is None:
+            return False
+        if not (_leer(z) or _leer(gegenstueck) or _gleicher_stand(z, gegenstueck)):
+            return False
+        paare.append((z, gegenstueck))
+
+    for z, gegenstueck in paare:
+        if _leer(gegenstueck) and not _leer(z):
+            gegenstueck.alt, gegenstueck.neu = z.alt, z.neu
+    warm.zaehler_nur = [z.name for z in warm.zaehler]
+    warm.zaehler_von = wasser.bezeichnung
+    warm.zaehler = []
+    return True
+
+
 def _nachziehen(positionen: list[Position]) -> list[Position]:
     """Gespeicherte Daten auf den heutigen Aufbau bringen.
 
@@ -372,22 +408,12 @@ def _nachziehen(positionen: list[Position]) -> list[Position]:
     * Am Gas hingen Zaehler mit verschiedenen Einheiten (Hauszaehler m³,
       Waermemengenzaehler kWh), angezeigt wurde aber ueberall die Einheit der
       Kostenart.
-
-    Angefasst wird nur, was noch leer ist: Stehen bereits Zaehlerstaende drin,
-    bleibt alles, wie es ist - lieber eine alte Struktur als veraenderte Zahlen
-    in einer Abrechnung, die vielleicht schon aus dem Haus ist.
     """
     nach_name = {p.bezeichnung.strip().lower(): p for p in positionen}
     wasser = nach_name.get("wasser")
     warm = nach_name.get("warmwasser (gas)")
-    if (wasser and warm and warm.zaehler and not warm.zaehler_von
-            and all(not z.alt and not z.neu for z in warm.zaehler)):
-        vorhanden = {z.name.strip().lower() for z in wasser.zaehler}
-        namen = [z.name for z in warm.zaehler if z.name.strip().lower() in vorhanden]
-        if len(namen) == len(warm.zaehler):
-            warm.zaehler = []
-            warm.zaehler_von = wasser.bezeichnung
-            warm.zaehler_nur = namen
+    if wasser and warm and warm.zaehler and not warm.zaehler_von:
+        _warmwasser_zusammenlegen(wasser, warm)
 
     for pos in positionen:
         for z in pos.zaehler:

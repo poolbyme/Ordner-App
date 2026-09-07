@@ -6,7 +6,9 @@ import math
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from .modell import NICHT_UMLAGEFAEHIG_STICHWORTE, Position, Stammdaten
+from .modell import (
+    NICHT_UMLAGEFAEHIG_STICHWORTE, Position, Stammdaten, sicht_vermieter,
+)
 
 
 def parse_datum(wert: str) -> date | None:
@@ -106,6 +108,11 @@ class Ergebnis:
     hochrechnung_jahr: float = 0.0    # Kosten des Mieters auf zwölf Monate gerechnet
     warnungen: list[str] = field(default_factory=list)
     fehler: list[str] = field(default_factory=list)
+    fuer: str = "mieter"
+
+    @property
+    def fuer_vermieter(self) -> bool:
+        return self.fuer == "vermieter"
 
     @property
     def ist_nachzahlung(self) -> bool:
@@ -127,8 +134,42 @@ def zaehlerquelle(pos: Position, positionen: list[Position] | None) -> Position:
     return pos
 
 
+def warmwasser_kwh(volumen: float, temperatur: float = 60.0,
+                   nutzungsgrad: float = 1.11) -> float:
+    """Wärmemenge für die Warmwasserbereitung nach § 9 Abs. 2 HeizkostenV.
+
+    Q = 2,5 × V × (tw − 10), wobei V die Warmwassermenge in m³ und tw die
+    Warmwassertemperatur in °C ist; ohne gemessene Temperatur gilt tw = 60 °C.
+    Der Nutzungsgrad rechnet die Verluste der Anlage hinzu.
+    """
+    return max(0.0, 2.5 * volumen * (temperatur - 10.0) * nutzungsgrad)
+
+
+# Stufenmodell des CO2-Kostenaufteilungsgesetzes für Wohngebäude (§ 5 CO2KostAufG):
+# spezifische Emissionen in kg CO2 je m² Wohnfläche und Jahr -> Anteil des Vermieters
+CO2_STUFEN = [(12, 0), (17, 10), (22, 20), (27, 30), (32, 40),
+              (37, 50), (42, 60), (47, 70), (52, 80), (float("inf"), 95)]
+
+
+def co2_vermieteranteil(kilogramm: float, wohnflaeche: float) -> tuple[float, str]:
+    """Anteil des Vermieters an den CO2-Kosten in Prozent, dazu die Stufe im Klartext."""
+    if kilogramm <= 0 or wohnflaeche <= 0:
+        return 0.0, "keine Angaben zu den CO2-Emissionen"
+    je_qm = kilogramm / wohnflaeche
+    untere = 0
+    for grenze, anteil in CO2_STUFEN:
+        if je_qm < grenze:
+            bereich = (f"{untere} bis unter {grenze} kg" if grenze != float("inf")
+                       else "52 kg und mehr")
+            return float(anteil), (f"{zahl(je_qm, 1)} kg CO2 je m² und Jahr "
+                                   f"({bereich}) – Vermieteranteil {anteil} %")
+        untere = grenze
+    return 0.0, ""
+
+
 def verbrauchsaufteilung(pos: Position, s: Stammdaten,
-                         positionen: list[Position] | None = None) -> Zaehler:
+                         positionen: list[Position] | None = None,
+                         fuer: str = "mieter") -> Zaehler:
     """Verteilt den gemessenen Verbrauch einer Position auf Mieter und Vermieter.
 
     Zwei Fälle:
@@ -143,8 +184,11 @@ def verbrauchsaufteilung(pos: Position, s: Stammdaten,
     """
     quelle = zaehlerquelle(pos, positionen)
     haus = quelle.verbrauch_haus
-    mieter = quelle.verbrauch_wohnung
-    vermieter = quelle.verbrauch_eigen
+    # Aus Sicht der eigenen Wohnung tauschen die beiden Parteien die Rollen.
+    if fuer == "vermieter":
+        mieter, vermieter = quelle.verbrauch_eigen, quelle.verbrauch_wohnung
+    else:
+        mieter, vermieter = quelle.verbrauch_wohnung, quelle.verbrauch_eigen
 
     zaehler = Zaehler(
         einheit=pos.einheit or quelle.einheit or "",
@@ -185,8 +229,8 @@ def verbrauchsaufteilung(pos: Position, s: Stammdaten,
     return zaehler
 
 
-def _quote(pos: Position, s: Stammdaten,
-           positionen: list[Position] | None = None) -> tuple[float, str, str | None]:
+def _quote(pos: Position, s: Stammdaten, positionen: list[Position] | None = None,
+           fuer: str = "mieter") -> tuple[float, str, str | None]:
     """Liefert (Quote, Erläuterungstext, Fehler)."""
     if pos.schluessel == "flaeche":
         if s.flaeche_gesamt <= 0:
@@ -207,7 +251,7 @@ def _quote(pos: Position, s: Stammdaten,
         return q, f"Wohneinheiten {zahl(s.einheiten_mieter, 0)}/{zahl(s.einheiten_gesamt, 0)} = {zahl(q * 100)} %", None
 
     if pos.schluessel == "verbrauch":
-        aufteilung = verbrauchsaufteilung(pos, s, positionen)
+        aufteilung = verbrauchsaufteilung(pos, s, positionen, fuer)
         if aufteilung.basis <= 0:
             return 0.0, "", (f"„{pos.bezeichnung}“: Es fehlen Zählerstände – ohne sie "
                              "lässt sich der Anteil nicht ausrechnen.")
@@ -227,13 +271,26 @@ def _quote(pos: Position, s: Stammdaten,
         return q, text, None
 
     if pos.schluessel == "direkt":
+        # Kosten, die allein der Mieter trägt – in der eigenen Aufstellung also nichts.
+        if fuer == "vermieter":
+            return 0.0, "trägt allein der Mieter", None
         return 1.0, "direkt zugeordnet (100 %)", None
+
+    if pos.schluessel == "direkt_vermieter":
+        if fuer == "vermieter":
+            return 1.0, "direkt zugeordnet (100 %)", None
+        return 0.0, "trägt allein der Vermieter", None
 
     return 0.0, "", f"Unbekannter Verteilerschlüssel „{pos.schluessel}“."
 
 
-def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
+def berechne(s: Stammdaten, positionen: list[Position],
+             fuer: str = "mieter") -> Ergebnis:
+    """Abrechnung für den Mieter (Standard) oder für die eigene Wohnung."""
+    if fuer == "vermieter":
+        s = sicht_vermieter(s)
     e = Ergebnis()
+    e.fuer = fuer
 
     von, bis = parse_datum(s.zeitraum_von), parse_datum(s.zeitraum_bis)
     n_von = parse_datum(s.nutzung_von) or von
@@ -267,7 +324,7 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
         if abs(pos.betrag) < 0.005 and pos.schluessel != "direkt":
             continue
 
-        quote, text, fehler = _quote(pos, s, positionen)
+        quote, text, fehler = _quote(pos, s, positionen, fuer)
         if fehler:
             e.fehler.append(fehler)
 
@@ -279,20 +336,49 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
         if zeitfaktor < 1.0:
             text = f"{text}; Zeitanteil {e.tage_nutzung}/{e.tage_zeitraum} Tage"
 
-        anteil = round(pos.betrag * quote * zeitfaktor, 2)
-        arbeit = round(min(pos.arbeitskosten, pos.betrag) * quote * zeitfaktor, 2) if pos.arbeitskosten else 0.0
+        zaehler = (verbrauchsaufteilung(pos, s, positionen, fuer)
+                   if pos.schluessel == "verbrauch" else None)
+
+        # Heiz- und Warmwasserkosten werden oft geteilt: ein fester Anteil nach
+        # Wohnfläche (Grundkosten), der Rest nach Verbrauch.
+        grund = min(max(pos.grundkosten_anteil, 0.0), 50.0) / 100
+        if grund > 0 and pos.schluessel == "verbrauch" and s.flaeche_gesamt > 0:
+            flaechenquote = s.flaeche_mieter / s.flaeche_gesamt
+            grundzeit = zeitfaktor_basis if pos.zeitanteilig else 1.0
+            grundtext = (f"Wohnfläche {zahl(s.flaeche_mieter)}/{zahl(s.flaeche_gesamt)} m² "
+                         f"= {zahl(flaechenquote * 100)} %")
+            if grundzeit < 1.0:
+                grundtext += f"; Zeitanteil {e.tage_nutzung}/{e.tage_zeitraum} Tage"
+            e.zeilen.append(Zeile(
+                bezeichnung=f"{pos.bezeichnung.strip()} – Grundkosten {zahl(grund * 100, 0)} %",
+                gesamtkosten=round(pos.betrag * grund, 2),
+                schluessel_text=grundtext,
+                quote=flaechenquote,
+                zeitfaktor=grundzeit,
+                anteil=round(pos.betrag * grund * flaechenquote * grundzeit, 2),
+                arbeitskosten_anteil=0.0,
+                hinweis=pos.hinweis,
+            ))
+            bezeichnung = f"{pos.bezeichnung.strip()} – Verbrauchskosten {zahl(100 - grund * 100, 0)} %"
+            restanteil = 1 - grund
+        else:
+            bezeichnung = pos.bezeichnung.strip()
+            restanteil = 1.0
+
+        anteil = round(pos.betrag * restanteil * quote * zeitfaktor, 2)
+        arbeit = (round(min(pos.arbeitskosten, pos.betrag) * quote * zeitfaktor, 2)
+                  if pos.arbeitskosten else 0.0)
 
         e.zeilen.append(Zeile(
-            bezeichnung=pos.bezeichnung.strip(),
-            gesamtkosten=round(pos.betrag, 2),
+            bezeichnung=bezeichnung,
+            gesamtkosten=round(pos.betrag * restanteil, 2),
             schluessel_text=text,
             quote=quote,
             zeitfaktor=zeitfaktor,
             anteil=anteil,
             arbeitskosten_anteil=arbeit,
             hinweis=pos.hinweis,
-            zaehler=(verbrauchsaufteilung(pos, s, positionen)
-                     if pos.schluessel == "verbrauch" else None),
+            zaehler=zaehler,
         ))
 
         if pos.schluessel == "verbrauch":
@@ -309,6 +395,17 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
                 e.warnungen.append(
                     f"„{quelle.bezeichnung}“: Die Unterzähler zeigen zusammen mehr an als der "
                     "Hauptzähler. Bitte die Stände prüfen – gerechnet wird ohne Differenz.")
+            aufteilung = zaehler
+            if (aufteilung and aufteilung.differenz > 0
+                    and aufteilung.haus_verbrauch > 0
+                    and aufteilung.differenz > 0.10 * aufteilung.haus_verbrauch):
+                e.warnungen.append(
+                    f"„{quelle.bezeichnung}“: Die Differenz zum Hauptzähler ist mit "
+                    f"{zahl(aufteilung.differenz / aufteilung.haus_verbrauch * 100)} % "
+                    "ungewöhnlich groß. Das kommt meist daher, dass eine Wohnung zeitweise "
+                    "leer stand oder die Zähler zu verschiedenen Zeitpunkten abgelesen wurden. "
+                    "Dann gehört die Differenz nicht anteilig auf den Mieter – prüfe die "
+                    "Zeiträume oder stelle die Position auf „nur die Unterzähler“.")
             if (pos.zaehler_grundlage != "unterzaehler" and quelle.verbrauch_haus > 0
                     and quelle.verbrauch_wohnung > quelle.verbrauch_haus):
                 e.fehler.append(f"„{pos.bezeichnung}“: Die Mietwohnung verbraucht mehr als der "
@@ -318,7 +415,7 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
                     f"„{pos.bezeichnung}“: Die Position „{pos.zaehler_von}“, deren Zähler "
                     "benutzt werden sollen, gibt es nicht (mehr).")
         if quote > 1.0001:
-            e.fehler.append(f"„{pos.bezeichnung}“: Der Anteil des Mieters ist größer als 100 %.")
+            e.fehler.append(f"„{pos.bezeichnung}“: Der berechnete Anteil ist größer als 100 %.")
         if any(w in pos.bezeichnung.lower() for w in NICHT_UMLAGEFAEHIG_STICHWORTE):
             e.warnungen.append(
                 f"„{pos.bezeichnung}“ klingt nach nicht umlagefähigen Kosten "
@@ -382,8 +479,10 @@ def _plausibilitaet(s: Stammdaten, e: Ergebnis, bis: date | None) -> None:
         )
 
     heiz_nach_flaeche = [z for z in e.zeilen
-                         if ("heiz" in z.bezeichnung.lower() or "warmwasser" in z.bezeichnung.lower())
-                         and "Wohnfläche" in z.schluessel_text]
+                         if ("heiz" in z.bezeichnung.lower()
+                             or "warmwasser" in z.bezeichnung.lower())
+                         and "Wohnfläche" in z.schluessel_text
+                         and "Grundkosten" not in z.bezeichnung]
     if heiz_nach_flaeche and s.einheiten_gesamt <= 2:
         e.warnungen.append(
             "Heiz-/Warmwasserkosten werden nach Fläche verteilt. Das ist im selbst bewohnten "

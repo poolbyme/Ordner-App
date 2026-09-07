@@ -10,7 +10,7 @@ from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 
 from .berechnung import Ergebnis, eur, menge, parse_datum, zahl
-from .modell import Stammdaten
+from .modell import Stammdaten, sicht_vermieter
 
 # Falls eine Unicode-Schrift verfügbar ist, wird sie benutzt (echtes €-Zeichen).
 # Sonst greift die eingebaute Helvetica, die nur Latin-1 kann.
@@ -38,9 +38,10 @@ def _fmt_datum(wert: str | date | None) -> str:
 
 
 class Abrechnung(FPDF):
-    def __init__(self, stammdaten: Stammdaten):
+    def __init__(self, stammdaten: Stammdaten, eigene_aufstellung: bool = False):
         super().__init__(format="A4", unit="mm")
         self.s = stammdaten
+        self.eigene_aufstellung = eigene_aufstellung
         self.set_margins(20, 15, 20)
         self.set_auto_page_break(True, margin=20)
         self.unicode = False
@@ -123,7 +124,9 @@ def _kopf(pdf: Abrechnung) -> None:
     pdf.line(pdf.l_margin, pdf.get_y() + 0.5, pdf.l_margin + 85, pdf.get_y() + 0.5)
     pdf.abstand(4)
 
-    empfaenger = [s.mieter_name, s.mieter_wohnung, s.objekt_strasse, s.objekt_plz_ort]
+    empfaenger = ([s.vermieter_name, "eigene Wohnung", s.objekt_strasse, s.objekt_plz_ort]
+                  if pdf.eigene_aufstellung
+                  else [s.mieter_name, s.mieter_wohnung, s.objekt_strasse, s.objekt_plz_ort])
     pdf.font(11)
     for teil in [x for x in empfaenger if x]:
         pdf.cell(0, 5.5, pdf.t(teil), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -135,11 +138,16 @@ def _kopf(pdf: Abrechnung) -> None:
              align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.abstand(4)
 
-    pdf.zeile("Betriebskostenabrechnung (Nebenkostenabrechnung)", size=14, bold=True, h=8)
+    titel = ("Betriebskosten der eigenen Wohnung" if pdf.eigene_aufstellung
+             else "Betriebskostenabrechnung (Nebenkostenabrechnung)")
+    pdf.zeile(titel, size=14, bold=True, h=8)
     pdf.zeile(f"{s.bezeichnung_abrechnung} für den Zeitraum "
               f"{_fmt_datum(s.zeitraum_von)} bis {_fmt_datum(s.zeitraum_bis)}", size=10)
+    if pdf.eigene_aufstellung:
+        pdf.zeile("Diese Aufstellung ist für die eigenen Unterlagen und die Steuererklärung "
+                  "gedacht, nicht zur Weitergabe an den Mieter.", size=9.5)
     pdf.abstand(3)
-    if s.anrede:
+    if s.anrede and not pdf.eigene_aufstellung:
         pdf.zeile(s.anrede, size=10.5)
         pdf.abstand(1)
     if s.ist_endabrechnung:
@@ -160,7 +168,8 @@ def _objektdaten(pdf: Abrechnung, e: Ergebnis) -> None:
     zeilen = [
         ("Mietobjekt", ", ".join(x for x in [s.objekt_strasse, s.objekt_plz_ort] if x) or "—"),
         ("Wohneinheit", s.mieter_wohnung or "—"),
-        ("Mieter", s.mieter_name or "—"),
+        ("Nutzer" if pdf.eigene_aufstellung else "Mieter",
+         (s.vermieter_name if pdf.eigene_aufstellung else s.mieter_name) or "—"),
         ("Nutzungszeitraum", f"{_fmt_datum(s.nutzung_von or s.zeitraum_von)} bis "
                              f"{_fmt_datum(s.nutzung_bis or s.zeitraum_bis)} "
                              f"({e.tage_nutzung} von {e.tage_zeitraum} Tagen)"),
@@ -196,8 +205,9 @@ def _kostentabelle(pdf: Abrechnung, e: Ergebnis) -> None:
         borders_layout="HORIZONTAL_LINES",
     ) as tabelle:
         kopfzeile = tabelle.row()
+        anteil_titel = ("Anteil eigene\nWohnung" if pdf.eigene_aufstellung else "Anteil Mieter")
         for titel in ("Kostenart", f"Gesamtkosten\n({waehrung})", "Verteilerschlüssel",
-                      f"Anteil Mieter\n({waehrung})"):
+                      f"{anteil_titel}\n({waehrung})"):
             kopfzeile.cell(pdf.t(titel))
         for z in e.zeilen:
             reihe = tabelle.row()
@@ -290,7 +300,7 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
         elif nur_unterzaehler:
             summenzeile("Summe der Unterzähler", f"{menge(zae.basis)} {einheit}".strip())
 
-        summenzeile(f"angerechnet für die Mietwohnung – {zahl(zae.quote * 100)} % von "
+        summenzeile(f"angerechnet für {'die eigene Wohnung' if pdf.eigene_aufstellung else 'die Mietwohnung'} – {zahl(zae.quote * 100)} % von "
                     f"{menge(zae.basis)} {einheit}".strip(),
                     f"{menge(zae.menge_mieter)} {einheit}".strip(), bold=True)
         pdf.abstand(1)
@@ -307,7 +317,9 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
 def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
     s = pdf.s
     pdf.abschnitt_ueberschrift("Abrechnung")
-    pdf.betragszeile("Auf den Mieter entfallende Betriebskosten", e.summe_anteil)
+    pdf.betragszeile("Auf die eigene Wohnung entfallende Betriebskosten"
+                     if e.fuer_vermieter else "Auf den Mieter entfallende Betriebskosten",
+                     e.summe_anteil)
     if e.co2_abzug > 0:
         pdf.betragszeile("abzüglich CO2-Kostenanteil des Vermieters (CO2KostAufG)",
                          e.co2_abzug, vorzeichen=True)
@@ -325,7 +337,9 @@ def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
     pdf.rect(pdf.l_margin, y, breite, 10, style="F")
     pdf.set_xy(pdf.l_margin + 2, y + 2)
     pdf.font(11.5, bold=True)
-    if s.ist_zwischenabrechnung:
+    if e.fuer_vermieter:
+        titel = "Kosten der eigenen Wohnung"
+    elif s.ist_zwischenabrechnung:
         titel = ("bisher nicht gedeckte Kosten" if e.ist_nachzahlung
                  else "bisher zu viel gezahlt")
     else:
@@ -342,6 +356,8 @@ def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:
     if d and s.zahlungsfrist_tage:
         faellig = d + timedelta(days=int(s.zahlungsfrist_tage))
 
+    if e.fuer_vermieter:
+        return
     if s.ist_zwischenabrechnung:
         _zwischenstand(pdf, e)
         return
@@ -425,7 +441,12 @@ def _erlaeuterungen(pdf: Abrechnung, e: Ergebnis) -> None:
             f"{'€' if pdf.unicode else 'EUR'} enthalten. Diese Bescheinigung kann für die "
             "Steuererklärung nach § 35a EStG verwendet werden."
         )
-    if s.ist_zwischenabrechnung:
+    if e.fuer_vermieter:
+        punkte.append(
+            "Diese Aufstellung weist den Kostenanteil der selbst genutzten Wohnung aus. "
+            "Sie dient den eigenen Unterlagen; eine Weitergabe an den Mieter ist nicht "
+            "vorgesehen.")
+    elif s.ist_zwischenabrechnung:
         punkte.append(
             "Die Belege können nach vorheriger Terminabsprache eingesehen werden. Diese "
             "Zwischenabrechnung ist keine Abrechnung im Sinne des § 556 Abs. 3 BGB; Fristen "
@@ -455,7 +476,9 @@ def _unterschrift(pdf: Abrechnung) -> None:
 
 
 def erzeuge_pdf(stammdaten: Stammdaten, ergebnis: Ergebnis) -> bytes:
-    pdf = Abrechnung(stammdaten)
+    if ergebnis.fuer_vermieter:
+        stammdaten = sicht_vermieter(stammdaten)
+    pdf = Abrechnung(stammdaten, eigene_aufstellung=ergebnis.fuer_vermieter)
     pdf.add_page()
     _kopf(pdf)
     _objektdaten(pdf, ergebnis)
@@ -463,12 +486,15 @@ def erzeuge_pdf(stammdaten: Stammdaten, ergebnis: Ergebnis) -> bytes:
     _zaehlerstaende(pdf, ergebnis)
     _abrechnung(pdf, ergebnis)
     _erlaeuterungen(pdf, ergebnis)
-    _unterschrift(pdf)
+    if not ergebnis.fuer_vermieter:
+        _unterschrift(pdf)
     return bytes(pdf.output())
 
 
-def dateiname(stammdaten: Stammdaten) -> str:
+def dateiname(stammdaten: Stammdaten, fuer: str = "mieter") -> str:
     jahr = (parse_datum(stammdaten.zeitraum_bis) or date.today()).year
+    if fuer == "vermieter":
+        return f"Nebenkosten_{jahr}_eigene_Wohnung.pdf"
     name = "".join(c for c in stammdaten.mieter_name if c.isalnum() or c in " -_").strip()
     name = name.replace(" ", "_") or "Mieter"
     return f"Nebenkostenabrechnung_{jahr}_{name}.pdf"

@@ -490,6 +490,83 @@ def test_archivname_nennt_die_art():
     assert "Jahresabrechnung" in speicher._dateiname(basis_stammdaten(mieter_name="Meier"))
 
 
+# --- Grundkosten, Warmwasserformel, CO2, eigene Aufstellung ----------------
+
+def test_grundkosten_und_verbrauchskosten_getrennt():
+    """Heizkosten: 30 % nach Wohnfläche, 70 % nach Verbrauch – wie beim Abrechner."""
+    pos = Position("Heizung", betrag=1000.0, schluessel="verbrauch", einheit="kWh",
+                   zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0, zaehler=[
+                       Zaehlerstand("Mieter", "mieter", 0.0, 4000.0),
+                       Zaehlerstand("eigene", "vermieter", 0.0, 6000.0)])
+    e = berechne(basis_stammdaten(), [pos])          # Mieter 80 von 200 m² = 40 %
+    assert [z.bezeichnung for z in e.zeilen] == [
+        "Heizung – Grundkosten 30 %", "Heizung – Verbrauchskosten 70 %"]
+    assert e.zeilen[0].anteil == 120.0               # 300 × 40 %
+    assert e.zeilen[1].anteil == 280.0               # 700 × 40 % Verbrauch
+    assert e.summe_gesamtkosten == 1000.0 and e.summe_anteil == 400.0
+
+
+def test_ohne_grundkostenanteil_bleibt_eine_zeile():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
+                   verbrauch_gesamt=200.0, verbrauch_mieter=50.0)
+    assert len(berechne(basis_stammdaten(), [pos]).zeilen) == 1
+
+
+def test_warmwasserformel_nach_paragraf_9_heizkostenv():
+    from nebenkosten.berechnung import warmwasser_kwh
+
+    # Beispiel aus einer echten Abrechnung: 61,271 m³ bei 40 °C
+    assert round(warmwasser_kwh(61.271, 40.0), 1) == 5100.8
+    # ohne gemessene Temperatur schreibt die Verordnung 60 °C vor
+    assert round(warmwasser_kwh(61.271), 1) == 8501.4
+    assert warmwasser_kwh(0.0) == 0.0
+
+
+def test_co2_stufenmodell():
+    from nebenkosten.berechnung import co2_vermieteranteil
+
+    assert co2_vermieteranteil(1000.0, 245.0)[0] == 0.0      # 4,1 kg/m² – Mieter allein
+    assert co2_vermieteranteil(5699.0, 245.0)[0] == 30.0     # 23,3 kg/m²
+    assert co2_vermieteranteil(20000.0, 245.0)[0] == 95.0    # 81,6 kg/m²
+    assert co2_vermieteranteil(0.0, 245.0)[0] == 0.0
+    assert "Vermieteranteil 30 %" in co2_vermieteranteil(5699.0, 245.0)[1]
+
+
+def test_aufstellung_fuer_die_eigene_wohnung():
+    s = basis_stammdaten()                    # 200 m² gesamt, 80 m² Mietwohnung
+    positionen = [Position("Grundsteuer", betrag=1000.0),
+                  Position("Müll Mietwohnung", betrag=200.0, schluessel="direkt")]
+    mieter = berechne(s, positionen)
+    eigene = berechne(s, positionen, fuer="vermieter")
+    assert eigene.fuer_vermieter and not mieter.fuer_vermieter
+    assert mieter.summe_anteil == 400.0 + 200.0
+    assert eigene.summe_anteil == 600.0            # 60 % der Grundsteuer, kein Müll
+    assert eigene.vorauszahlungen == 0.0
+    # zusammen ergeben beide Sichten die Gesamtkosten
+    assert round(mieter.summe_anteil + eigene.summe_anteil, 2) == 1200.0
+
+
+def test_direkte_zuordnung_an_den_vermieter():
+    pos = Position("Eigene Tonne", betrag=150.0, schluessel="direkt_vermieter")
+    assert berechne(basis_stammdaten(), [pos]).summe_anteil == 0.0
+    assert berechne(basis_stammdaten(), [pos], fuer="vermieter").summe_anteil == 150.0
+
+
+def test_eigene_aufstellung_als_pdf():
+    s = basis_stammdaten()
+    eigene = berechne(s, [Position("Grundsteuer", betrag=1000.0)], fuer="vermieter")
+    daten = erzeuge_pdf(s, eigene)
+    assert daten.startswith(b"%PDF") and len(daten) > 1000
+    assert dateiname(s, fuer="vermieter") == "Nebenkosten_2025_eigene_Wohnung.pdf"
+
+
+def test_warnung_bei_sehr_grosser_zaehlerdifferenz():
+    """Leerstand oder verschiedene Ablesetermine – dann darf nicht anteilig verteilt werden."""
+    pos = wasser(haus=(0.0, 188.0), mieter=(0.0, 27.85), eigen=(0.0, 118.02))
+    e = berechne(basis_stammdaten(), [pos])
+    assert any("ungewöhnlich groß" in w for w in e.warnungen)
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

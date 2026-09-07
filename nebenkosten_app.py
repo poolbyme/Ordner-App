@@ -12,7 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from nebenkosten.berechnung import (
-    berechne, eur, menge, parse_datum, verbrauchsaufteilung, zaehlerquelle, zahl,
+    berechne, co2_vermieteranteil, eur, menge, parse_datum, verbrauchsaufteilung,
+    warmwasser_kwh, zaehlerquelle, zahl,
 )
 from nebenkosten import speicher
 from nebenkosten.modell import (
@@ -32,12 +33,14 @@ SP_AKTIV = "Abrechnen"
 SP_NAME = "Kostenart"
 SP_BETRAG = "Kosten fürs ganze Haus (€)"
 SP_VERTEILUNG = "Verteilung"
+SP_GRUND = "Grundkosten (%)"
 SP_LOHN = "davon Lohnkosten (€)"
 SP_ZEIT = "zeitanteilig"
 SP_BELEG = "Welcher Beleg?"
 
 SPALTEN_EINFACH = (SP_AKTIV, SP_NAME, SP_BETRAG, SP_VERTEILUNG, SP_BELEG)
-SPALTEN_ERWEITERT = (SP_AKTIV, SP_NAME, SP_BETRAG, SP_VERTEILUNG, SP_LOHN, SP_ZEIT, SP_BELEG)
+SPALTEN_ERWEITERT = (SP_AKTIV, SP_NAME, SP_BETRAG, SP_VERTEILUNG, SP_GRUND, SP_LOHN,
+                     SP_ZEIT, SP_BELEG)
 
 BEHALTEN = {"stamm", "positionen", "erweitert"}
 
@@ -113,6 +116,7 @@ def positionen_als_df(positionen: list[Position]) -> pd.DataFrame:
         SP_NAME: p.bezeichnung,
         SP_BETRAG: float(p.betrag),
         SP_VERTEILUNG: SCHLUESSEL.get(p.schluessel, SCHLUESSEL["flaeche"]),
+        SP_GRUND: float(p.grundkosten_anteil),
         SP_LOHN: float(p.arbeitskosten),
         SP_ZEIT: p.zeitanteilig,
         SP_BELEG: p.hinweis,
@@ -156,6 +160,8 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position]) -> list[Posit
             verbrauch_gesamt=vorgaenger.verbrauch_gesamt if vorgaenger else 0.0,
             verbrauch_mieter=vorgaenger.verbrauch_mieter if vorgaenger else 0.0,
             verbrauch_eigen_direkt=vorgaenger.verbrauch_eigen_direkt if vorgaenger else 0.0,
+            grundkosten_anteil=zahlwert(
+                SP_GRUND, vorgaenger.grundkosten_anteil if vorgaenger else 0.0),
             arbeitskosten=zahlwert(SP_LOHN, vorgaenger.arbeitskosten if vorgaenger else 0.0),
             zeitanteilig=bool(r.get(SP_ZEIT, vorgaenger.zeitanteilig if vorgaenger else True)),
             aktiv=bool(r.get(SP_AKTIV, True)),
@@ -552,6 +558,13 @@ with tab_kosten:
                                                                  SCHLUESSEL["flaeche"])))
                 p.schluessel = LABEL_ZU_KEY.get(gewaehlt, "flaeche")
         if erweitert:
+            with st.expander("Grundkosten-Anteil (Heizung, Warmwasser)"):
+                for i, p in enumerate(st.session_state.positionen):
+                    if not p.aktiv or p.schluessel != "verbrauch":
+                        continue
+                    p.grundkosten_anteil = st.number_input(
+                        f"{p.bezeichnung}: nach Wohnfläche (%)", min_value=0.0, max_value=50.0,
+                        step=5.0, value=float(p.grundkosten_anteil), key=f"kos{i}_grund")
             with st.expander("Lohnkosten für die Steuererklärung des Mieters"):
                 for i, p in enumerate(st.session_state.positionen):
                     if not p.aktiv or not p.betrag:
@@ -576,6 +589,11 @@ with tab_kosten:
                     help="Wie sollen die Kosten aufgeteilt werden? Nach Wohnfläche ist der "
                          "Normalfall. „Nach Zählerstand“ nur, wenn es einen eigenen Zähler "
                          "für die Wohnung gibt. „Nur der Mieter“ heißt: die Kosten trägt er allein."),
+                SP_GRUND: st.column_config.NumberColumn(
+                    format="%.0f", min_value=0.0, max_value=50.0, step=5.0,
+                    help="Nur bei Verteilung nach Zählerstand: Anteil der Kosten, der nach "
+                         "Wohnfläche verteilt wird (Grundkosten). Bei Heizung und Warmwasser "
+                         "sind 30 % üblich, der Rest geht nach Verbrauch. 0 = alles nach Verbrauch."),
                 SP_LOHN: st.column_config.NumberColumn(
                     format="%.2f", min_value=0.0,
                     help="Der Lohnanteil auf der Rechnung (z. B. Gärtner, Schornsteinfeger). "
@@ -590,6 +608,63 @@ with tab_kosten:
         st.session_state.positionen = df_als_positionen(bearbeitet, st.session_state.positionen)
     summe = sum(p.betrag for p in st.session_state.positionen if p.aktiv)
     st.info(f"Kosten des Hauses insgesamt: **{eur(summe)} €**")
+
+    with st.expander("🔥 Gasrechnung auf Heizung und Warmwasser aufteilen"):
+        st.caption(
+            "Wenn deine Wärmemengenzähler nur die Heizung messen, steckt im Gas auch das "
+            "Warmwasser. Die Heizkostenverordnung (§ 9) rechnet den Warmwasseranteil so heraus: "
+            "**Q = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur − 10 °C)**, plus Zuschlag "
+            "für die Verluste der Anlage."
+        )
+        w1, w2, w3 = st.columns(3)
+        ww_menge = w1.number_input("Warmwasser im ganzen Haus (m³)", min_value=0.0, step=1.0,
+                                   value=float(st.session_state.get("ww_menge", 0.0)),
+                                   key="ww_menge")
+        ww_temp = w2.number_input(
+            "Warmwassertemperatur (°C)", min_value=20.0, max_value=80.0, step=5.0,
+            value=float(st.session_state.get("ww_temp", 60.0)), key="ww_temp",
+            help="Ohne gemessene Temperatur schreibt die Heizkostenverordnung 60 °C vor. "
+                 "Einen niedrigeren Wert darfst du nur ansetzen, wenn du ihn wirklich misst.")
+        ww_nutzung = w3.number_input(
+            "Zuschlag für Anlagenverluste", min_value=1.0, max_value=1.5, step=0.01,
+            value=float(st.session_state.get("ww_nutzung", 1.11)), key="ww_nutzung",
+            help="1,11 entspricht einem Nutzungsgrad von 90 % – der übliche Wert.")
+
+        g1, g2 = st.columns(2)
+        gas_kwh = g1.number_input("Gasverbrauch im Zeitraum (kWh)", min_value=0.0, step=100.0,
+                                  value=float(st.session_state.get("gas_kwh", 0.0)), key="gas_kwh")
+        gas_kosten = g2.number_input("Gaskosten im Zeitraum (€)", min_value=0.0, step=10.0,
+                                     value=float(st.session_state.get("gas_kosten", 0.0)),
+                                     key="gas_kosten")
+
+        if ww_menge > 0 and gas_kwh > 0 and gas_kosten > 0:
+            ww_bedarf = warmwasser_kwh(ww_menge, ww_temp, ww_nutzung)
+            anteil = min(ww_bedarf / gas_kwh, 1.0)
+            kosten_ww = round(gas_kosten * anteil, 2)
+            kosten_heizung = round(gas_kosten - kosten_ww, 2)
+            st.success(
+                f"Warmwasser braucht **{menge(round(ww_bedarf))} kWh** = **{zahl(anteil * 100)} %** "
+                f"des Gases → **{eur(kosten_ww)} €** für Warmwasser, "
+                f"**{eur(kosten_heizung)} €** für die Heizung."
+            )
+            if st.button("Diese Beträge in die Kostenzeilen übernehmen", key="ww_uebernehmen"):
+                getroffen = []
+                for p in st.session_state.positionen:
+                    name = p.bezeichnung.lower()
+                    if "warmwasser" in name:
+                        p.betrag, p.aktiv = kosten_ww, True
+                        getroffen.append(p.bezeichnung)
+                    elif "heizung" in name:
+                        p.betrag, p.aktiv = kosten_heizung, True
+                        getroffen.append(p.bezeichnung)
+                if getroffen:
+                    sichern()
+                    neu_zeichnen()
+                else:
+                    st.warning("Keine Zeile mit „Heizung“ oder „Warmwasser“ gefunden.")
+        else:
+            st.caption("Trag Warmwassermenge, Gasverbrauch und Gaskosten ein, dann rechnet die "
+                       "App die Aufteilung aus.")
 
     with st.expander("Was darfst du überhaupt abrechnen?"):
         st.markdown(
@@ -836,11 +911,38 @@ with tab_vz:
     )
     c1, c2 = st.columns(2)
     with c1:
+        co2_kg = st.number_input(
+            "CO2-Ausstoß im Abrechnungszeitraum (kg)", min_value=0.0, step=10.0,
+            value=float(st.session_state.get("co2_kg", 0.0)), key="co2_kg",
+            help="Steht seit 2023 auf jeder Gas- und Ölrechnung. Wenn nicht: beim Versorger "
+                 "anfordern – er muss die Angabe machen.")
+        co2_kosten = st.number_input(
+            "darin enthaltene CO2-Kosten (€)", min_value=0.0, step=1.0,
+            value=float(st.session_state.get("co2_kosten", 0.0)), key="co2_kosten",
+            help="Ebenfalls auf der Rechnung, oft als „CO2-Preis“ oder „BEHG“ ausgewiesen.")
+    with c2:
+        if co2_kg > 0 and stamm.flaeche_gesamt > 0:
+            prozent, erklaerung = co2_vermieteranteil(co2_kg, stamm.flaeche_gesamt)
+            dein_anteil = round(co2_kosten * prozent / 100, 2)
+            st.success(f"{erklaerung}\n\nDein Anteil: **{eur(dein_anteil)} €** von "
+                       f"{eur(co2_kosten)} €")
+            if st.button("Diesen Betrag übernehmen", key="co2_uebernehmen"):
+                stamm.co2_abzug = dein_anteil
+                sichern()
+                neu_zeichnen()
+        else:
+            st.caption("Trag den CO2-Ausstoß ein, dann rechnet die App deinen Pflichtanteil "
+                       "nach dem Stufenmodell aus. Je schlechter das Haus gedämmt ist, desto "
+                       "mehr trägst du.")
         stamm.co2_abzug = st.number_input(
             "Dein Anteil an den CO2-Kosten (€)", min_value=0.0, step=1.0,
             value=float(stamm.co2_abzug), key="co2",
             help="Wird vom Anteil des Mieters abgezogen.")
-    with c2:
+
+    st.divider()
+    st.subheader("Vorauszahlung anpassen")
+    a1, a2 = st.columns(2)
+    with a1:
         if stamm.ist_zwischenabrechnung:
             st.info("Bei einer Zwischenabrechnung steht im PDF nur ein Vorschlag für die "
                     "künftige Vorauszahlung – ändern darfst du sie erst nach der "
@@ -849,8 +951,13 @@ with tab_vz:
             "Im PDF ankündigen, dass die Vorauszahlung angepasst wird",
             value=stamm.anpassung_vorschlagen, key="anpassung",
             help="Sinnvoll, wenn die bisherige Vorauszahlung deutlich zu niedrig oder "
-                 "zu hoch war. Die App schlägt einen Betrag vor. Bei einer Abrechnung "
-                 "zum Mietende brauchst du das nicht.")
+                 "zu hoch war. Die App schlägt einen Betrag vor.")
+    with a2:
+        stamm.eigene_abrechnung = st.checkbox(
+            "Auch eine Aufstellung für die eigene Wohnung erstellen",
+            value=stamm.eigene_abrechnung, key="eigene",
+            help="Dieselbe Rechnung aus deiner Sicht – für die Unterlagen und die "
+                 "Steuererklärung (Anlage V). Nicht für den Mieter gedacht.")
 
 # --------------------------------------------------------------------------
 # 6 Ergebnis
@@ -931,7 +1038,7 @@ with tab_ergebnis:
         st.info("Ohne Kosten gibt es nichts abzurechnen.")
     else:
         if st.download_button(
-            "📄 Abrechnung als PDF speichern",
+            "📄 Abrechnung für den Mieter als PDF speichern",
             data=erzeuge_pdf(stamm, ergebnis),
             file_name=dateiname(stamm),
             mime="application/pdf",
@@ -949,6 +1056,22 @@ with tab_ergebnis:
             "Das PDF ausdrucken, unterschreiben und dem Mieter geben – "
             "am besten mit Kopien der Rechnungen."
         )
+
+        if stamm.eigene_abrechnung:
+            eigenes = berechne(stamm, st.session_state.positionen, fuer="vermieter")
+            st.divider()
+            st.markdown(f"**Deine eigene Wohnung:** {eur(eigenes.summe_anteil)} € von "
+                        f"{eur(ergebnis.summe_gesamtkosten)} € Gesamtkosten. "
+                        f"Nicht verteilt (Leerstand, Zeiten ohne Mieter): "
+                        f"{eur(max(0.0, ergebnis.summe_gesamtkosten - ergebnis.summe_anteil - eigenes.summe_anteil))} €.")
+            if not eigenes.fehler:
+                st.download_button(
+                    "📄 Aufstellung für die eigene Wohnung speichern",
+                    data=erzeuge_pdf(stamm, eigenes),
+                    file_name=dateiname(stamm, fuer="vermieter"),
+                    mime="application/pdf",
+                    width="stretch",
+                )
 
 # Nach jeder Eingabe alles dauerhaft sichern.
 sichern()

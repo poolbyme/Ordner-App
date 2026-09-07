@@ -6,7 +6,7 @@ damit sich der komplette Zustand verlustfrei als JSON speichern lässt.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date
 
 # Verteilerschlüssel (§ 556a BGB). Ohne abweichende Vereinbarung im
@@ -17,6 +17,7 @@ SCHLUESSEL = {
     "einheiten": "je Wohnung",
     "verbrauch": "nach Zählerstand",
     "direkt": "nur der Mieter",
+    "direkt_vermieter": "nur ich selbst",
 }
 
 ABRECHNUNGSARTEN = {
@@ -50,6 +51,11 @@ NICHT_UMLAGEFAEHIG_STICHWORTE = [
     "modernisierung", "sanierung", "neuanschaffung", "bankgebühr",
 ]
 
+
+SICHTEN = {
+    "mieter": "Abrechnung für den Mieter",
+    "vermieter": "Abrechnung für die eigene Wohnung",
+}
 
 PARTEIEN = {
     "haus": "Hauptzähler (ganzes Haus)",
@@ -93,6 +99,9 @@ class Position:
     verbrauch_gesamt: float = 0.0
     verbrauch_mieter: float = 0.0
     verbrauch_eigen_direkt: float = 0.0
+    # Bei Heiz- und Warmwasserkosten üblich: ein Teil wird nach Wohnfläche
+    # verteilt (Grundkosten), der Rest nach Verbrauch. 0 = alles nach Verbrauch.
+    grundkosten_anteil: float = 0.0   # Prozent, 0 bis 50
     arbeitskosten: float = 0.0     # im Betrag enthaltene Lohnkosten (§ 35a EStG)
     zeitanteilig: bool = True      # bei unterjähriger Nutzung anteilig kürzen
     aktiv: bool = True
@@ -169,6 +178,7 @@ class Stammdaten:
     ort: str = ""
     datum: str = field(default_factory=lambda: date.today().isoformat())
     anpassung_vorschlagen: bool = True
+    eigene_abrechnung: bool = False
 
     @property
     def ist_endabrechnung(self) -> bool:
@@ -219,7 +229,7 @@ def standard_positionen() -> list[Position]:
                  zaehler_von="Wasser",
                  hinweis="Gebührenbescheid der Gemeinde; meist auf die Frischwassermenge"),
         Position("Heizung (Gas)", schluessel="verbrauch", einheit="kWh",
-                 zaehler_grundlage="unterzaehler",
+                 zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
                  zaehler=[
                      Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus"),
                      Zaehlerstand("Wärmemenge Fußbodenheizung Mieter", "mieter"),
@@ -229,7 +239,7 @@ def standard_positionen() -> list[Position]:
                  hinweis="Gasrechnung, Wartung, Betriebsstrom – verteilt nach den "
                          "Wärmemengenzählern"),
         Position("Warmwasser (Gas)", schluessel="verbrauch", einheit="m³",
-                 zaehler_grundlage="unterzaehler",
+                 zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
                  zaehler=[
                      Zaehlerstand("Warmwasser Mieter", "mieter"),
                      Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
@@ -265,6 +275,30 @@ def standard_positionen() -> list[Position]:
         Position("Sonstiges", schluessel="flaeche", aktiv=False,
                  hinweis="nur wenn diese Kosten im Mietvertrag ausdrücklich genannt sind"),
     ]
+
+
+def sicht_vermieter(s: Stammdaten) -> Stammdaten:
+    """Dieselben Daten aus Sicht der eigenen Wohnung.
+
+    Für die eigene Aufstellung (Steuer, Unterlagen) wird alles gespiegelt:
+    die eigene Wohnfläche, die eigenen Personen, das ganze Jahr als
+    Nutzungszeitraum und keine Vorauszahlungen.
+    """
+    return replace(
+        s,
+        mieter_name=s.vermieter_name,
+        mieter_wohnung="eigene Wohnung",
+        anrede="",
+        flaeche_mieter=max(0.0, s.flaeche_gesamt - s.flaeche_mieter),
+        personen_mieter=max(0.0, s.personen_gesamt - s.personen_mieter),
+        einheiten_mieter=max(0.0, s.einheiten_gesamt - s.einheiten_mieter),
+        nutzung_von=s.zeitraum_von,
+        nutzung_bis=s.zeitraum_bis,
+        vorauszahlung_monatlich=0.0,
+        vorauszahlung_manuell=None,
+        co2_abzug=0.0,
+        anpassung_vorschlagen=False,
+    )
 
 
 def as_dict(stammdaten: Stammdaten, positionen: list[Position]) -> dict:

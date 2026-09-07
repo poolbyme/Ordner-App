@@ -179,6 +179,55 @@ Wärme fürs Warmwasser in kWh = 2,5 × Warmwassermenge in m³ × (Warmwassertem
 Der so errechnete Kostenanteil kommt in die Zeile „Warmwasser (Gas)", der Rest in
 „Heizung (Gas)". Der Hinweis steht auch im Tab „Zählerstände".
 
+### Heiz- und Warmwasserkosten
+
+Zwei Werkzeuge, die den üblichen Weg der Abrechnungsdienste nachbilden:
+
+**Grundkosten und Verbrauchskosten trennen.** Je Kostenart lässt sich ein Anteil
+angeben (0–50 %), der nach Wohnfläche verteilt wird; der Rest geht nach Verbrauch.
+Bei Heizung und Warmwasser sind 30 % Grundkosten üblich. Im PDF erscheinen dann zwei
+Zeilen, „Heizung – Grundkosten 30 %" und „Heizung – Verbrauchskosten 70 %", wie in
+einer professionellen Abrechnung.
+
+**Gasrechnung aufteilen (Tab Kosten).** Messen die Wärmemengenzähler nur die Heizung,
+steckt im Gas auch das Warmwasser. Der Rechner benutzt die Formel des § 9 Abs. 2
+HeizkostenV – Q = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur − 10 °C), plus
+Zuschlag für die Anlagenverluste – und teilt die Gaskosten auf beide Zeilen auf. Ohne
+gemessene Warmwassertemperatur schreibt die Verordnung 60 °C vor; ein niedrigerer Wert
+verschiebt Kosten von der Warmwasser- in die Heizungsposition und ist nur mit
+gemessener Temperatur haltbar.
+
+### CO2-Kosten
+
+Bei Gas- oder Ölheizung muss sich der Vermieter seit 2023 an den CO2-Kosten beteiligen
+(CO2KostAufG). Der Rechner im Tab „Vorauszahlungen" nimmt den CO2-Ausstoß in kg und die
+CO2-Kosten in Euro von der Energierechnung, bezieht die Emissionen auf die Wohnfläche
+und liest den Vermieteranteil aus dem gesetzlichen Stufenmodell ab:
+
+| kg CO2 je m² und Jahr | Vermieter | Mieter |
+| --- | --- | --- |
+| unter 12 | 0 % | 100 % |
+| 12 bis unter 22 | 10–20 % | 90–80 % |
+| 22 bis unter 32 | 30–40 % | 70–60 % |
+| 32 bis unter 42 | 50–60 % | 50–40 % |
+| 42 bis unter 52 | 70–80 % | 30–20 % |
+| 52 und mehr | 95 % | 5 % |
+
+Der so ermittelte Betrag wird vom Anteil des Mieters abgezogen. Fehlen die Angaben auf
+der Rechnung, ist der Versorger verpflichtet, sie zu liefern.
+
+### Aufstellung für die eigene Wohnung
+
+Der Schalter „Auch eine Aufstellung für die eigene Wohnung erstellen" erzeugt ein
+zweites PDF: dieselbe Rechnung aus Sicht des Vermieters – eigene Wohnfläche, eigene
+Zähler, voller Zeitraum, keine Vorauszahlungen. Gedacht für die eigenen Unterlagen und
+die Steuererklärung, nicht zur Weitergabe an den Mieter; das PDF sagt das auch. Der
+Ergebnis-Tab zeigt zusätzlich, welcher Teil der Gesamtkosten auf niemanden entfällt –
+das ist der Leerstandsanteil, den der Vermieter trägt.
+
+Für Kosten, die nur eine Seite betreffen, gibt es die Verteilungen **„nur der Mieter"**
+und **„nur ich selbst"** – etwa für getrennte Mülltonnen.
+
 ### Differenz zwischen Hauptzähler und Wohnungszählern
 
 Der Hauptzähler zeigt fast immer mehr an als die Wohnungszähler zusammen –
@@ -192,6 +241,16 @@ zieht die Unterzähler vom Hauptzähler ab und verteilt den Rest auf beide Wohnu
 Wird kein eigener Zähler eingetragen, bleibt die gesamte Differenz beim Vermieter. Die
 Rechnung steht vollständig im PDF: alle Zählerstände, die Summe der Unterzähler, die
 Differenz, der Verteilungsmaßstab und die angerechnete Menge.
+
+Übersteigt die Differenz 10 % des Hauptzählers, warnt die App. Das ist dann keine
+Messtoleranz mehr, sondern deutet auf Leerstand oder auf Zähler hin, die zu
+verschiedenen Zeitpunkten abgelesen wurden – in beiden Fällen darf die Differenz nicht
+anteilig auf den Mieter verteilt werden.
+
+**Noch offen:** Rechnungen mit einem eigenen Gültigkeitszeitraum (etwa eine Versicherung
+von Juni bis Juni) und Zählerstände zu Zwischenterminen kann die App noch nicht je
+Position abbilden. Zieht ein Mieter mitten im Jahr ein, müssen für dieses eine Jahr die
+Beträge und Zählerstände des Mietzeitraums von Hand eingetragen werden.
 
 ### Was die App prüft
 

@@ -766,6 +766,123 @@ def design_pfad():
     return design.ICON_APPLE
 
 
+def test_warmwasser_benutzt_die_wasserzaehler_mit():
+    """Dieselben Zaehler zweimal eintippen heisst zweimal Gelegenheit fuer einen
+    Zahlendreher - und wenn beide Eingaben auseinanderlaufen, rechnet die App
+    mit zwei Wahrheiten."""
+    from nebenkosten.berechnung import zaehlerquelle
+    from nebenkosten.modell import standard_positionen
+
+    positionen = standard_positionen()
+    nach_name = {p.bezeichnung: p for p in positionen}
+    warm = nach_name["Warmwasser (Gas)"]
+
+    assert warm.zaehler == [], "Warmwasser darf keine eigenen Zaehler mehr haben"
+    assert warm.zaehler_von == "Wasser"
+
+    quelle = zaehlerquelle(warm, positionen)
+    namen = [z.name for z in quelle.zaehler]
+    assert namen == ["Warmwasser Mieter", "Warmwasser eigene Wohnung"]
+    # Die Wasserposition selbst bleibt vollstaendig.
+    assert len(nach_name["Wasser"].zaehler) == 6
+
+
+def test_abwasser_nimmt_weiter_alle_wasserzaehler():
+    from nebenkosten.berechnung import zaehlerquelle
+    from nebenkosten.modell import standard_positionen
+
+    positionen = standard_positionen()
+    abwasser = next(p for p in positionen if p.bezeichnung == "Abwasser")
+    assert len(zaehlerquelle(abwasser, positionen).zaehler) == 6
+
+
+def test_gaszaehler_in_kubikmetern_waermemenge_in_kilowattstunden():
+    from nebenkosten.modell import standard_positionen
+
+    heizung = next(p for p in standard_positionen()
+                   if p.bezeichnung == "Heizung (Gas)")
+    einheiten = {z.name: z.einheit for z in heizung.zaehler}
+    assert einheiten["Gaszähler Haus (nur zur Information)"] == "m³"
+    assert all(e == "kWh" for name, e in einheiten.items() if name.startswith("Wärmemenge"))
+
+
+def test_einheit_steht_je_zaehler_im_ergebnis():
+    from nebenkosten.berechnung import verbrauchsaufteilung
+    from nebenkosten.modell import Position, Zaehlerstand
+
+    pos = Position("Heizung (Gas)", "gas", betrag=1000.0, schluessel="verbrauch",
+                   einheit="kWh", zaehler_grundlage="unterzaehler",
+                   zaehler=[Zaehlerstand("Gaszähler Haus", "haus", 0, 2440, einheit="m³"),
+                            Zaehlerstand("Wärmemenge Mieter", "mieter", 0, 9000),
+                            Zaehlerstand("Wärmemenge eigen", "vermieter", 0, 11000)])
+    z = verbrauchsaufteilung(pos, basis_stammdaten(), [pos])
+    nach_name = {m.name: m.einheit for m in z.messungen}
+    assert nach_name["Gaszähler Haus"] == "m³"
+    # Ohne eigene Angabe gilt die Einheit der Kostenart.
+    assert nach_name["Wärmemenge Mieter"] == "kWh"
+
+
+def _alter_stand() -> dict:
+    """Gespeicherte Daten im Aufbau von frueher: Warmwasser mit eigenen Zaehlern."""
+    return {
+        "stammdaten": {"vermieter_name": "Vermieter"},
+        "positionen": [
+            {"bezeichnung": "Wasser", "kategorie": "wasser", "schluessel": "verbrauch",
+             "einheit": "m³", "zaehler": [
+                 {"name": "Hauptzähler Wasser", "partei": "haus", "alt": 0, "neu": 0},
+                 {"name": "Warmwasser Mieter", "partei": "mieter", "alt": 0, "neu": 0},
+                 {"name": "Warmwasser eigene Wohnung", "partei": "vermieter",
+                  "alt": 0, "neu": 0}]},
+            {"bezeichnung": "Warmwasser (Gas)", "kategorie": "gas", "schluessel": "verbrauch",
+             "einheit": "m³", "zaehler": [
+                 {"name": "Warmwasser Mieter", "partei": "mieter", "alt": 0, "neu": 0},
+                 {"name": "Warmwasser eigene Wohnung", "partei": "vermieter",
+                  "alt": 0, "neu": 0}]},
+            {"bezeichnung": "Heizung (Gas)", "kategorie": "gas", "schluessel": "verbrauch",
+             "einheit": "kWh", "zaehler": [
+                 {"name": "Gaszähler Haus (nur zur Information)", "partei": "haus",
+                  "alt": 0, "neu": 0},
+                 {"name": "Wärmemenge Fußbodenheizung Mieter", "partei": "mieter",
+                  "alt": 0, "neu": 0}]},
+        ],
+    }
+
+
+def test_gespeicherte_daten_ziehen_das_warmwasser_nach():
+    from nebenkosten.modell import from_dict
+
+    _, positionen = from_dict(_alter_stand())
+    warm = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
+    assert warm.zaehler == []
+    assert warm.zaehler_von == "Wasser"
+    assert warm.zaehler_nur == ["Warmwasser Mieter", "Warmwasser eigene Wohnung"]
+
+
+def test_gespeicherte_daten_bekommen_die_einheit_je_zaehler():
+    from nebenkosten.modell import from_dict
+
+    _, positionen = from_dict(_alter_stand())
+    heizung = next(p for p in positionen if p.bezeichnung == "Heizung (Gas)")
+    einheiten = {z.name: z.einheit for z in heizung.zaehler}
+    assert einheiten["Gaszähler Haus (nur zur Information)"] == "m³"
+    assert einheiten["Wärmemenge Fußbodenheizung Mieter"] == "kWh"
+
+
+def test_eingetragene_zaehlerstaende_werden_nicht_angetastet():
+    """Lieber ein alter Aufbau als veraenderte Zahlen in einer Abrechnung,
+    die vielleicht schon beim Mieter liegt."""
+    from nebenkosten.modell import from_dict
+
+    daten = _alter_stand()
+    warm = daten["positionen"][1]
+    warm["zaehler"][0]["alt"], warm["zaehler"][0]["neu"] = 100, 148
+
+    _, positionen = from_dict(daten)
+    gewandert = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
+    assert len(gewandert.zaehler) == 2, "eingetippte Staende duerfen nicht verschwinden"
+    assert gewandert.zaehler_von == ""
+
+
 # --- Gas: Kubikmeter in Kilowattstunden ------------------------------------
 
 def test_gasumrechnung():

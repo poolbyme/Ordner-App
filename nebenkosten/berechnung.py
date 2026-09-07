@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
 from .modell import (
@@ -49,6 +49,7 @@ class Messung:
     alt: float
     neu: float
     verbrauch: float
+    einheit: str = ""   # leer: die Einheit der Kostenart
 
 
 @dataclass
@@ -151,13 +152,23 @@ class Ergebnis:
 
 
 def zaehlerquelle(pos: Position, positionen: list[Position] | None) -> Position:
-    """Position, deren Zähler benutzt werden (z. B. Abwasser nutzt die von Wasser)."""
+    """Position, deren Zähler benutzt werden (z. B. Abwasser nutzt die von Wasser).
+
+    Mit ``zaehler_nur`` lassen sich einzelne Zähler der anderen Position
+    herausgreifen: Das Warmwasser rechnet mit den Warmwasserzählern, die schon
+    beim Wasser stehen, statt sie ein zweites Mal abzufragen. Zurück kommt dann
+    eine Kopie mit nur diesen Zählern - die andere Position bleibt unberührt.
+    """
     if not pos.zaehler_von or not positionen:
         return pos
     gesucht = pos.zaehler_von.strip().lower()
     for anderer in positionen:
         if anderer is not pos and anderer.bezeichnung.strip().lower() == gesucht:
-            return anderer
+            if not pos.zaehler_nur:
+                return anderer
+            namen = {n.strip().lower() for n in pos.zaehler_nur}
+            return replace(anderer, zaehler=[z for z in anderer.zaehler
+                                             if z.name.strip().lower() in namen])
     return pos
 
 
@@ -234,7 +245,8 @@ def verbrauchsaufteilung(pos: Position, s: Stammdaten,
 
     zaehler = Zaehler(
         einheit=pos.einheit or quelle.einheit or "",
-        messungen=[Messung(z.name, z.partei, z.alt, z.neu, z.verbrauch)
+        messungen=[Messung(z.name, z.partei, z.alt, z.neu, z.verbrauch,
+                           z.einheit or pos.einheit or quelle.einheit or "")
                    for z in quelle.zaehler if z.alt or z.neu],
         quelle="" if quelle is pos else quelle.bezeichnung,
         grundlage=pos.zaehler_grundlage,

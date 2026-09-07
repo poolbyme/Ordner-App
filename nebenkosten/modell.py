@@ -87,6 +87,10 @@ class Zaehlerstand:
     partei: str = "mieter"      # haus, mieter oder vermieter
     alt: float = 0.0
     neu: float = 0.0
+    # Leer heißt: die Einheit der Kostenart. Gebraucht wird das, wo an einer
+    # Kostenart Zähler mit verschiedenen Einheiten hängen - beim Gas etwa der
+    # Hauszähler in m³ und die Wärmemengenzähler in kWh.
+    einheit: str = ""
 
     @property
     def verbrauch(self) -> float:
@@ -105,6 +109,9 @@ class Position:
     zaehler: list[Zaehlerstand] = field(default_factory=list)
     zaehler_grundlage: str = "hauptzaehler"
     zaehler_von: str = ""          # Zähler einer anderen Position mitbenutzen
+    # Nur diese Zähler der anderen Position benutzen (leer = alle). Damit
+    # braucht das Warmwasser die Warmwasserzähler nicht ein zweites Mal.
+    zaehler_nur: list[str] = field(default_factory=list)
     # Ersatz, wenn es gar keine Zähler gibt: Mengen direkt eintragen
     verbrauch_gesamt: float = 0.0
     verbrauch_mieter: float = 0.0
@@ -265,20 +272,26 @@ def standard_positionen() -> list[Position]:
     besonderheiten = {
         "Wasser": dict(einheit="m³", zaehler=wasserzaehler),
         "Abwasser": dict(einheit="m³", zaehler_von="Wasser"),
+        # Der Gaszähler des Hauses zählt Kubikmeter, die Wärmemengenzähler
+        # Kilowattstunden. Beides an einer Kostenart, deshalb steht die Einheit
+        # am einzelnen Zähler und nicht nur an der Kostenart.
         "Heizung (Gas)": dict(
             einheit="kWh", zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
             zaehler=[
-                Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus"),
-                Zaehlerstand("Wärmemenge Fußbodenheizung Mieter", "mieter"),
-                Zaehlerstand("Wärmemenge Fußbodenheizung eigene Wohnung", "vermieter"),
-                Zaehlerstand("Wärmemenge Heizkörper eigene Wohnung", "vermieter"),
+                Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus", einheit="m³"),
+                Zaehlerstand("Wärmemenge Fußbodenheizung Mieter", "mieter", einheit="kWh"),
+                Zaehlerstand("Wärmemenge Fußbodenheizung eigene Wohnung", "vermieter",
+                             einheit="kWh"),
+                Zaehlerstand("Wärmemenge Heizkörper eigene Wohnung", "vermieter",
+                             einheit="kWh"),
             ]),
+        # Es sind dieselben Warmwasserzähler wie bei „Wasser". Zweimal eintippen
+        # heißt zweimal Gelegenheit für einen Zahlendreher - und wenn die beiden
+        # Eingaben auseinanderlaufen, rechnet die App mit zwei Wahrheiten.
         "Warmwasser (Gas)": dict(
             einheit="m³", zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
-            zaehler=[
-                Zaehlerstand("Warmwasser Mieter", "mieter"),
-                Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
-            ]),
+            zaehler_von="Wasser",
+            zaehler_nur=["Warmwasser Mieter", "Warmwasser eigene Wohnung"]),
     }
     return [aus_katalog(name, **besonderheiten.get(name, {})) for name in VORBELEGT]
 
@@ -349,6 +362,45 @@ def _zaehler_aus_dict(daten: dict) -> list[Zaehlerstand]:
     return uebernommen
 
 
+def _nachziehen(positionen: list[Position]) -> list[Position]:
+    """Gespeicherte Daten auf den heutigen Aufbau bringen.
+
+    Zwei Dinge, die frueher falsch angelegt waren:
+
+    * Das Warmwasser hatte eigene Zaehler, obwohl es dieselben sind wie beim
+      Wasser - zweimal eintippen, zwei Gelegenheiten fuer einen Zahlendreher.
+    * Am Gas hingen Zaehler mit verschiedenen Einheiten (Hauszaehler m³,
+      Waermemengenzaehler kWh), angezeigt wurde aber ueberall die Einheit der
+      Kostenart.
+
+    Angefasst wird nur, was noch leer ist: Stehen bereits Zaehlerstaende drin,
+    bleibt alles, wie es ist - lieber eine alte Struktur als veraenderte Zahlen
+    in einer Abrechnung, die vielleicht schon aus dem Haus ist.
+    """
+    nach_name = {p.bezeichnung.strip().lower(): p for p in positionen}
+    wasser = nach_name.get("wasser")
+    warm = nach_name.get("warmwasser (gas)")
+    if (wasser and warm and warm.zaehler and not warm.zaehler_von
+            and all(not z.alt and not z.neu for z in warm.zaehler)):
+        vorhanden = {z.name.strip().lower() for z in wasser.zaehler}
+        namen = [z.name for z in warm.zaehler if z.name.strip().lower() in vorhanden]
+        if len(namen) == len(warm.zaehler):
+            warm.zaehler = []
+            warm.zaehler_von = wasser.bezeichnung
+            warm.zaehler_nur = namen
+
+    for pos in positionen:
+        for z in pos.zaehler:
+            if z.einheit:
+                continue
+            name = z.name.strip().lower()
+            if name.startswith("gaszähler") or name.startswith("gaszaehler"):
+                z.einheit = "m³"
+            elif name.startswith("wärmemenge") or name.startswith("waermemenge"):
+                z.einheit = "kWh"
+    return positionen
+
+
 def from_dict(daten: dict) -> tuple[Stammdaten, list[Position]]:
     stamm_felder = set(Stammdaten.__dataclass_fields__)
     pos_felder = set(Position.__dataclass_fields__) - {"zaehler"}
@@ -360,4 +412,4 @@ def from_dict(daten: dict) -> tuple[Stammdaten, list[Position]]:
         if not werte.get("kategorie"):
             werte["kategorie"] = kategorie_raten(str(p.get("bezeichnung", "")))
         positionen.append(Position(zaehler=_zaehler_aus_dict(p), **werte))
-    return stamm, positionen or standard_positionen()
+    return stamm, _nachziehen(positionen) if positionen else standard_positionen()

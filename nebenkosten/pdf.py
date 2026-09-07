@@ -299,9 +299,14 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
 
         for m in zae.messungen:
             partei = PARTEI_KURZ.get(m.partei, m.partei)
-            zeileneinheit = einheit
+            # Der Gaszähler des Hauses misst m³, die Wärmemengenzähler kWh.
+            # Deshalb hat jeder Zähler seine eigene Einheit; die der Kostenart
+            # gilt nur, wo nichts anderes hinterlegt ist.
+            zeileneinheit = m.einheit or einheit
             if nur_unterzaehler and m.partei == "haus":
-                partei, zeileneinheit = "nachrichtlich", ""
+                partei = "nachrichtlich"
+                if not m.einheit:
+                    zeileneinheit = ""
             messzeile(m.name or "Zähler", partei, m.alt, m.neu, m.verbrauch, zeileneinheit)
 
         if zae.mit_gemeinsam:
@@ -326,8 +331,11 @@ def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
         pdf.abstand(2)
         pdf.font(9)
         for zeile in geliehen:
+            namen = [m.name for m in zeile.zaehler.messungen if m.name]
+            welche = (" – " + ", ".join(namen)) if namen else ""
             pdf.multi_cell(0, 4.6, pdf.t(f"{zeile.bezeichnung}: abgerechnet nach den "
-                                         f"Zählerständen von „{zeile.zaehler.quelle}“."),
+                                         f"Zählerständen von „{zeile.zaehler.quelle}“"
+                                         f"{welche}."),
                            align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
 

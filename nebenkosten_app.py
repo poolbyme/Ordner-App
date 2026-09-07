@@ -216,6 +216,7 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position],
 
 ZAE_NAME, ZAE_WER = "Zähler", "Wer"
 ZAE_ALT, ZAE_NEU, ZAE_VERBRAUCH = "Stand Anfang", "Stand Ende", "Verbrauch"
+ZAE_EINHEIT = "Einheit"
 PARTEI_LABELS = list(PARTEIEN.values())
 LABEL_ZU_PARTEI = {v: k for k, v in PARTEIEN.items()}
 
@@ -223,9 +224,10 @@ LABEL_ZU_PARTEI = {v: k for k, v in PARTEIEN.items()}
 def zaehler_als_df(pos: Position) -> pd.DataFrame:
     return pd.DataFrame(
         [{ZAE_NAME: z.name, ZAE_WER: PARTEIEN.get(z.partei, PARTEIEN["mieter"]),
+           ZAE_EINHEIT: z.einheit or pos.einheit,
            ZAE_ALT: float(z.alt), ZAE_NEU: float(z.neu), ZAE_VERBRAUCH: z.verbrauch}
          for z in pos.zaehler],
-        columns=[ZAE_NAME, ZAE_WER, ZAE_ALT, ZAE_NEU, ZAE_VERBRAUCH])
+        columns=[ZAE_NAME, ZAE_WER, ZAE_EINHEIT, ZAE_ALT, ZAE_NEU, ZAE_VERBRAUCH])
 
 
 def df_als_zaehler(df: pd.DataFrame) -> list[Zaehlerstand]:
@@ -242,10 +244,12 @@ def df_als_zaehler(df: pd.DataFrame) -> list[Zaehlerstand]:
             except (TypeError, ValueError):
                 return 0.0
 
+        einheit = r.get(ZAE_EINHEIT)
         staende.append(Zaehlerstand(
             name=name,
             partei=LABEL_ZU_PARTEI.get(str(r.get(ZAE_WER)), "mieter"),
-            alt=wert(ZAE_ALT), neu=wert(ZAE_NEU)))
+            alt=wert(ZAE_ALT), neu=wert(ZAE_NEU),
+            einheit=str(einheit).strip() if pd.notna(einheit) else ""))
     return staende
 
 
@@ -957,7 +961,13 @@ und der Heizungsanteil nach den Wärmemengenzählern.
             p.zaehler_von = "" if gewaehlt == "(eigene Zähler)" else gewaehlt
 
             if p.zaehler_von:
-                st.info(f"Es werden die Zählerstände von **{p.zaehler_von}** benutzt.")
+                if p.zaehler_nur:
+                    st.info("Es werden die Zählerstände von **{}** benutzt, und zwar {}. "
+                            "Du trägst sie also nur einmal ein.".format(
+                                p.zaehler_von,
+                                " und ".join(f"„{n}“" for n in p.zaehler_nur)))
+                else:
+                    st.info(f"Es werden die Zählerstände von **{p.zaehler_von}** benutzt.")
             else:
                 p.zaehler_grundlage = st.radio(
                     "Woraus ergibt sich der Anteil des Mieters?",
@@ -986,10 +996,15 @@ und der Heizungsanteil nach den Wärmemengenzählern.
                             "Stand Ende", min_value=0.0, step=1.0, value=float(z.neu),
                             key=f"zae{i}_{nr}_neu", label_visibility="collapsed",
                             placeholder="Ende")
-                        st.caption(f"Anfang → Ende, Verbrauch {menge(z.verbrauch)} {p.einheit}")
+                        st.caption("Anfang → Ende, Verbrauch "
+                                   f"{menge(z.verbrauch)} {z.einheit or p.einheit}")
                     with st.expander("Zähler umbenennen, zuordnen oder löschen"):
                         for nr, z in enumerate(p.zaehler):
                             z.name = st.text_input("Name", z.name, key=f"zae{i}_{nr}_name")
+                            z.einheit = st.text_input(
+                                "Einheit", z.einheit or p.einheit, key=f"zae{i}_{nr}_einheit",
+                                help="Wasserzähler m³, Wärmemengenzähler kWh, "
+                                     "Gaszähler des Hauses m³.")
                             z.partei = LABEL_ZU_PARTEI.get(st.selectbox(
                                 "Wem gehört der Zähler?", PARTEI_LABELS,
                                 index=PARTEI_LABELS.index(PARTEIEN.get(z.partei,
@@ -1018,6 +1033,10 @@ und der Heizungsanteil nach den Wärmemengenzählern.
                              "gehören – etwa die Außenzapfstelle. Die Menge wird dann nach "
                              "demselben Maßstab geteilt wie die Differenz. Nutzt den "
                              "Außenhahn nur eine Seite, gehört der Zähler zu dieser Wohnung."),
+                            ZAE_EINHEIT: st.column_config.TextColumn(
+                                width="small",
+                                help="Was dieser Zähler misst. Wasserzähler m³, "
+                                     "Wärmemengenzähler kWh, der Gaszähler des Hauses m³."),
                             ZAE_ALT: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
                             ZAE_NEU: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
                             ZAE_VERBRAUCH: st.column_config.NumberColumn(

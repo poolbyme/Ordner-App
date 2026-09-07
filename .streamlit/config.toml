@@ -2,3 +2,8 @@
 # Das Ausliefern von static/ wird für das App-Symbol auf dem Startbildschirm gebraucht.
 [server]
 enableStaticServing = true
+
+# Akzentfarbe für Rahmen, Haken und Regler. Ohne diese Angabe zeichnet Streamlit
+# sie rot, was in der Nebenkosten-App wie eine Fehlermeldung aussieht.
+[theme]
+primaryColor = "#176a94"

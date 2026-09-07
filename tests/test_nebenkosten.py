@@ -751,6 +751,60 @@ def test_umrechnungswerte_werden_mitgespeichert():
     assert wieder.gas_zustandszahl == 0.9563 and wieder.gas_brennwert == 11.024
 
 
+# --- Hilfe und Suche -------------------------------------------------------
+
+def test_jeder_bereich_hat_eine_erklaerung():
+    from nebenkosten import hilfe
+
+    assert set(hilfe.ERKLAERUNGEN) == set(hilfe.BEREICHE)
+    for titel, text in hilfe.ERKLAERUNGEN.values():
+        assert titel and len(text.strip()) > 80
+
+
+def test_themen_zeigen_auf_vorhandene_bereiche():
+    from nebenkosten import hilfe
+
+    for thema in hilfe.THEMEN:
+        assert thema.bereich in hilfe.BEREICHE, thema.titel
+        assert thema.wo, thema.titel
+        assert thema.woerter, thema.titel
+
+
+def test_suche_findet_die_richtige_stelle():
+    from nebenkosten import hilfe
+
+    def bereiche(begriff):
+        return {t.bereich for _, t in hilfe.suche(begriff)}
+
+    assert "kosten" in bereiche("gasrechnung")
+    assert "zaehler" in bereiche("gaszähler")
+    assert "vz" in bereiche("co2")
+    assert "ergebnis" in bereiche("pdf")
+    assert "diese" in bereiche("auszug")
+    assert "haus" in bereiche("iban")
+    assert hilfe.suche("") == []
+    assert hilfe.suche("xyzabc") == []
+
+
+def test_suche_findet_eigene_zeilen_und_zaehler():
+    from nebenkosten import hilfe
+
+    positionen = standard_positionen()
+    treffer = hilfe.suche("außenzapfstelle", positionen)
+    assert any(t.bereich == "zaehler" for _, t in treffer)
+    assert any("Außenzapfstelle" in t.titel for _, t in treffer)
+
+    treffer = hilfe.suche("niederschlag", positionen)
+    assert any(t.bereich == "kosten" for _, t in treffer)
+
+
+def test_suche_sortiert_genaue_treffer_nach_vorne():
+    from nebenkosten import hilfe
+
+    treffer = hilfe.suche("brennwert")
+    assert treffer and treffer[0][1].titel == "Zustandszahl und Brennwert"
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

@@ -26,6 +26,30 @@ Für die Streamlit Community Cloud dieselbe Datei als „Main file path" eintrag
 Die App braucht weder Google-Zugang noch Secrets. Alle Eingaben bleiben in der
 Sitzung und lassen sich über die Seitenleiste als Datei sichern und wieder laden.
 
+### Hilfe und Suche
+
+**Fragezeichen.** Neben der Überschrift jedes Bereichs sitzt ein rundes **?**. Ein Klick
+öffnet, was auf dieser Seite hineingehört – was die einzelnen Felder bedeuten, worauf zu
+achten ist, was die App daraus macht. Die Texte stehen in `nebenkosten/hilfe.py` unter
+`ERKLAERUNGEN`.
+
+**Suchleiste** über der Bereichswahl. Tipp ein, was gerade auf dem Tisch liegt – *Gas*,
+*Wasser*, *Grundsteuer*, *Zähler*, *PDF* – und die App zeigt, wo es hingehört:
+
+```
+Gasrechnung · Aufklapper „Gasrechnung auf Heizung und Warmwasser aufteilen“   → 3 · Kosten
+Gaszähler ablesen · Position „Heizung (Gas)“, Zeile „Gaszähler Haus“          → 4 · Zählerstände
+Zustandszahl und Brennwert · im Gasrechner, Block „Gasverbrauch“              → 3 · Kosten
+```
+
+Ein Klick auf den Knopf springt in den Bereich. Gesucht wird in zwei Quellen: in den
+hinterlegten Themen (`THEMEN` in `hilfe.py`, jeweils mit Suchwörtern, Fundort und
+Kurzhinweis) und in den **eigenen Daten** – eigene Kostenarten und Zählernamen werden
+mitgefunden, auch wenn die Zeile noch abgewählt ist.
+
+Damit die Suche springen kann, ist die Bereichswahl ein Segmentschalter statt fester
+Reiter; der ausgewählte Bereich steht in `st.session_state["bereich"]`.
+
 ### Aussehen
 
 Die Oberfläche bringt ihr eigenes Aussehen mit (`nebenkosten/design.py`): Kopfzeile mit
@@ -395,6 +419,7 @@ nebenkosten/berechnung.py Verteilung, Zählerdifferenz, Zeitanteil, Saldo, Prüf
 nebenkosten/speicher.py   dauerhaftes Speichern und Archiv
 nebenkosten/cloud.py      Ablage in einer Google-Tabelle (für den Cloud-Betrieb)
 nebenkosten/design.py     Aussehen und Anmeldung als App auf dem Startbildschirm
+nebenkosten/hilfe.py      Erklärungen je Bereich und die Suche
 static/                   App-Symbol und manifest.json
 werkzeuge/icon_erzeugen.py  erzeugt das App-Symbol neu
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)

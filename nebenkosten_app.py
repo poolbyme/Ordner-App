@@ -15,7 +15,7 @@ from nebenkosten.berechnung import (
     berechne, co2_vermieteranteil, eur, gas_kwh, menge, parse_datum,
     verbrauchsaufteilung, warmwasser_kwh, zaehlerquelle, zahl,
 )
-from nebenkosten import design, speicher
+from nebenkosten import design, hilfe, speicher
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
@@ -43,7 +43,7 @@ SPALTEN_EINFACH = (SP_AKTIV, SP_NAME, SP_BETRAG, SP_VERTEILUNG, SP_BELEG)
 SPALTEN_ERWEITERT = (SP_AKTIV, SP_NAME, SP_BETRAG, SP_VERTEILUNG, SP_GRUND, SP_LOHN,
                      SP_ZEIT, SP_BELEG)
 
-BEHALTEN = {"stamm", "positionen", "erweitert"}
+BEHALTEN = {"stamm", "positionen", "erweitert", "handy", "bereich"}
 
 
 # --------------------------------------------------------------------------
@@ -54,6 +54,12 @@ def init_state() -> None:
 
     # Nach dem Laden einer Datei müssen die Eingabefelder ihre alten Werte
     # vergessen. Das passiert hier, bevor irgendein Feld gezeichnet wird.
+    if "_ziel_bereich" in st.session_state:
+        st.session_state["bereich"] = st.session_state.pop("_ziel_bereich")
+    if st.session_state.pop("_suche_leeren", False):
+        st.session_state.pop("suche", None)
+    st.session_state.setdefault("bereich", "haus")
+
     if st.session_state.pop("_felder_leeren", False):
         for schluessel in [k for k in st.session_state if k not in BEHALTEN]:
             del st.session_state[schluessel]
@@ -374,16 +380,44 @@ und Rechnungsbeträge.
         """
     )
 
-tab_haus, tab_diese, tab_kosten, tab_zaehler, tab_vz, tab_ergebnis = st.tabs(
-    ["1 · Haus (bleibt gleich)", "2 · Diese Abrechnung", "3 · Kosten",
-     "4 · Zählerstände", "5 · Vorauszahlungen", "6 · Fertige Abrechnung"]
-)
+# --------------------------------------------------------------------------
+# Suche und Navigation
+# --------------------------------------------------------------------------
+begriff = st.text_input(
+    "Suchen", key="suche", placeholder="🔍  Suchen: Gas, Wasser, Zähler, Grundsteuer, PDF …",
+    label_visibility="collapsed",
+    help="Tipp ein, was du gerade in der Hand hast – die App zeigt, wo es hingehört.")
+
+if begriff.strip():
+    treffer = hilfe.suche(begriff, st.session_state.positionen)
+    if not treffer:
+        st.info(f"Zu „{begriff}“ ist nichts hinterlegt. Versuch es mit einem anderen Wort, "
+                "zum Beispiel Gas, Wasser, Müll, Versicherung oder Zähler.")
+    else:
+        with st.container(border=True):
+            st.caption(f"{len(treffer)} Treffer – zum Springen anklicken")
+            for nummer, (_, thema) in enumerate(treffer):
+                zeile, knopfspalte = st.columns([5, 2], vertical_alignment="center")
+                with zeile:
+                    st.markdown(f"**{thema.titel}** · {thema.wo}"
+                                + (f"  \n_{thema.hinweis}_" if thema.hinweis else ""))
+                with knopfspalte:
+                    if st.button(f"→ {hilfe.BEREICHE[thema.bereich]}",
+                                 key=f"treffer_{nummer}", width="stretch"):
+                        st.session_state["_ziel_bereich"] = thema.bereich
+                        st.session_state["_suche_leeren"] = True
+                        st.rerun()
+
+bereich = st.segmented_control(
+    "Bereich", list(hilfe.BEREICHE), key="bereich",
+    format_func=lambda b: hilfe.BEREICHE[b], label_visibility="collapsed") or "haus"
 
 # --------------------------------------------------------------------------
 # 1 Haus und Vermieter – die Daten, die jedes Jahr gleich bleiben
 # --------------------------------------------------------------------------
-with tab_haus:
-    st.caption("Diese Angaben trägst du einmal ein. Die App merkt sie sich dauerhaft.")
+if bereich == "haus":
+    hilfe.ueberschrift("haus", "Haus und Vermieter",
+                       "Diese Angaben trägst du einmal ein. Die App merkt sie sich dauerhaft.")
     links, rechts = st.columns(2)
     with links:
         st.subheader("Du als Vermieter")
@@ -435,8 +469,8 @@ with tab_haus:
 # --------------------------------------------------------------------------
 # 2 Diese Abrechnung – Art, Zeitraum, Mieter
 # --------------------------------------------------------------------------
-with tab_diese:
-    st.subheader("Was für eine Abrechnung ist das?")
+if bereich == "diese":
+    hilfe.ueberschrift("diese", "Was für eine Abrechnung ist das?")
     arten = list(ABRECHNUNGSARTEN)
     stamm.abrechnungsart = st.radio(
         "Art der Abrechnung",
@@ -538,8 +572,8 @@ with tab_diese:
 # --------------------------------------------------------------------------
 # 3 Kosten
 # --------------------------------------------------------------------------
-with tab_kosten:
-    st.subheader("Was hat das Haus in diesem Zeitraum gekostet?")
+if bereich == "kosten":
+    hilfe.ueberschrift("kosten", "Was hat das Haus in diesem Zeitraum gekostet?")
     st.caption(
         "Trag pro Zeile ein, was **für das ganze Haus** angefallen ist – die App rechnet "
         "aus, welcher Anteil auf den Mieter entfällt. Zeilen, die es bei dir nicht gibt, "
@@ -767,8 +801,8 @@ Betrag, den eine Firma dafür nehmen würde, aber ohne Mehrwertsteuer.
 # --------------------------------------------------------------------------
 # 4 Zählerstände
 # --------------------------------------------------------------------------
-with tab_zaehler:
-    st.subheader("Zählerstände")
+if bereich == "zaehler":
+    hilfe.ueberschrift("zaehler", "Zählerstände")
     verbrauchszeilen = [(i, p) for i, p in enumerate(st.session_state.positionen)
                         if p.aktiv and p.schluessel == "verbrauch"]
     if not verbrauchszeilen:
@@ -956,8 +990,8 @@ und der Heizungsanteil nach den Wärmemengenzählern.
 # --------------------------------------------------------------------------
 # 5 Vorauszahlungen
 # --------------------------------------------------------------------------
-with tab_vz:
-    st.subheader("Was hat dein Mieter schon gezahlt?")
+if bereich == "vz":
+    hilfe.ueberschrift("vz", "Was hat dein Mieter schon gezahlt?")
     st.caption(
         "Die monatliche Nebenkostenvorauszahlung aus dem Mietvertrag – der Betrag, den "
         "er zusätzlich zur Kaltmiete überweist."
@@ -1045,8 +1079,9 @@ with tab_vz:
 # --------------------------------------------------------------------------
 # 6 Ergebnis
 # --------------------------------------------------------------------------
-with tab_ergebnis:
+if bereich == "ergebnis":
     ergebnis = berechne(stamm, st.session_state.positionen)
+    hilfe.ueberschrift("ergebnis", "Fertige Abrechnung")
     st.caption(f"{stamm.bezeichnung_abrechnung} für "
                f"{stamm.mieter_name or 'deinen Mieter'} · "
                f"{_fmt(stamm.zeitraum_von)} bis {_fmt(stamm.zeitraum_bis)}")

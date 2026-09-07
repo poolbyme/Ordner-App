@@ -113,6 +113,37 @@ h4 {{ font-size: 1.02rem; margin: 1.4rem 0 .4rem; }}
 [data-baseweb="tab-highlight"], [data-baseweb="tab-border"],
 .react-aria-SelectionIndicator {{ display: none !important; }}
 
+/* ---------- Bereichswahl (Segmentschalter) als Kacheln ---------- */
+.stApp [role="radiogroup"]:has(button[data-variant="segmented_control"]) {{
+    gap: 6px; flex-wrap: wrap; border: none !important; background: transparent !important;
+}}
+.stApp button[data-variant="segmented_control"] {{
+    border-radius: 999px !important; padding: 8px 14px !important;
+    background: var(--nk-flaeche) !important; border: 1px solid var(--nk-rand) !important;
+    color: var(--nk-gedaempft) !important; font-weight: 550; font-size: .88rem;
+    box-shadow: none !important; margin: 0 !important;
+}}
+.stApp button[data-variant="segmented_control"][aria-checked="true"],
+.stApp button[data-variant="segmented_control"][data-selected="true"] {{
+    background: var(--nk-akzent) !important; border-color: var(--nk-akzent) !important;
+    color: #fff !important;
+}}
+.stApp button[data-variant="segmented_control"][aria-checked="true"] p,
+.stApp button[data-variant="segmented_control"][data-selected="true"] p {{
+    color: #fff !important;
+}}
+
+/* ---------- Suche und Fragezeichen ---------- */
+.stApp [data-testid="stTextInput"]:has(input[aria-label="Suchen"]) input {{
+    font-size: .95rem;
+}}
+.stApp [data-testid="stPopover"] button {{
+    border-radius: 50% !important; width: 38px; min-width: 38px; height: 38px;
+    padding: 0 !important; font-size: 1.05rem; font-weight: 700;
+    color: var(--nk-akzent) !important;
+}}
+.stApp [data-testid="stPopover"] button svg {{ display: none; }}
+
 /* ---------- Karten, Kennzahlen, Hinweise ---------- */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {{
     border-radius: var(--nk-radius);

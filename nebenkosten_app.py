@@ -15,7 +15,7 @@ from nebenkosten.berechnung import (
     berechne, co2_vermieteranteil, eur, gas_kwh, menge, parse_datum,
     verbrauchsaufteilung, warmwasser_kwh, zaehlerquelle, zahl,
 )
-from nebenkosten import design, hilfe, pruefung, speicher
+from nebenkosten import design, hilfe, katalog, pruefung, speicher
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
@@ -142,9 +142,15 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position],
         vorrat.setdefault(p.bezeichnung.strip().lower(), []).append(p)
 
     positionen: list[Position] = []
+    abgelehnt: list[tuple[str, str]] = []
     for _, r in df.iterrows():
         name = str(r.get(SP_NAME) or "").strip()
         if not name:
+            continue
+        grund = katalog.verboten(name)
+        if grund:
+            # Solche Kosten dürfen nicht auf den Mieter – die Zeile wird nicht übernommen.
+            abgelehnt.append((name, grund))
             continue
 
         def zahlwert(spalte: str, standard: float = 0.0) -> float:
@@ -176,6 +182,7 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position],
             aktiv=bool(r.get(SP_AKTIV, True)),
             hinweis=str(r.get(SP_BELEG) or ""),
         ))
+    st.session_state["_abgelehnt"] = abgelehnt + st.session_state.get("_abgelehnt", [])
     return positionen
 
 
@@ -580,6 +587,33 @@ if bereich == "kosten":
         "einfach links abwählen. Eigene Zeilen unten anfügen."
     )
 
+    st.session_state["_abgelehnt"] = []
+
+    def kostenart_anbieten(schluessel: str, vorhandene: list[Position]) -> None:
+        """Auswahl aus dem Katalog der abrechenbaren Kostenarten."""
+        namen = {p.bezeichnung for p in vorhandene}
+        offen = [k for k in katalog.nach_kategorie(schluessel) if k.name not in namen]
+        if not offen:
+            return
+        with st.expander(f"➕ Kostenart hinzufügen ({len(offen)} zur Auswahl)"):
+            wahl = st.selectbox(
+                "Nur was hier steht, darf auf den Mieter umgelegt werden",
+                offen, format_func=lambda k: f"{k.name}  ·  {k.nummer}",
+                key=f"neu_{schluessel}")
+            st.caption(wahl.erlaeuterung)
+            erlaubt = True
+            if wahl.vertrag_noetig:
+                erlaubt = st.checkbox(
+                    "Diese Kosten sind in meinem Mietvertrag ausdrücklich benannt",
+                    key=f"vertrag_{schluessel}",
+                    help="Sonstige Betriebskosten nach § 2 Nr. 17 BetrKV darfst du nur "
+                         "abrechnen, wenn sie im Mietvertrag beim Namen genannt sind.")
+            if st.button("Hinzufügen", key=f"add_{schluessel}", disabled=not erlaubt,
+                         width="stretch"):
+                st.session_state.positionen.append(aus_katalog(wahl.name))
+                sichern()
+                neu_zeichnen()
+
     def kategorie_positionen(schluessel: str) -> list[Position]:
         return [p for p in st.session_state.positionen if p.kategorie == schluessel]
 
@@ -673,6 +707,11 @@ if bereich == "kosten":
                 },
             )
             zusammenfuehren(schluessel, df_als_positionen(bearbeitet, gruppe, schluessel))
+            kostenart_anbieten(schluessel, kategorie_positionen(schluessel))
+
+    for name, grund in st.session_state.get("_abgelehnt", []):
+        st.error(f"**„{name}“ kann nicht abgerechnet werden.** {grund}\n\n"
+                 "Die Zeile wurde deshalb nicht übernommen.")
 
     summe = sum(p.betrag for p in st.session_state.positionen if p.aktiv)
     st.info(f"Kosten des Hauses insgesamt: **{eur(summe)} €**")
@@ -776,26 +815,32 @@ if bereich == "kosten":
             st.caption("Trag Warmwassermenge, Gasverbrauch und Gaskosten ein, dann rechnet "
                        "die App die Aufteilung aus.")
 
-    with st.expander("Was darfst du überhaupt abrechnen?"):
+    with st.expander("📋 Alle Kosten, die du abrechnen darfst"):
+        st.caption(
+            "Die Betriebskostenverordnung zählt abschließend auf, was auf den Mieter "
+            "umgelegt werden darf. Was hier nicht steht, ist keine Betriebskostenart."
+        )
+        for schluessel, name in KATEGORIEN.items():
+            st.markdown(f"**{name}**")
+            for art in katalog.nach_kategorie(schluessel):
+                zusatz = " · nur mit Vereinbarung im Mietvertrag" if art.vertrag_noetig else ""
+                st.markdown(f"- **{art.name}** ({art.nummer}{zusatz})  \n"
+                            f"  <span style='color:#5b6b7c'>{art.erlaeuterung}</span>",
+                            unsafe_allow_html=True)
+
+    with st.expander("🚫 Was nicht in die Abrechnung darf"):
+        st.caption(
+            "Diese Zeilen nimmt die App gar nicht erst an. Solche Kosten trägt der "
+            "Eigentümer – sie lassen sich nur über die Miete weitergeben, nicht über "
+            "die Nebenkosten."
+        )
+        for woerter, grund in katalog.VERBOTEN:
+            beispiele = ", ".join(w.strip().capitalize() for w in woerter[:5])
+            st.markdown(f"- **{beispiele} …** – {grund}")
         st.markdown(
-            """
-**Ja:** laufende Kosten, die jedes Jahr wieder anfallen – Grundsteuer, Wasser, Abwasser,
-Müll, Heizung, Schornsteinfeger, Gebäude- und Haftpflichtversicherung, Allgemeinstrom,
-Gartenpflege, Straßenreinigung, Winterdienst, Hausmeisterlohn.
-
-**Nein:** alles, was das Haus in Ordnung hält oder deine eigene Verwaltung betrifft –
-Reparaturen, neue Fenster, Heizungsaustausch, Rücklagen, Kontogebühren, dein Aufwand
-fürs Abrechnen, Rechtsschutz- und Mietausfallversicherung.
-
-**Aufpassen bei Wartungsrechnungen:** Steht auf der Rechnung Wartung *und* Reparatur,
-darf nur der Wartungsanteil in die Abrechnung.
-
-**Kabelanschluss** darf seit dem 01.07.2024 nicht mehr über die Nebenkosten abgerechnet
-werden.
-
-**Eigene Arbeit** (du mähst den Rasen, räumst Schnee) darfst du ansetzen – mit dem
-Betrag, den eine Firma dafür nehmen würde, aber ohne Mehrwertsteuer.
-            """
+            "Aufpassen bei gemischten Rechnungen: Steht auf einer Rechnung Wartung "
+            "**und** Reparatur, darf nur der Wartungsanteil in die Abrechnung. Trag dann "
+            "nur diesen Teilbetrag ein."
         )
 
 # --------------------------------------------------------------------------

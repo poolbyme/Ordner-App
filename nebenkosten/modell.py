@@ -225,12 +225,34 @@ class Stammdaten:
         return float(self.vorauszahlung_monatlich) * int(self.vorauszahlung_monate)
 
 
-def standard_positionen() -> list[Position]:
-    """Alles, was auf einen Mieter umgelegt werden darf (§ 2 BetrKV), nach Bereichen.
+# Diese Kostenarten sind beim ersten Start dabei; alles Weitere lässt sich in
+# der App aus dem Katalog hinzufügen.
+VORBELEGT = (
+    "Wasser", "Abwasser", "Niederschlagswasser",
+    "Heizung (Gas)", "Warmwasser (Gas)", "Heizungswartung", "Schornsteinfeger",
+    "Grundsteuer", "Müllabfuhr", "Straßenreinigung und Winterdienst",
+    "Gartenpflege", "Allgemeinstrom", "Versicherungen",
+)
 
-    Aktiv ist, was in einem Zweifamilienhaus mit Gasheizung üblicherweise anfällt.
-    Der Rest steht bereit, ist aber abgewählt. Der Hinweis sagt, welcher Beleg
-    dazugehört und worauf zu achten ist.
+
+def aus_katalog(name: str, **abweichungen) -> Position:
+    """Position aus dem Katalog der abrechenbaren Kostenarten bauen."""
+    from .katalog import finde
+
+    art = finde(name)
+    if art is None:
+        return Position(name, **abweichungen)
+    werte = dict(kategorie=art.kategorie, schluessel=art.schluessel,
+                 hinweis=f"{art.erlaeuterung} ({art.nummer})")
+    werte.update(abweichungen)
+    return Position(art.name, **werte)
+
+
+def standard_positionen() -> list[Position]:
+    """Die Kostenarten, mit denen die App startet – ein üblicher Zweifamilienhaus-Satz.
+
+    Jede Zeile stammt aus dem Katalog in `nebenkosten/katalog.py`; dort steht
+    auch die Fundstelle in der Betriebskostenverordnung.
     """
     wasserzaehler = [
         Zaehlerstand("Hauptzähler Wasser", "haus"),
@@ -240,100 +262,25 @@ def standard_positionen() -> list[Position]:
         Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
         Zaehlerstand("Außenzapfstelle / Garten", "vermieter"),
     ]
-    return [
-        # --- Wasser und Abwasser ------------------------------------------
-        Position("Wasser", "wasser", schluessel="verbrauch", einheit="m³",
-                 zaehler=wasserzaehler,
-                 hinweis="Jahresrechnung des Wasserversorgers (Verbrauchsgebühr)"),
-        Position("Abwasser", "wasser", schluessel="verbrauch", einheit="m³",
-                 zaehler_von="Wasser",
-                 hinweis="Schmutzwassergebühr der Gemeinde, meist auf die Frischwassermenge"),
-        Position("Niederschlagswasser", "wasser", schluessel="flaeche",
-                 hinweis="Regenwassergebühr, meist nach versiegelter Fläche berechnet"),
-        Position("Grundgebühr Wasser / Zählermiete", "wasser", schluessel="flaeche", aktiv=False,
-                 hinweis="verbrauchsunabhängiger Teil der Wasserrechnung"),
-        Position("Eichung und Wartung der Wasserzähler", "wasser", schluessel="flaeche",
-                 aktiv=False,
-                 hinweis="§ 2 Nr. 2 BetrKV – Miete, Eichung und Ablesung der Zähler"),
-        Position("Wasseraufbereitung / Enthärtungsanlage", "wasser", schluessel="flaeche",
-                 aktiv=False,
-                 hinweis="§ 2 Nr. 2 BetrKV – Betrieb und Salz, keine Anschaffung"),
-        Position("Abwasserhebeanlage / Pumpe", "wasser", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 3 BetrKV – Strom und Wartung, keine Reparatur"),
-        Position("Legionellenprüfung", "wasser", schluessel="flaeche", aktiv=False,
-                 hinweis="nur bei zentraler Warmwasseranlage über 400 l Speicher; "
-                         "im Zweifamilienhaus meist nicht nötig"),
-
-        # --- Heizung und Warmwasser ---------------------------------------
-        Position("Heizung (Gas)", "gas", schluessel="verbrauch", einheit="kWh",
-                 zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
-                 zaehler=[
-                     Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus"),
-                     Zaehlerstand("Wärmemenge Fußbodenheizung Mieter", "mieter"),
-                     Zaehlerstand("Wärmemenge Fußbodenheizung eigene Wohnung", "vermieter"),
-                     Zaehlerstand("Wärmemenge Heizkörper eigene Wohnung", "vermieter"),
-                 ],
-                 hinweis="Gasrechnung ohne den Warmwasseranteil – siehe Rechner im Tab Kosten"),
-        Position("Warmwasser (Gas)", "gas", schluessel="verbrauch", einheit="m³",
-                 zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
-                 zaehler=[
-                     Zaehlerstand("Warmwasser Mieter", "mieter"),
-                     Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
-                 ],
-                 hinweis="Anteil der Gaskosten für die Warmwasserbereitung"),
-        Position("Heizungswartung", "gas", schluessel="flaeche",
-                 hinweis="jährliche Wartung – Reparaturen auf derselben Rechnung müssen raus"),
-        Position("Schornsteinfeger", "gas", schluessel="flaeche",
-                 hinweis="Kehr- und Messgebühren, wenn nicht schon in der Heizung enthalten"),
-        Position("Betriebsstrom der Heizung", "gas", schluessel="flaeche", aktiv=False,
-                 hinweis="Strom für Brenner, Pumpen und Steuerung; oft pauschal geschätzt"),
-        Position("Miete und Eichung der Wärmezähler", "gas", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 4a BetrKV – Ausstattung zur Verbrauchserfassung"),
-        Position("Kosten der Heizkostenabrechnung", "gas", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 4a BetrKV – Ablesung, Berechnung und Aufteilung durch einen "
-                         "Abrechnungsdienst; ausdrücklich umlagefähig"),
-        Position("Tankreinigung / Immissionsmessung", "gas", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 4a BetrKV – bei Öl- oder Flüssiggasheizung"),
-
-        # --- Sonstige Betriebskosten --------------------------------------
-        Position("Grundsteuer", "sonstiges", schluessel="flaeche",
-                 hinweis="Grundsteuerbescheid der Gemeinde"),
-        Position("Müllabfuhr", "sonstiges", schluessel="personen",
-                 hinweis="Gebührenbescheid; bei eigener Tonne „nur der Mieter“ wählen"),
-        Position("Straßenreinigung und Winterdienst", "sonstiges", schluessel="flaeche",
-                 hinweis="Gebührenbescheid oder Rechnung des Dienstleisters"),
-        Position("Gartenpflege", "sonstiges", schluessel="flaeche",
-                 hinweis="Rechnungen der Gärtnerei; eigene Arbeit darf zum üblichen Preis "
-                         "ohne Mehrwertsteuer angesetzt werden"),
-        Position("Allgemeinstrom", "sonstiges", schluessel="flaeche",
-                 hinweis="Strom für Flur, Keller, Außenbeleuchtung"),
-        Position("Versicherungen", "sonstiges", schluessel="flaeche",
-                 hinweis="Gebäude-, Haftpflicht- und Elementarversicherung; keine "
-                         "Rechtsschutz-, Reparatur- oder Mietausfallversicherung"),
-        Position("Gebäudereinigung", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="Treppenhaus, Keller, Zugänge"),
-        Position("Ungezieferbekämpfung", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="nur laufende Vorbeugung, keine einmalige Beseitigung"),
-        Position("Hausmeister", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="Lohn ohne Reparatur- und Verwaltungsanteil"),
-        Position("Rauchwarnmelder – Wartung", "sonstiges", schluessel="einheiten", aktiv=False,
-                 hinweis="Wartung ist umlagefähig, wenn im Mietvertrag als sonstige "
-                         "Betriebskosten benannt; die Miete der Geräte ist es nicht (BGH 2022)"),
-        Position("Dachrinnenreinigung", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="nur wenn regelmäßig wiederkehrend und im Mietvertrag benannt"),
-        Position("Wartung der Lüftungsanlage", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="nur wenn im Mietvertrag als sonstige Betriebskosten benannt"),
-        Position("Prüfung der Elektroanlage", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="wiederkehrender E-Check; umstritten, nur mit Vereinbarung im Vertrag"),
-        Position("Aufzug", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="Wartung, Notruf, Strom"),
-        Position("Gemeinsame Waschmaschine", "sonstiges", schluessel="einheiten", aktiv=False,
-                 hinweis="Strom und Wartung gemeinsam genutzter Geräte"),
-        Position("Kabelanschluss", "sonstiges", schluessel="einheiten", aktiv=False,
-                 hinweis="seit 01.07.2024 nicht mehr über die Nebenkosten umlegbar"),
-        Position("Sonstiges", "sonstiges", schluessel="flaeche", aktiv=False,
-                 hinweis="§ 2 Nr. 17 BetrKV – nur wenn im Mietvertrag ausdrücklich benannt"),
-    ]
+    besonderheiten = {
+        "Wasser": dict(einheit="m³", zaehler=wasserzaehler),
+        "Abwasser": dict(einheit="m³", zaehler_von="Wasser"),
+        "Heizung (Gas)": dict(
+            einheit="kWh", zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
+            zaehler=[
+                Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus"),
+                Zaehlerstand("Wärmemenge Fußbodenheizung Mieter", "mieter"),
+                Zaehlerstand("Wärmemenge Fußbodenheizung eigene Wohnung", "vermieter"),
+                Zaehlerstand("Wärmemenge Heizkörper eigene Wohnung", "vermieter"),
+            ]),
+        "Warmwasser (Gas)": dict(
+            einheit="m³", zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
+            zaehler=[
+                Zaehlerstand("Warmwasser Mieter", "mieter"),
+                Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
+            ]),
+    }
+    return [aus_katalog(name, **besonderheiten.get(name, {})) for name in VORBELEGT]
 
 
 def sicht_vermieter(s: Stammdaten) -> Stammdaten:

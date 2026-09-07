@@ -656,11 +656,14 @@ def test_ergebnis_gruppiert_nach_kategorie():
     assert round(sum(g[3] for g in gruppen), 2) == e.summe_anteil
 
 
-def test_neue_umlagefaehige_positionen_sind_vorhanden():
-    namen = {p.bezeichnung for p in standard_positionen()}
+def test_katalog_enthaelt_die_umlagefaehigen_kostenarten():
+    from nebenkosten import katalog
+
+    namen = {k.name for k in katalog.KATALOG}
     for pflicht in ("Niederschlagswasser", "Kosten der Heizkostenabrechnung",
                     "Rauchwarnmelder – Wartung", "Grundgebühr Wasser / Zählermiete",
-                    "Legionellenprüfung", "Betriebsstrom der Heizung"):
+                    "Legionellenprüfung", "Betriebsstrom der Heizung",
+                    "Baumpflege und Baumfällung", "Aufzug", "Hausmeister"):
         assert pflicht in namen, pflicht
 
 
@@ -902,6 +905,71 @@ def test_pruefung_erinnert_an_die_iban_nur_bei_nachzahlung():
     s.vorauszahlung_monatlich = 500.0       # Guthaben -> keine IBAN nötig
     bericht = pruefung.pruefe(s, positionen, berechne(s, positionen))
     assert not any("IBAN" in p.was for p in bericht.kann)
+
+
+# --- Katalog: was rein darf und was gesperrt ist ---------------------------
+
+def test_jede_kostenart_nennt_ihre_fundstelle():
+    from nebenkosten import katalog
+
+    for art in katalog.KATALOG:
+        assert art.nummer.startswith("§ 2 Nr."), art.name
+        assert art.kategorie in ("wasser", "gas", "sonstiges"), art.name
+        assert art.erlaeuterung, art.name
+        assert art.schluessel in SCHLUESSEL_ERLAUBT, art.name
+
+
+SCHLUESSEL_ERLAUBT = {"flaeche", "personen", "einheiten", "verbrauch",
+                      "direkt", "direkt_vermieter"}
+
+
+def test_verbotene_kosten_werden_erkannt():
+    from nebenkosten import katalog
+
+    for name in ("Renovierung Treppenhaus", "Reparatur der Heizung",
+                 "Schönheitsreparaturen", "Malerarbeiten Flur", "Hausverwaltung",
+                 "Kontoführungsgebühren", "Instandhaltungsrücklage", "Mietausfallwagnis",
+                 "Anwaltskosten", "Sanierung Bad", "Modernisierung Fenster",
+                 "Neuanschaffung Rasenmäher", "Kaution"):
+        assert katalog.verboten(name), name
+
+
+def test_erlaubte_kosten_werden_nicht_gesperrt():
+    """Wartung, Pflege und Abrechnungsdienst sind zulässig – trotz ähnlicher Wörter."""
+    from nebenkosten import katalog
+
+    for art in katalog.KATALOG:
+        assert not katalog.verboten(art.name), art.name
+    for name in ("Heizungswartung", "Wartung der Lüftungsanlage", "Baumpflege",
+                 "Kosten der Heizkostenabrechnung", "Eichung und Wartung der Wasserzähler",
+                 "Gartenpflege", "Ungezieferbekämpfung"):
+        assert not katalog.verboten(name), name
+
+
+def test_katalog_deckt_die_startzeilen_ab():
+    from nebenkosten import katalog
+
+    for pos in standard_positionen():
+        art = katalog.finde(pos.bezeichnung)
+        assert art is not None, pos.bezeichnung
+        assert pos.kategorie == art.kategorie
+        assert art.nummer in pos.hinweis
+
+
+def test_uebliche_kostenarten_der_pruefung_gibt_es_wirklich():
+    from nebenkosten import katalog, pruefung
+
+    for name in pruefung.UEBLICH:
+        assert katalog.finde(name) is not None, name
+
+
+def test_sonstige_betriebskosten_brauchen_eine_vereinbarung():
+    from nebenkosten import katalog
+
+    mit_vertrag = [k for k in katalog.KATALOG if k.vertrag_noetig]
+    assert mit_vertrag
+    for art in mit_vertrag:
+        assert "Nr. 17" in art.nummer, art.name
 
 
 if __name__ == "__main__":

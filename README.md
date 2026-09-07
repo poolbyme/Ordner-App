@@ -145,42 +145,94 @@ Daumen bedienen lassen. Gerechnet wird in beiden Ansichten gleich.
 
 Der Ablageort steht in der App selbst: Seitenleiste → „Wo liegen meine Daten?".
 
-### Kostenarten nach Bereichen
+### Was abgerechnet werden darf – und was nicht
 
-Die Kosten sind in drei Bereiche gegliedert, im Eingabetab wie im PDF – dort mit
-Zwischensummen je Bereich:
+Die Betriebskostenverordnung zählt **abschließend** auf, was auf den Mieter umgelegt
+werden darf. Alles Abrechenbare steht in `nebenkosten/katalog.py`; die Liste ist
+gleichzeitig die Auswahl in der App. Unter jeder Kostentabelle sitzt
+**„➕ Kostenart hinzufügen“** mit den noch nicht benutzten Einträgen des Bereichs, samt
+Fundstelle und Erläuterung.
 
-**Wasser und Abwasser** — Wasser, Abwasser, Niederschlagswasser, Grundgebühr und
-Zählermiete, Eichung und Wartung der Wasserzähler, Wasseraufbereitung,
-Abwasserhebeanlage, Legionellenprüfung
+**Wasser und Abwasser**
 
-**Heizung und Warmwasser** — Heizung, Warmwasser, Heizungswartung, Schornsteinfeger,
-Betriebsstrom der Heizung, Miete und Eichung der Wärmezähler, Kosten der
-Heizkostenabrechnung, Tankreinigung und Immissionsmessung
+| Kostenart | Fundstelle | Erläuterung |
+| --- | --- | --- |
+| Wasser | § 2 Nr. 2 | Verbrauchsgebühr des Wasserversorgers |
+| Grundgebühr Wasser / Zählermiete | § 2 Nr. 2 | verbrauchsunabhängiger Teil der Wasserrechnung |
+| Eichung und Wartung der Wasserzähler | § 2 Nr. 2 | Miete, Eichung und Ablesung der Zähler |
+| Wasseraufbereitung / Enthärtungsanlage | § 2 Nr. 2 | Betrieb und Aufbereitungsstoffe, keine Anschaffung |
+| Betrieb einer eigenen Wasserversorgung | § 2 Nr. 2 | Hausbrunnen oder eigene Pumpe: Strom und Wartung |
+| Abwasser | § 2 Nr. 3 | Schmutzwassergebühr der Gemeinde |
+| Niederschlagswasser | § 2 Nr. 3 | Regenwassergebühr, meist nach versiegelter Fläche |
+| Abwasserhebeanlage / Pumpe | § 2 Nr. 3 | Strom und Wartung, keine Reparatur |
+| Entleerung von Grube oder Kleinkläranlage | § 2 Nr. 3 | regelmäßige Entleerung und Überprüfung |
+| Legionellenprüfung | § 2 Nr. 5a | nur bei zentraler Warmwasseranlage über 400 l Speicher |
 
-**Sonstige Betriebskosten** — Grundsteuer, Müllabfuhr, Straßenreinigung und
-Winterdienst, Gartenpflege, Allgemeinstrom, Versicherungen, Gebäudereinigung,
-Ungezieferbekämpfung, Hausmeister, Rauchwarnmelder-Wartung, Dachrinnenreinigung,
-Wartung der Lüftungsanlage, Prüfung der Elektroanlage, Aufzug, gemeinsame
-Waschmaschine, Kabelanschluss, Sonstiges
+**Heizung und Warmwasser**
 
-Aktiv ist, was in einem Zweifamilienhaus mit Gasheizung üblich ist; der Rest steht
-abgewählt bereit. Eigene Zeilen lassen sich in jedem Bereich anfügen.
+| Kostenart | Fundstelle | Erläuterung |
+| --- | --- | --- |
+| Heizung (Gas) | § 2 Nr. 4a | Erdgas für die Heizung, ohne den Warmwasseranteil |
+| Heizung (Öl) | § 2 Nr. 4a | Heizöl einschließlich Lieferung |
+| Heizung (Pellets, Holz) | § 2 Nr. 4a | Brennstoff einschließlich Lieferung |
+| Fernwärme | § 2 Nr. 4c | Wärmelieferung und Betrieb der Hausanlage |
+| Betriebsstrom der Heizung | § 2 Nr. 4a | Strom für Brenner, Pumpen und Steuerung |
+| Heizungswartung | § 2 Nr. 4a | jährliche Wartung, Einstellung durch die Fachkraft |
+| Reinigung der Heizanlage und des Heizraums | § 2 Nr. 4a | Reinigung von Anlage, Betriebsraum und Öltank |
+| Schornsteinfeger | § 2 Nr. 12 | Kehr- und Messgebühren, Feuerstättenschau |
+| Tankreinigung / Immissionsmessung | § 2 Nr. 4a | bei Öl- oder Flüssiggasheizung |
+| Miete und Eichung der Wärmezähler | § 2 Nr. 4a | Ausstattung zur Verbrauchserfassung |
+| Kosten der Heizkostenabrechnung | § 2 Nr. 4a | Ablesung, Berechnung und Aufteilung durch einen Dienstleister |
+| Wartung der Etagenheizung | § 2 Nr. 4d | Reinigung und Wartung von Gasetagenheizungen |
+| Warmwasser (Gas) | § 2 Nr. 5a | Anteil der Gaskosten für die Warmwasserbereitung |
+| Warmwasser (Strom, Boiler) | § 2 Nr. 5c | Strom für gesonderte Warmwassergeräte |
 
-Drei Positionen werden oft übersehen und sind trotzdem umlagefähig:
+**Sonstige Betriebskosten**
 
-* **Kosten der Heizkostenabrechnung** – Ablesung, Berechnung und Aufteilung durch einen
-  Abrechnungsdienst (§ 2 Nr. 4a BetrKV). Der einzige Fall, in dem Abrechnungsaufwand
-  auf den Mieter darf.
-* **Miete und Eichung der Zähler** – für Wärme- und Wasserzähler.
-* **Niederschlagswassergebühr** – wird gern mit der Abwassergebühr verwechselt und dann
-  gar nicht umgelegt.
+| Kostenart | Fundstelle | Erläuterung |
+| --- | --- | --- |
+| Grundsteuer | § 2 Nr. 1 | Grundsteuerbescheid der Gemeinde |
+| Aufzug | § 2 Nr. 7 | Strom, Wartung, Notruf, Überwachung, Reinigung |
+| Straßenreinigung und Winterdienst | § 2 Nr. 8 | Gebühr der Gemeinde oder Rechnung des Dienstleisters |
+| Müllabfuhr | § 2 Nr. 8 | Gebührenbescheid; bei eigener Tonne direkt zuordnen |
+| Sperrmüll (regelmäßig) | § 2 Nr. 8 | nur wiederkehrende Abfuhr, keine einmalige Entrümpelung |
+| Gebäudereinigung | § 2 Nr. 9 | Treppenhaus, Keller, Zugänge, Waschküche |
+| Ungezieferbekämpfung | § 2 Nr. 9 | laufende Vorbeugung, keine einmalige Beseitigung |
+| Gartenpflege | § 2 Nr. 10 | Pflege der Grünflächen, Zugänge und Spielplätze; eigene Arbeit zum üblichen Preis ohne Mehrwertsteuer |
+| Baumpflege und Baumfällung | § 2 Nr. 10 | Schnitt und das Fällen kranker Bäume samt Ersatzpflanzung |
+| Allgemeinstrom | § 2 Nr. 11 | Licht in Flur, Keller, Hof und Außenbereich |
+| Versicherungen | § 2 Nr. 13 | Gebäude-, Elementar-, Glas- und Haftpflichtversicherung |
+| Hausmeister | § 2 Nr. 14 | Lohn ohne Reparatur- und Verwaltungsanteil |
+| Gemeinsame Waschmaschine | § 2 Nr. 16 | Strom, Wasser und Wartung gemeinsam genutzter Geräte |
+| Rauchwarnmelder – Wartung *(nur mit Vereinbarung)* | § 2 Nr. 17 | nur die Wartung; die Miete der Geräte ist nicht umlagefähig |
+| Dachrinnenreinigung *(nur mit Vereinbarung)* | § 2 Nr. 17 | nur bei regelmäßiger Wiederkehr |
+| Wartung der Lüftungsanlage *(nur mit Vereinbarung)* | § 2 Nr. 17 | Lüftung, Dunstabzug, Wärmerückgewinnung |
+| Prüfung der Elektroanlage *(nur mit Vereinbarung)* | § 2 Nr. 17 | wiederkehrender E-Check |
+| Wartung der Feuerlöscher *(nur mit Vereinbarung)* | § 2 Nr. 17 | wiederkehrende Prüfung |
+| Prüfung der Blitzschutzanlage *(nur mit Vereinbarung)* | § 2 Nr. 17 | wiederkehrende Prüfung |
+| Wartung von Tür- und Toranlagen *(nur mit Vereinbarung)* | § 2 Nr. 17 | Garagentor, Türschließanlage, Gegensprechanlage |
+| Betrieb von Schwimmbad oder Sauna *(nur mit Vereinbarung)* | § 2 Nr. 17 | laufender Betrieb gemeinschaftlicher Anlagen |
+| Kabelanschluss (bis 30.06.2024) | § 2 Nr. 15 | Seit dem 01.07.2024 nicht mehr über die Nebenkosten umlegbar. Nur für Zeiträume davor. |
 
-Vier Positionen setzen voraus, dass sie im Mietvertrag ausdrücklich als sonstige
-Betriebskosten benannt sind (§ 2 Nr. 17 BetrKV): Rauchwarnmelder-Wartung,
-Dachrinnenreinigung, Wartung der Lüftungsanlage, Prüfung der Elektroanlage. Bei
-Rauchwarnmeldern ist außerdem nur die Wartung umlagefähig, nicht die Miete der Geräte
-(BGH 2022).
+Kostenarten nach **§ 2 Nr. 17** (sonstige Betriebskosten) dürfen nur abgerechnet werden,
+wenn sie im Mietvertrag ausdrücklich beim Namen genannt sind. Die App fragt beim
+Hinzufügen danach.
+
+**Gesperrt.** Trägt man eine Kostenart ein, deren Bezeichnung auf nicht umlagefähige
+Kosten hindeutet, nimmt die App die Zeile nicht an und sagt, warum:
+
+* **Reparatur, Instandhaltung, Instandsetzung, Reparieren …** – Reparatur und Instandhaltung halten das Haus in Ordnung. Diese Kosten trägt der Eigentümer (§ 1 Abs. 2 Nr. 2 BetrKV).
+* **Renovierung, Renovieren, Schönheitsrepar, Schoenheitsrepar …** – Renovierung und Schönheitsreparaturen sind keine laufenden Betriebskosten.
+* **Sanierung, Modernisierung, Dämmung, Daemmung …** – Sanierung und Modernisierung sind Investitionen in das Haus, keine Betriebskosten. Sie können nur über eine Mieterhöhung weitergegeben werden.
+* **Verwaltung, Verwalter, Hausverwaltung, Kontoführung …** – Verwaltungskosten trägt der Vermieter (§ 1 Abs. 2 Nr. 1 BetrKV) – auch dein eigener Aufwand fürs Abrechnen.
+* **Rücklage, Ruecklage, Instandhaltungsrücklage …** – Rücklagen sind Vorsorge für künftige Reparaturen, keine angefallenen Betriebskosten.
+* **Mietausfall, Leerstand, Kaution, Mietminderung …** – Das ist das unternehmerische Risiko des Vermieters.
+* **Rechtsschutz, Anwalt, Gericht, Inkasso …** – Rechtsverfolgung gehört nicht zu den Betriebskosten.
+
+Die Sperre greift über die Bezeichnung der Zeile. Sie ersetzt kein Nachdenken: Wer
+Renovierungskosten in eine Zeile „Sonstiges“ schreibt, kommt daran vorbei. Bei
+gemischten Rechnungen (Wartung *und* Reparatur) gehört nur der Wartungsanteil in die
+Abrechnung.
 
 ### Was einmal eingetragen wird und was jedes Jahr neu
 
@@ -446,6 +498,7 @@ nebenkosten/cloud.py      Ablage in einer Google-Tabelle (für den Cloud-Betrieb
 nebenkosten/design.py     Aussehen und Anmeldung als App auf dem Startbildschirm
 nebenkosten/hilfe.py      Erklärungen je Bereich und die Suche
 nebenkosten/pruefung.py   Vollständigkeitsprüfung vor dem Abschließen
+nebenkosten/katalog.py    alle abrechenbaren Kostenarten und die Sperrliste
 static/                   App-Symbol und manifest.json
 werkzeuge/icon_erzeugen.py  erzeugt das App-Symbol neu
 nebenkosten/pdf.py        PDF-Erzeugung (fpdf2)

@@ -12,12 +12,12 @@ import pandas as pd
 import streamlit as st
 
 from nebenkosten.berechnung import (
-    berechne, eur, menge, parse_datum, verbrauchsaufteilung, zahl,
+    berechne, eur, menge, parse_datum, verbrauchsaufteilung, zaehlerquelle, zahl,
 )
 from nebenkosten import speicher
 from nebenkosten.modell import (
-    ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, SCHLUESSEL, Position, Stammdaten,
-    as_dict, from_dict, standard_positionen,
+    ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, PARTEIEN, SCHLUESSEL, ZAEHLER_GRUNDLAGE,
+    Position, Stammdaten, Zaehlerstand, as_dict, from_dict, standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
@@ -125,22 +125,54 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position]) -> list[Posit
             bezeichnung=name,
             betrag=zahlwert(SP_BETRAG),
             schluessel=LABEL_ZU_KEY.get(str(r.get(SP_VERTEILUNG)), "flaeche"),
+            einheit=vorgaenger.einheit if vorgaenger else "",
+            zaehler=vorgaenger.zaehler if vorgaenger else [],
+            zaehler_grundlage=vorgaenger.zaehler_grundlage if vorgaenger else "hauptzaehler",
+            zaehler_von=vorgaenger.zaehler_von if vorgaenger else "",
             verbrauch_gesamt=vorgaenger.verbrauch_gesamt if vorgaenger else 0.0,
             verbrauch_mieter=vorgaenger.verbrauch_mieter if vorgaenger else 0.0,
-            zaehler_haus_alt=vorgaenger.zaehler_haus_alt if vorgaenger else 0.0,
-            zaehler_haus_neu=vorgaenger.zaehler_haus_neu if vorgaenger else 0.0,
-            zaehler_mieter_alt=vorgaenger.zaehler_mieter_alt if vorgaenger else 0.0,
-            zaehler_mieter_neu=vorgaenger.zaehler_mieter_neu if vorgaenger else 0.0,
-            zaehler_eigen_alt=vorgaenger.zaehler_eigen_alt if vorgaenger else 0.0,
-            zaehler_eigen_neu=vorgaenger.zaehler_eigen_neu if vorgaenger else 0.0,
             verbrauch_eigen_direkt=vorgaenger.verbrauch_eigen_direkt if vorgaenger else 0.0,
-            einheit=vorgaenger.einheit if vorgaenger else "",
             arbeitskosten=zahlwert(SP_LOHN, vorgaenger.arbeitskosten if vorgaenger else 0.0),
             zeitanteilig=bool(r.get(SP_ZEIT, vorgaenger.zeitanteilig if vorgaenger else True)),
             aktiv=bool(r.get(SP_AKTIV, True)),
             hinweis=str(r.get(SP_BELEG) or ""),
         ))
     return positionen
+
+
+ZAE_NAME, ZAE_WER = "Zähler", "Wer"
+ZAE_ALT, ZAE_NEU, ZAE_VERBRAUCH = "Stand Anfang", "Stand Ende", "Verbrauch"
+PARTEI_LABELS = list(PARTEIEN.values())
+LABEL_ZU_PARTEI = {v: k for k, v in PARTEIEN.items()}
+
+
+def zaehler_als_df(pos: Position) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{ZAE_NAME: z.name, ZAE_WER: PARTEIEN.get(z.partei, PARTEIEN["mieter"]),
+           ZAE_ALT: float(z.alt), ZAE_NEU: float(z.neu), ZAE_VERBRAUCH: z.verbrauch}
+         for z in pos.zaehler],
+        columns=[ZAE_NAME, ZAE_WER, ZAE_ALT, ZAE_NEU, ZAE_VERBRAUCH])
+
+
+def df_als_zaehler(df: pd.DataFrame) -> list[Zaehlerstand]:
+    staende = []
+    for _, r in df.iterrows():
+        name = str(r.get(ZAE_NAME) or "").strip()
+        if not name:
+            continue
+
+        def wert(spalte: str) -> float:
+            try:
+                roh = r.get(spalte)
+                return float(roh) if pd.notna(roh) else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        staende.append(Zaehlerstand(
+            name=name,
+            partei=LABEL_ZU_PARTEI.get(str(r.get(ZAE_WER)), "mieter"),
+            alt=wert(ZAE_ALT), neu=wert(ZAE_NEU)))
+    return staende
 
 
 def _fmt(iso: str) -> str:
@@ -223,9 +255,10 @@ with st.sidebar:
                     setattr(stamm, feld, d.replace(year=d.year + 1, day=28).isoformat())
         for p in st.session_state.positionen:
             p.betrag = p.arbeitskosten = 0.0
-            p.verbrauch_gesamt = p.verbrauch_mieter = 0.0
-            p.zaehler_haus_alt = p.zaehler_haus_neu = p.zaehler_haus_alt = 0.0
-            p.zaehler_mieter_alt = p.zaehler_mieter_neu = 0.0
+            p.verbrauch_gesamt = p.verbrauch_mieter = p.verbrauch_eigen_direkt = 0.0
+            for z in p.zaehler:
+                # Der Endstand des alten Jahres ist der Anfangsstand des neuen.
+                z.alt, z.neu = z.neu, 0.0
         stamm.datum = date.today().isoformat()
         stamm.abrechnungsart = "jahr"
         stamm.auszug_am = ""
@@ -494,17 +527,18 @@ with tab_zaehler:
     if not verbrauchszeilen:
         st.info(
             "Hier erscheint jede Kostenart, die du im Tab „Kosten“ auf **nach Zählerstand** "
-            "gestellt hast. Typisch sind Wasser und Abwasser, manchmal auch Strom oder Gas."
+            "gestellt hast. Typisch sind Wasser, Abwasser, Heizung und Warmwasser."
         )
     else:
         st.caption(
-            "Trag für jeden Zähler den Stand am Anfang und am Ende des Abrechnungszeitraums "
-            "ein – den Verbrauch rechnet die App aus. **Hauptzähler** ist der Zähler fürs "
-            "ganze Haus, dazu die Zähler der beiden Wohnungen."
+            "Zu jeder Kostenart gehören beliebig viele Zähler – Hauptzähler, die Zähler "
+            "deines Mieters und deine eigenen. Trag Anfangs- und Endstand ein, den "
+            "Verbrauch rechnet die App. Zeilen lassen sich ändern, löschen und unten "
+            "ergänzen."
         )
         st.radio(
             "Der Hauptzähler zeigt mehr an als die Wohnungszähler zusammen. Wie soll diese "
-            "Differenz verteilt werden?",
+            "Differenz auf euch beide verteilt werden?",
             list(DIFFERENZ_VERTEILUNG),
             index=list(DIFFERENZ_VERTEILUNG).index(stamm.zaehlerdifferenz)
             if stamm.zaehlerdifferenz in DIFFERENZ_VERTEILUNG else 0,
@@ -512,83 +546,127 @@ with tab_zaehler:
             horizontal=True,
             key="differenz_art",
             help="Die Differenz entsteht durch Messtoleranz, den Gartenwasserhahn oder "
-                 "undichte Leitungen. Sie darf nicht allein dem Mieter angelastet werden. "
-                 "Ohne besondere Vereinbarung im Mietvertrag ist die Wohnfläche der "
-                 "gesetzliche Maßstab (§ 556a BGB); nach gemessenem Verbrauch ist ebenfalls "
-                 "üblich. Trägst du deinen eigenen Zähler nicht ein, bleibt die ganze "
-                 "Differenz bei dir.")
+                 "undichte Leitungen – und dadurch, dass kein Zähler exakt misst. "
+                 "„Nach gemessenem Verbrauch“ heißt: Wer mehr verbraucht hat, trägt auch "
+                 "mehr von der Differenz. „Nach Wohnfläche“ ist der gesetzliche "
+                 "Ersatzmaßstab (§ 556a BGB).")
         stamm.zaehlerdifferenz = st.session_state["differenz_art"]
+
+    with st.expander("Wie teile ich die Gasrechnung auf Heizung und Warmwasser auf?"):
+        st.markdown(
+            """
+Wenn deine Wärmemengenzähler nur die Heizung messen, steckt im Gasverbrauch auch die
+Wärme fürs Warmwasser. Diesen Teil rechnet man üblicherweise so heraus
+(Faustformel aus der Heizkostenverordnung):
+
+**Wärme fürs Warmwasser in kWh = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur in °C − 10)**
+
+Beispiel: 55 m³ Warmwasser bei 60 °C → 2,5 × 55 × 50 = **6.875 kWh**.
+
+Bei einem Gaspreis von z. B. 0,12 €/kWh sind das rund 825 € der Gasrechnung. Diesen
+Betrag trägst du in die Zeile **Warmwasser (Gas)** ein, den Rest der Gasrechnung in
+**Heizung (Gas)**. So wird der Warmwasseranteil nach den Warmwasserzählern verteilt
+und der Heizungsanteil nach den Wärmemengenzählern.
+            """
+        )
+
+    namen_aller = [p.bezeichnung for p in st.session_state.positionen
+                   if p.aktiv and p.schluessel == "verbrauch"]
 
     for i, p in verbrauchszeilen:
         with st.container(border=True):
-            kopf, einheit_spalte = st.columns([3, 1])
-            kopf.markdown(f"**{p.bezeichnung}**")
-            p.einheit = einheit_spalte.text_input(
+            k1, k2, k3 = st.columns([2, 1, 2])
+            k1.markdown(f"### {p.bezeichnung}")
+            p.einheit = k2.text_input(
                 "Einheit", p.einheit or "m³", key=f"zae{i}_einheit",
-                help="Was zählt der Zähler? Bei Wasser m³, bei Strom kWh.")
+                help="Was misst der Zähler? Wasser m³, Wärmemenge kWh, Gas m³.")
+            andere = [n for n in namen_aller if n != p.bezeichnung]
+            auswahl = ["(eigene Zähler)"] + andere
+            vorgabe = p.zaehler_von if p.zaehler_von in andere else "(eigene Zähler)"
+            gewaehlt = k3.selectbox(
+                "Zähler", auswahl, index=auswahl.index(vorgabe), key=f"zae{i}_von",
+                help="Abwasser wird meist nach der Frischwassermenge abgerechnet – dann "
+                     "hier „Wasser“ auswählen, statt dieselben Stände noch einmal einzutippen.")
+            p.zaehler_von = "" if gewaehlt == "(eigene Zähler)" else gewaehlt
 
-            haus, wohnung, eigen = st.columns(3)
-            with haus:
-                st.markdown("**Hauptzähler (ganzes Haus)**")
-                p.zaehler_haus_alt = st.number_input(
-                    "Stand am Anfang", min_value=0.0, step=1.0,
-                    value=float(p.zaehler_haus_alt), key=f"zae{i}_haus_alt")
-                p.zaehler_haus_neu = st.number_input(
-                    "Stand am Ende", min_value=0.0, step=1.0,
-                    value=float(p.zaehler_haus_neu), key=f"zae{i}_haus_neu")
-            with wohnung:
-                st.markdown("**Wohnung des Mieters**")
-                p.zaehler_mieter_alt = st.number_input(
-                    "Stand am Anfang ", min_value=0.0, step=1.0,
-                    value=float(p.zaehler_mieter_alt), key=f"zae{i}_m_alt")
-                p.zaehler_mieter_neu = st.number_input(
-                    "Stand am Ende ", min_value=0.0, step=1.0,
-                    value=float(p.zaehler_mieter_neu), key=f"zae{i}_m_neu")
-            with eigen:
-                st.markdown("**Deine eigene Wohnung**")
-                p.zaehler_eigen_alt = st.number_input(
-                    "Stand am Anfang  ", min_value=0.0, step=1.0,
-                    value=float(p.zaehler_eigen_alt), key=f"zae{i}_e_alt")
-                p.zaehler_eigen_neu = st.number_input(
-                    "Stand am Ende  ", min_value=0.0, step=1.0,
-                    value=float(p.zaehler_eigen_neu), key=f"zae{i}_e_neu")
+            if p.zaehler_von:
+                st.info(f"Es werden die Zählerstände von **{p.zaehler_von}** benutzt.")
+            else:
+                p.zaehler_grundlage = st.radio(
+                    "Woraus ergibt sich der Anteil des Mieters?",
+                    list(ZAEHLER_GRUNDLAGE),
+                    index=list(ZAEHLER_GRUNDLAGE).index(p.zaehler_grundlage)
+                    if p.zaehler_grundlage in ZAEHLER_GRUNDLAGE else 0,
+                    format_func=lambda k: ZAEHLER_GRUNDLAGE[k],
+                    horizontal=True,
+                    key=f"zae{i}_grundlage",
+                    help="**Anteil am Hauptzähler**: Die Rechnung hängt am Hauptzähler "
+                         "(Wasser). Was der Hauptzähler mehr anzeigt als die Unterzähler, "
+                         "wird verteilt. **Nur die Unterzähler**: Die Zähler messen etwas "
+                         "anderes als die Rechnung – Wärmemenge in kWh bei einer Gasrechnung. "
+                         "Dann zählt nur das Verhältnis der Unterzähler zueinander, und ein "
+                         "Hauptzähler steht bloß zur Information dabei.")
 
-            with st.expander("Kein Zähler vorhanden? Verbrauch direkt eintragen"):
-                d1, d2, d3 = st.columns(3)
-                p.verbrauch_gesamt = d1.number_input(
-                    "Verbrauch ganzes Haus", min_value=0.0, step=1.0,
-                    value=float(p.verbrauch_gesamt), key=f"zae{i}_v_haus",
-                    help="Steht auf der Jahresrechnung des Versorgers.")
-                p.verbrauch_mieter = d2.number_input(
-                    "Verbrauch Mieterwohnung", min_value=0.0, step=1.0,
-                    value=float(p.verbrauch_mieter), key=f"zae{i}_v_mieter")
-                p.verbrauch_eigen_direkt = d3.number_input(
-                    "Verbrauch deine Wohnung", min_value=0.0, step=1.0,
-                    value=float(p.verbrauch_eigen_direkt), key=f"zae{i}_v_eigen")
-                st.caption("Diese Felder gelten nur, wenn oben keine Zählerstände stehen.")
+                bearbeitet_zae = st.data_editor(
+                    zaehler_als_df(p),
+                    key=f"zae{i}_tabelle",
+                    num_rows="dynamic",
+                    width="stretch",
+                    hide_index=True,
+                    disabled=[ZAE_VERBRAUCH],
+                    column_config={
+                        ZAE_NAME: st.column_config.TextColumn(width="medium", required=True),
+                        ZAE_WER: st.column_config.SelectboxColumn(
+                            options=PARTEI_LABELS, default=PARTEIEN["mieter"], width="medium"),
+                        ZAE_ALT: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
+                        ZAE_NEU: st.column_config.NumberColumn(format="%.3f", min_value=0.0),
+                        ZAE_VERBRAUCH: st.column_config.NumberColumn(
+                            format="%.3f", help="Rechnet die App aus: Ende minus Anfang."),
+                    },
+                )
+                p.zaehler = df_als_zaehler(bearbeitet_zae)
 
-            if p.verbrauch_haus > 0:
-                aufteilung = verbrauchsaufteilung(p, stamm)
-                anteil = aufteilung.menge_mieter / p.verbrauch_haus * 100
-                einheit = p.einheit
-                if aufteilung.differenz > 0:
-                    st.success(
-                        f"Hauptzähler **{menge(p.verbrauch_haus)} {einheit}** · "
-                        f"Mieter **{menge(aufteilung.mieter_verbrauch)}** · "
-                        f"du **{menge(aufteilung.eigen_verbrauch)}** · "
+                if not p.zaehler:
+                    with st.expander("Kein Zähler vorhanden? Mengen direkt eintragen"):
+                        d1, d2, d3 = st.columns(3)
+                        p.verbrauch_gesamt = d1.number_input(
+                            "ganzes Haus", min_value=0.0, step=1.0,
+                            value=float(p.verbrauch_gesamt), key=f"zae{i}_v_haus",
+                            help="Steht auf der Jahresrechnung des Versorgers.")
+                        p.verbrauch_mieter = d2.number_input(
+                            "Mieterwohnung", min_value=0.0, step=1.0,
+                            value=float(p.verbrauch_mieter), key=f"zae{i}_v_mieter")
+                        p.verbrauch_eigen_direkt = d3.number_input(
+                            "deine Wohnung", min_value=0.0, step=1.0,
+                            value=float(p.verbrauch_eigen_direkt), key=f"zae{i}_v_eigen")
+
+            aufteilung = verbrauchsaufteilung(p, stamm, st.session_state.positionen)
+            einheit = aufteilung.einheit
+            if aufteilung.basis > 0:
+                zeilen = []
+                if aufteilung.haus_verbrauch:
+                    if aufteilung.grundlage != "unterzaehler":
+                        zeilen.append(f"Hauptzähler **{menge(aufteilung.haus_verbrauch)} "
+                                      f"{einheit}**")
+                    else:
+                        zeilen.append("Hauptzähler (nur Information) "
+                                      f"**{menge(aufteilung.haus_verbrauch)}**")
+                zeilen.append(f"Mieter **{menge(aufteilung.mieter_verbrauch)}**")
+                zeilen.append(f"du **{menge(aufteilung.vermieter_verbrauch)}**")
+                if aufteilung.mit_differenz:
+                    zeilen.append(
                         f"Differenz **{menge(aufteilung.differenz)}**, davon "
                         f"{menge(aufteilung.differenz_mieter)} für den Mieter "
-                        f"({aufteilung.differenz_text}) → angerechnet "
-                        f"**{menge(aufteilung.menge_mieter)} {einheit}** = **{zahl(anteil)} %**"
-                    )
-                else:
-                    st.success(
-                        f"Hauptzähler **{menge(p.verbrauch_haus)} {einheit}**, davon Mieter "
-                        f"**{menge(aufteilung.menge_mieter)} {einheit}** = **{zahl(anteil)} %**"
-                    )
-                    if aufteilung.eigen_verbrauch <= 0:
-                        st.caption("Trag auch den Zähler deiner eigenen Wohnung ein – sonst "
-                                   "trägst du die gesamte Differenz zum Hauptzähler allein.")
+                        f"({aufteilung.differenz_text})")
+                st.success(" · ".join(zeilen) + f" → angerechnet für den Mieter "
+                           f"**{menge(aufteilung.menge_mieter)} {einheit}** von "
+                           f"**{menge(aufteilung.basis)} {einheit}** = "
+                           f"**{zahl(aufteilung.quote * 100)} %**")
+                if (aufteilung.grundlage != "unterzaehler"
+                        and aufteilung.vermieter_verbrauch <= 0
+                        and aufteilung.haus_verbrauch > 0):
+                    st.caption("Trag auch deine eigenen Zähler ein – sonst trägst du die "
+                               "gesamte Differenz zum Hauptzähler allein.")
             else:
                 st.warning("Noch kein Verbrauch erkennbar – bitte die Zählerstände eintragen.")
 

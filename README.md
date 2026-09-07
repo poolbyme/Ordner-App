@@ -67,9 +67,9 @@ hilft die Sicherungskopie aus der Seitenleiste.
    Die üblichen Kostenarten sind vorbereitet, jede mit dem Hinweis, welcher Beleg
    dazugehört. Pro Zeile wählbar, wie verteilt wird: nach Wohnfläche, nach
    Personenzahl, je Wohnung, nach Zählerstand oder allein auf den Mieter.
-4. **Zählerstände** – Stand am Anfang und am Ende, für den Hauptzähler und für
-   beide Wohnungen. Den Verbrauch rechnet die App aus. Wo es keinen Zähler gibt,
-   lässt sich der Verbrauch direkt eintragen.
+4. **Zählerstände** – pro Kostenart eine Tabelle mit allen zugehörigen Zählern:
+   Name, wem er gehört, Stand am Anfang und am Ende. Den Verbrauch rechnet die App
+   aus. Wo es keinen Zähler gibt, lassen sich die Mengen direkt eintragen.
 5. **Vorauszahlungen** – der monatliche Betrag des Mieters; dazu der eigene Anteil
    an den CO2-Kosten, falls mit Gas oder Öl geheizt wird.
 6. **Fertige Abrechnung** – Ergebnis prüfen, PDF herunterladen.
@@ -78,25 +78,61 @@ hilft die Sicherungskopie aus der Seitenleiste.
 Felder dazu: Lohnkosten für die Steuererklärung des Mieters, unterjähriger Einzug,
 Anrede und Datum des Anschreibens.
 
+### Zähler
+
+Zu jeder Kostenart gehören beliebig viele Zähler, jeder mit Anfangs- und Endstand und
+der Angabe, wem er gehört: **Hauptzähler (ganzes Haus)**, **Wohnung des Mieters** oder
+**deine Wohnung**. Mehrere Zähler derselben Partei werden addiert – Kalt- und
+Warmwasserzähler einer Wohnung ergeben zusammen ihren Wasserverbrauch.
+
+Pro Kostenart ist einstellbar, woraus sich der Anteil des Mieters ergibt:
+
+* **Anteil am Hauptzähler** – die Rechnung hängt am Hauptzähler (Wasser). Was der
+  Hauptzähler mehr anzeigt als die Unterzähler zusammen, wird verteilt (siehe unten).
+* **Nur die Unterzähler** – die Zähler messen etwas anderes als die Rechnung:
+  Wärmemengenzähler in kWh bei einer Gasrechnung. Dann zählt allein das Verhältnis der
+  Unterzähler zueinander; ein Hauptzähler steht nur nachrichtlich dabei.
+
+Eine Kostenart kann die Zähler einer anderen mitbenutzen – **Abwasser** rechnet mit den
+Zählerständen von **Wasser**, ohne dass etwas doppelt eingetippt wird.
+
+Voreingestellt ist das übliche Zweifamilienhaus:
+
+| Kostenart | Zähler | Grundlage |
+| --- | --- | --- |
+| Wasser | Hauptzähler, Kalt- und Warmwasser beider Wohnungen | Anteil am Hauptzähler |
+| Abwasser | – (nutzt die Zähler von Wasser) | wie Wasser |
+| Heizung (Gas) | Gaszähler (nachrichtlich), Wärmemengenzähler beider Wohnungen | nur Unterzähler |
+| Warmwasser (Gas) | Warmwasserzähler beider Wohnungen | nur Unterzähler |
+
+Beim Knopf „Nächstes Jahr vorbereiten" wird der Endstand jedes Zählers zum
+Anfangsstand des neuen Jahres.
+
+**Gasrechnung aufteilen:** Messen die Wärmemengenzähler nur die Heizung, steckt im Gas
+auch das Warmwasser. Die Faustformel der Heizkostenverordnung trennt beides:
+Wärme fürs Warmwasser in kWh = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur − 10).
+Der so errechnete Kostenanteil kommt in die Zeile „Warmwasser (Gas)", der Rest in
+„Heizung (Gas)". Der Hinweis steht auch im Tab „Zählerstände".
+
 ### Differenz zwischen Hauptzähler und Wohnungszählern
 
-Der Hauptzähler zeigt fast immer mehr als die Wohnungszähler zusammen –
-Messtoleranz, Außenzapfstelle, Leitungsverluste. Diese Differenz darf nicht allein
-dem Mieter angelastet werden. Die App zieht die beiden Wohnungszähler vom
-Hauptzähler ab und verteilt den Rest:
+Der Hauptzähler zeigt fast immer mehr an als die Wohnungszähler zusammen –
+Messtoleranz, Außenzapfstelle, Leitungsverluste, und kein Zähler misst exakt. Die App
+zieht die Unterzähler vom Hauptzähler ab und verteilt den Rest auf beide Wohnungen:
 
-* **nach Wohnfläche** – der gesetzliche Maßstab, wenn der Mietvertrag nichts
-  anderes vorsieht (§ 556a Abs. 1 S. 1 BGB); Voreinstellung
-* **nach gemessenem Verbrauch** – ebenfalls üblich, wer mehr verbraucht, trägt mehr
+* **nach gemessenem Verbrauch** – Voreinstellung: Wer mehr verbraucht hat, trägt auch
+  mehr von der Differenz
+* **nach Wohnfläche** – der gesetzliche Ersatzmaßstab (§ 556a Abs. 1 S. 1 BGB)
 
-Wird der eigene Zähler nicht eingetragen, bleibt die gesamte Differenz beim
-Vermieter. Die Rechnung steht vollständig im PDF, damit der Mieter sie
-nachvollziehen kann.
+Wird kein eigener Zähler eingetragen, bleibt die gesamte Differenz beim Vermieter. Die
+Rechnung steht vollständig im PDF: alle Zählerstände, die Summe der Unterzähler, die
+Differenz, der Verteilungsmaßstab und die angerechnete Menge.
 
 ### Was die App prüft
 
-* Zählerstände, die rückwärts laufen; Wohnungszähler, die zusammen mehr anzeigen
-  als der Hauptzähler
+* Zählerstände, die rückwärts laufen; Unterzähler, die zusammen mehr anzeigen als
+  der Hauptzähler; eine Mietwohnung, die mehr verbraucht als der Hauptzähler zeigt
+* Kostenarten, die auf die Zähler einer Position verweisen, die es nicht mehr gibt
 * Anteile über 100 % bei Fläche und Personenzahl
 * Abrechnungszeitraum länger als 12 Monate
 * Abrechnungsfrist: Die Abrechnung muss den Mieter innerhalb von 12 Monaten nach

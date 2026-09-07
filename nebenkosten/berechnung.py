@@ -39,27 +39,41 @@ def menge(wert: float) -> str:
 
 
 @dataclass
-class Zaehler:
-    """Abgelesene Zählerstände einer verbrauchsabhängigen Position."""
+class Messung:
+    """Ein Zähler mit seinen Ständen – so, wie er im PDF erscheint."""
 
-    einheit: str
-    haus_alt: float
-    haus_neu: float
-    haus_verbrauch: float
-    mieter_alt: float
-    mieter_neu: float
-    mieter_verbrauch: float
-    eigen_alt: float = 0.0
-    eigen_neu: float = 0.0
-    eigen_verbrauch: float = 0.0
-    differenz: float = 0.0            # Hauptzähler minus Summe der Wohnungszähler
-    differenz_mieter: float = 0.0     # davon auf den Mieter verteilt
+    name: str
+    partei: str
+    alt: float
+    neu: float
+    verbrauch: float
+
+
+@dataclass
+class Zaehler:
+    """Wie sich der Verbrauch einer Position auf die Parteien verteilt."""
+
+    einheit: str = ""
+    messungen: list[Messung] = field(default_factory=list)
+    quelle: str = ""                  # Position, von der die Zähler stammen
+    grundlage: str = "hauptzaehler"
+    haus_verbrauch: float = 0.0
+    mieter_verbrauch: float = 0.0
+    vermieter_verbrauch: float = 0.0
+    gemessen: float = 0.0             # Mieter + Vermieter
+    basis: float = 0.0                # Nenner für den Anteil des Mieters
+    differenz: float = 0.0            # Hauptzähler minus Unterzähler
+    differenz_mieter: float = 0.0
     differenz_text: str = ""
-    menge_mieter: float = 0.0         # eigener Verbrauch + Anteil an der Differenz
+    menge_mieter: float = 0.0
 
     @property
     def mit_differenz(self) -> bool:
-        return self.eigen_verbrauch > 0
+        return self.differenz > 0
+
+    @property
+    def quote(self) -> float:
+        return self.menge_mieter / self.basis if self.basis > 0 else 0.0
 
 
 @dataclass
@@ -101,49 +115,77 @@ class Ergebnis:
         return abs(self.saldo)
 
 
-def verbrauchsaufteilung(pos: Position, s: Stammdaten) -> Zaehler:
-    """Verteilt den Verbrauch einer Zählerposition auf Mieter und Vermieter.
+def zaehlerquelle(pos: Position, positionen: list[Position] | None) -> Position:
+    """Position, deren Zähler benutzt werden (z. B. Abwasser nutzt die von Wasser)."""
+    if not pos.zaehler_von or not positionen:
+        return pos
+    gesucht = pos.zaehler_von.strip().lower()
+    for anderer in positionen:
+        if anderer is not pos and anderer.bezeichnung.strip().lower() == gesucht:
+            return anderer
+    return pos
 
-    Der Hauptzähler zeigt fast immer mehr an als die Wohnungszähler zusammen
-    (Messtoleranz, Gartenwasser, undichte Leitungen). Diese Differenz darf nicht
-    allein dem Mieter angelastet werden; sie wird auf beide Wohnungen verteilt –
-    ohne andere Vereinbarung nach Wohnfläche (§ 556a Abs. 1 S. 1 BGB).
+
+def verbrauchsaufteilung(pos: Position, s: Stammdaten,
+                         positionen: list[Position] | None = None) -> Zaehler:
+    """Verteilt den gemessenen Verbrauch einer Position auf Mieter und Vermieter.
+
+    Zwei Fälle:
+
+    * **Anteil am Hauptzähler** – die Kosten hängen am Hauptzähler (Wasser).
+      Der Hauptzähler zeigt fast immer mehr als die Unterzähler zusammen
+      (Messtoleranz, Außenzapfstelle, undichte Leitungen). Diese Differenz wird
+      auf beide Wohnungen verteilt, nicht einer Seite allein angelastet.
+    * **Nur die Unterzähler** – die Zähler messen in einer anderen Einheit als
+      die Rechnung (Wärmemengenzähler bei einer Gasrechnung). Dann zählt allein
+      das Verhältnis der Unterzähler zueinander.
     """
-    haus = pos.verbrauch_haus
-    mieter = pos.verbrauch_wohnung
-    eigen = pos.verbrauch_eigen
+    quelle = zaehlerquelle(pos, positionen)
+    haus = quelle.verbrauch_haus
+    mieter = quelle.verbrauch_wohnung
+    vermieter = quelle.verbrauch_eigen
 
     zaehler = Zaehler(
-        einheit=pos.einheit or "",
-        haus_alt=pos.zaehler_haus_alt, haus_neu=pos.zaehler_haus_neu, haus_verbrauch=haus,
-        mieter_alt=pos.zaehler_mieter_alt, mieter_neu=pos.zaehler_mieter_neu,
+        einheit=pos.einheit or quelle.einheit or "",
+        messungen=[Messung(z.name, z.partei, z.alt, z.neu, z.verbrauch)
+                   for z in quelle.zaehler if z.alt or z.neu],
+        quelle="" if quelle is pos else quelle.bezeichnung,
+        grundlage=pos.zaehler_grundlage,
+        haus_verbrauch=haus,
         mieter_verbrauch=mieter,
-        eigen_alt=pos.zaehler_eigen_alt, eigen_neu=pos.zaehler_eigen_neu,
-        eigen_verbrauch=eigen,
+        vermieter_verbrauch=vermieter,
+        gemessen=round(mieter + vermieter, 2),
         menge_mieter=mieter,
     )
 
-    gemessen = mieter + eigen
-    if eigen <= 0 or gemessen <= 0 or haus <= gemessen:
-        # Ohne zweiten Wohnungszähler bleibt die Differenz beim Vermieter.
+    nach_hauptzaehler = pos.zaehler_grundlage != "unterzaehler" and haus > 0
+    if not nach_hauptzaehler:
+        # Die Unterzähler stehen für sich; ein Hauptzähler ist nur Information.
+        zaehler.basis = zaehler.gemessen
         return zaehler
 
-    zaehler.differenz = round(haus - gemessen, 2)
-    nach_flaeche = s.zaehlerdifferenz != "verbrauch" and s.flaeche_gesamt > 0
-    if nach_flaeche:
+    zaehler.basis = haus
+    if vermieter <= 0 or zaehler.gemessen <= 0 or haus <= zaehler.gemessen:
+        # Ohne Gegenzähler bleibt die Differenz beim Vermieter.
+        return zaehler
+
+    zaehler.differenz = round(haus - zaehler.gemessen, 2)
+    nach_verbrauch = s.zaehlerdifferenz != "flaeche" or s.flaeche_gesamt <= 0
+    if nach_verbrauch:
+        quote = mieter / zaehler.gemessen
+        zaehler.differenz_text = (f"nach gemessenem Verbrauch {menge(mieter)}/"
+                                  f"{menge(zaehler.gemessen)} = {zahl(quote * 100)} %")
+    else:
         quote = s.flaeche_mieter / s.flaeche_gesamt
         zaehler.differenz_text = (f"nach Wohnfläche {zahl(s.flaeche_mieter)}/"
                                   f"{zahl(s.flaeche_gesamt)} m² = {zahl(quote * 100)} %")
-    else:
-        quote = mieter / gemessen
-        zaehler.differenz_text = (f"nach gemessenem Verbrauch {menge(mieter)}/"
-                                  f"{menge(gemessen)} = {zahl(quote * 100)} %")
     zaehler.differenz_mieter = round(zaehler.differenz * quote, 2)
     zaehler.menge_mieter = round(mieter + zaehler.differenz_mieter, 2)
     return zaehler
 
 
-def _quote(pos: Position, s: Stammdaten) -> tuple[float, str, str | None]:
+def _quote(pos: Position, s: Stammdaten,
+           positionen: list[Position] | None = None) -> tuple[float, str, str | None]:
     """Liefert (Quote, Erläuterungstext, Fehler)."""
     if pos.schluessel == "flaeche":
         if s.flaeche_gesamt <= 0:
@@ -164,22 +206,23 @@ def _quote(pos: Position, s: Stammdaten) -> tuple[float, str, str | None]:
         return q, f"Wohneinheiten {zahl(s.einheiten_mieter, 0)}/{zahl(s.einheiten_gesamt, 0)} = {zahl(q * 100)} %", None
 
     if pos.schluessel == "verbrauch":
-        haus = pos.verbrauch_haus
-        if haus <= 0:
-            return 0.0, "", (f"„{pos.bezeichnung}“: Der Verbrauch des Hauses fehlt – "
-                             "bitte die Zählerstände eintragen.")
-        einheit = pos.einheit or "Einheiten"
-        aufteilung = verbrauchsaufteilung(pos, s)
-        q = aufteilung.menge_mieter / haus
-        if aufteilung.differenz > 0:
+        aufteilung = verbrauchsaufteilung(pos, s, positionen)
+        if aufteilung.basis <= 0:
+            return 0.0, "", (f"„{pos.bezeichnung}“: Es fehlen Zählerstände – ohne sie "
+                             "lässt sich der Anteil nicht ausrechnen.")
+        einheit = aufteilung.einheit or "Einheiten"
+        q = aufteilung.quote
+        if aufteilung.mit_differenz:
             text = (f"Zähler {menge(aufteilung.mieter_verbrauch)} + "
                     f"{menge(aufteilung.differenz_mieter)} Anteil an "
                     f"{menge(aufteilung.differenz)} {einheit} Differenz = "
-                    f"{menge(aufteilung.menge_mieter)}/{menge(haus)} {einheit} "
+                    f"{menge(aufteilung.menge_mieter)}/{menge(aufteilung.basis)} {einheit} "
                     f"= {zahl(q * 100)} %")
         else:
-            text = (f"Verbrauch {menge(aufteilung.menge_mieter)}/{menge(haus)} {einheit} "
-                    f"= {zahl(q * 100)} %")
+            text = (f"Verbrauch {menge(aufteilung.menge_mieter)}/"
+                    f"{menge(aufteilung.basis)} {einheit} = {zahl(q * 100)} %")
+        if aufteilung.quelle:
+            text += f" (Zähler von „{aufteilung.quelle}“)"
         return q, text, None
 
     if pos.schluessel == "direkt":
@@ -222,7 +265,7 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
         if abs(pos.betrag) < 0.005 and pos.schluessel != "direkt":
             continue
 
-        quote, text, fehler = _quote(pos, s)
+        quote, text, fehler = _quote(pos, s, positionen)
         if fehler:
             e.fehler.append(fehler)
 
@@ -246,29 +289,32 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
             anteil=anteil,
             arbeitskosten_anteil=arbeit,
             hinweis=pos.hinweis,
-            zaehler=(verbrauchsaufteilung(pos, s)
-                     if pos.schluessel == "verbrauch" and pos.hat_zaehlerstaende else None),
+            zaehler=(verbrauchsaufteilung(pos, s, positionen)
+                     if pos.schluessel == "verbrauch" else None),
         ))
 
         if pos.schluessel == "verbrauch":
-            if pos.zaehler_haus_neu and pos.zaehler_haus_neu < pos.zaehler_haus_alt:
-                e.fehler.append(f"„{pos.bezeichnung}“: Der Endstand des Hauszählers ist "
-                                "kleiner als der Anfangsstand.")
-            if pos.zaehler_mieter_neu and pos.zaehler_mieter_neu < pos.zaehler_mieter_alt:
-                e.fehler.append(f"„{pos.bezeichnung}“: Der Endstand des Wohnungszählers ist "
-                                "kleiner als der Anfangsstand.")
-            if (pos.verbrauch_eigen > 0 and pos.verbrauch_haus > 0
-                    and pos.verbrauch_wohnung + pos.verbrauch_eigen > pos.verbrauch_haus + 0.001):
+            quelle = zaehlerquelle(pos, positionen)
+            for zst in quelle.zaehler:
+                if zst.neu and zst.neu < zst.alt:
+                    e.fehler.append(
+                        f"„{quelle.bezeichnung}“, Zähler „{zst.name or 'ohne Namen'}“: "
+                        "Der Endstand ist kleiner als der Anfangsstand.")
+            if (pos.zaehler_grundlage != "unterzaehler"
+                    and quelle.verbrauch_haus > 0 and quelle.verbrauch_eigen > 0
+                    and quelle.verbrauch_wohnung + quelle.verbrauch_eigen
+                    > quelle.verbrauch_haus + 0.001):
                 e.warnungen.append(
-                    f"„{pos.bezeichnung}“: Die beiden Wohnungszähler zeigen zusammen mehr an "
-                    "als der Hauptzähler. Bitte die Stände prüfen – gerechnet wird mit dem "
-                    "gemessenen Verbrauch der Mietwohnung.")
-            if pos.zaehler_eigen_neu and pos.zaehler_eigen_neu < pos.zaehler_eigen_alt:
-                e.fehler.append(f"„{pos.bezeichnung}“: Der Endstand deines eigenen Zählers ist "
-                                "kleiner als der Anfangsstand.")
-            if pos.verbrauch_haus > 0 and pos.verbrauch_wohnung > pos.verbrauch_haus:
-                e.fehler.append(f"„{pos.bezeichnung}“: Die Wohnung verbraucht mehr als das "
-                                "ganze Haus – bitte die Zählerstände prüfen.")
+                    f"„{quelle.bezeichnung}“: Die Unterzähler zeigen zusammen mehr an als der "
+                    "Hauptzähler. Bitte die Stände prüfen – gerechnet wird ohne Differenz.")
+            if (pos.zaehler_grundlage != "unterzaehler" and quelle.verbrauch_haus > 0
+                    and quelle.verbrauch_wohnung > quelle.verbrauch_haus):
+                e.fehler.append(f"„{pos.bezeichnung}“: Die Mietwohnung verbraucht mehr als der "
+                                "Hauptzähler anzeigt – bitte die Zählerstände prüfen.")
+            if pos.zaehler_von and zaehlerquelle(pos, positionen) is pos:
+                e.warnungen.append(
+                    f"„{pos.bezeichnung}“: Die Position „{pos.zaehler_von}“, deren Zähler "
+                    "benutzt werden sollen, gibt es nicht (mehr).")
         if quote > 1.0001:
             e.fehler.append(f"„{pos.bezeichnung}“: Der Anteil des Mieters ist größer als 100 %.")
         if any(w in pos.bezeichnung.lower() for w in NICHT_UMLAGEFAEHIG_STICHWORTE):
@@ -290,6 +336,8 @@ def berechne(s: Stammdaten, positionen: list[Position]) -> Ergebnis:
         e.empfehlung_vorauszahlung = float(math.ceil(e.umlage / e.monate_nutzung))
 
     _plausibilitaet(s, e, bis)
+    e.fehler = list(dict.fromkeys(e.fehler))
+    e.warnungen = list(dict.fromkeys(e.warnungen))
     return e
 
 

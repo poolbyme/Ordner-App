@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from nebenkosten.berechnung import berechne, eur, menge, tage  # noqa: E402
 from nebenkosten.modell import (  # noqa: E402
-    Position, Stammdaten, as_dict, from_dict, standard_positionen,
+    Position, Stammdaten, Zaehlerstand, as_dict, from_dict, standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf  # noqa: E402
 
@@ -41,10 +41,11 @@ def test_personenschluessel():
 
 
 def test_verbrauchsschluessel():
-    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
-                   verbrauch_gesamt=200.0, verbrauch_mieter=50.0, einheit="m³")
-    e = berechne(basis_stammdaten(), [pos])
-    assert e.summe_anteil == 150.0
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³", zaehler=[
+        Zaehlerstand("Hauptzähler", "haus", 1000.0, 1200.0),
+        Zaehlerstand("Mieter", "mieter", 100.0, 150.0),
+    ])
+    assert berechne(basis_stammdaten(), [pos]).summe_anteil == 150.0
 
 
 def test_direkte_zuordnung():
@@ -164,51 +165,63 @@ def test_pdf_wird_erzeugt():
     assert dateiname(s).endswith(".pdf") and "2025" in dateiname(s)
 
 
+def wasser(haus=(1000.0, 1200.0), mieter=(500.0, 580.0), eigen=None, **abweichungen):
+    """Wasserposition mit Hauptzähler, Mieter- und optionalem Vermieterzähler."""
+    staende = [Zaehlerstand("Hauptzähler", "haus", *haus),
+               Zaehlerstand("Mieter kalt", "mieter", *mieter)]
+    if eigen:
+        staende.append(Zaehlerstand("Eigene Wohnung", "vermieter", *eigen))
+    werte = dict(bezeichnung="Wasser", betrag=600.0, schluessel="verbrauch",
+                 einheit="m³", zaehler=staende)
+    werte.update(abweichungen)
+    return Position(**werte)
+
+
 def test_zaehlerstaende_ergeben_den_verbrauch():
-    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³",
-                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1400.0,
-                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
-    assert pos.verbrauch_haus == 200.0 and pos.verbrauch_wohnung == 50.0
+    pos = wasser(eigen=(200.0, 250.0))   # Haus 200, Mieter 80, Vermieter 50
+    assert pos.verbrauch_haus == 200.0
+    assert pos.verbrauch_wohnung == 80.0
+    assert pos.verbrauch_eigen == 50.0
+
+
+def test_mehrere_zaehler_je_partei_werden_addiert():
+    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³", zaehler=[
+        Zaehlerstand("Hauptzähler", "haus", 1000.0, 1200.0),
+        Zaehlerstand("Mieter kalt", "mieter", 500.0, 580.0),
+        Zaehlerstand("Mieter warm", "mieter", 100.0, 130.0),
+        Zaehlerstand("Eigene kalt", "vermieter", 200.0, 240.0),
+        Zaehlerstand("Eigene warm", "vermieter", 50.0, 70.0),
+    ])
+    assert pos.verbrauch_wohnung == 110.0     # 80 + 30
+    assert pos.verbrauch_eigen == 60.0        # 40 + 20
     e = berechne(basis_stammdaten(), [pos])
-    assert e.summe_anteil == 150.0
-    assert e.zeilen[0].zaehler is not None
-    assert e.zeilen[0].zaehler.haus_verbrauch == 200.0
-
-
-def test_zaehlerstand_hat_vorrang_vor_direktem_verbrauch():
-    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
-                   verbrauch_gesamt=999.0, verbrauch_mieter=999.0,
-                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1400.0,
-                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
-    assert berechne(basis_stammdaten(), [pos]).summe_anteil == 150.0
+    z = e.zeilen[0].zaehler
+    assert z.gemessen == 170.0 and z.differenz == 30.0
 
 
 def test_verbrauch_ohne_zaehler_bleibt_moeglich():
     pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
                    verbrauch_gesamt=200.0, verbrauch_mieter=50.0)
     e = berechne(basis_stammdaten(), [pos])
-    assert e.summe_anteil == 150.0 and e.zeilen[0].zaehler is None
+    assert e.summe_anteil == 150.0
+    assert e.zeilen[0].zaehler.messungen == []
 
 
 def test_fehler_bei_ruecklaeufigem_zaehler():
-    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
-                   zaehler_haus_alt=1400.0, zaehler_haus_neu=1200.0,
-                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
+    pos = wasser(haus=(1400.0, 1200.0))
     assert any("kleiner als der Anfangsstand" in f
                for f in berechne(basis_stammdaten(), [pos]).fehler)
 
 
-def test_fehler_wenn_wohnung_mehr_verbraucht_als_haus():
-    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch",
-                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1250.0,
-                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=500.0)
-    assert any("mehr als das ganze Haus" in f
+def test_fehler_wenn_wohnung_mehr_verbraucht_als_das_haus():
+    pos = wasser(haus=(1200.0, 1250.0), mieter=(300.0, 500.0))
+    assert any("mehr als der Hauptzähler" in f
                for f in berechne(basis_stammdaten(), [pos]).fehler)
 
 
 def test_fehlender_verbrauch_wird_gemeldet():
     pos = Position("Wasser", betrag=600.0, schluessel="verbrauch")
-    assert any("Verbrauch des Hauses fehlt" in f
+    assert any("fehlen Zählerstände" in f
                for f in berechne(basis_stammdaten(), [pos]).fehler)
 
 
@@ -220,55 +233,118 @@ def test_mengenformat():
 
 def test_pdf_mit_zaehlerstaenden():
     s = basis_stammdaten()
-    pos = Position("Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³",
-                   zaehler_haus_alt=1200.0, zaehler_haus_neu=1400.0,
-                   zaehler_mieter_alt=300.0, zaehler_mieter_neu=350.0)
-    daten = erzeuge_pdf(s, berechne(s, [pos, Position("Grundsteuer", betrag=500.0)]))
+    positionen = [wasser_mit_differenz(), waermezaehler(),
+                  Position("Abwasser", betrag=300.0, schluessel="verbrauch",
+                           einheit="m³", zaehler_von="Wasser"),
+                  Position("Grundsteuer", betrag=500.0)]
+    daten = erzeuge_pdf(s, berechne(s, positionen))
     assert daten.startswith(b"%PDF") and len(daten) > 1000
 
 
 # --- Zählerdifferenz zwischen Hauptzähler und Wohnungszählern ---------------
 
-def wasserzaehler(**abweichungen) -> Position:
-    werte = dict(bezeichnung="Wasser", betrag=600.0, schluessel="verbrauch", einheit="m³",
-                 zaehler_haus_alt=1000.0, zaehler_haus_neu=1200.0,     # 200 m³
-                 zaehler_mieter_alt=500.0, zaehler_mieter_neu=580.0,   # 80 m³
-                 zaehler_eigen_alt=200.0, zaehler_eigen_neu=300.0)     # 100 m³
-    werte.update(abweichungen)
-    return Position(**werte)
+def wasser_mit_differenz() -> Position:
+    # Haus 200, Mieter 80, Vermieter 100 -> 20 Differenz
+    return wasser(haus=(1000.0, 1200.0), mieter=(500.0, 580.0), eigen=(200.0, 300.0))
+
+
+def test_differenz_wird_nach_verbrauch_verteilt():
+    s = basis_stammdaten()   # Voreinstellung: nach gemessenem Verbrauch
+    z = berechne(s, [wasser_mit_differenz()]).zeilen[0].zaehler
+    assert z.differenz == 20.0
+    assert z.differenz_mieter == round(20 * 80 / 180, 2)     # 8,89
+    assert z.menge_mieter == 88.89
+    assert "gemessenem Verbrauch" in z.differenz_text
 
 
 def test_differenz_wird_nach_wohnflaeche_verteilt():
-    # 200 - (80 + 100) = 20 m³ Differenz, Mieter hat 80 von 200 m² = 40 %
-    s = basis_stammdaten()
-    e = berechne(s, [wasserzaehler()])
+    s = basis_stammdaten(zaehlerdifferenz="flaeche")   # Mieter 80 von 200 m² = 40 %
+    e = berechne(s, [wasser_mit_differenz()])
     z = e.zeilen[0].zaehler
-    assert z.differenz == 20.0
-    assert z.differenz_mieter == 8.0          # 20 × 40 %
-    assert z.menge_mieter == 88.0             # 80 + 8
+    assert z.differenz_mieter == 8.0
+    assert z.menge_mieter == 88.0
     assert e.summe_anteil == round(600 * 88 / 200, 2)
     assert "Wohnfläche" in z.differenz_text
 
 
-def test_differenz_wird_nach_verbrauch_verteilt():
-    s = basis_stammdaten(zaehlerdifferenz="verbrauch")
-    z = berechne(s, [wasserzaehler()]).zeilen[0].zaehler
-    assert z.differenz_mieter == round(20 * 80 / 180, 2)
-    assert "gemessenem Verbrauch" in z.differenz_text
-
-
 def test_ohne_eigenen_zaehler_bleibt_die_differenz_beim_vermieter():
-    pos = wasserzaehler(zaehler_eigen_alt=0.0, zaehler_eigen_neu=0.0)
-    e = berechne(basis_stammdaten(), [pos])
+    e = berechne(basis_stammdaten(), [wasser()])
     assert e.zeilen[0].zaehler.differenz == 0.0
     assert e.summe_anteil == round(600 * 80 / 200, 2)
 
 
-def test_warnung_wenn_wohnungszaehler_mehr_zeigen_als_der_hauptzaehler():
-    pos = wasserzaehler(zaehler_haus_neu=1100.0)   # nur 100 m³ im Haus
+def test_warnung_wenn_unterzaehler_mehr_zeigen_als_der_hauptzaehler():
+    pos = wasser(haus=(1000.0, 1100.0), mieter=(500.0, 580.0), eigen=(200.0, 300.0))
     e = berechne(basis_stammdaten(), [pos])
     assert any("mehr an als der Hauptzähler" in w for w in e.warnungen)
     assert e.zeilen[0].zaehler.differenz == 0.0
+
+
+# --- Wärmemengenzähler: nur die Unterzähler im Verhältnis -------------------
+
+def waermezaehler() -> Position:
+    return Position("Heizung (Gas)", betrag=2400.0, schluessel="verbrauch", einheit="kWh",
+                    zaehler_grundlage="unterzaehler", zaehler=[
+                        Zaehlerstand("Gaszähler Haus", "haus", 18450.0, 20890.0),
+                        Zaehlerstand("Fußbodenheizung Mieter", "mieter", 4000.0, 7200.0),
+                        Zaehlerstand("Fußbodenheizung eigene", "vermieter", 2000.0, 4100.0),
+                        Zaehlerstand("Heizkörper eigene", "vermieter", 1000.0, 3600.0),
+                    ])
+
+
+def test_gas_wird_nach_den_waermemengenzaehlern_verteilt():
+    """Der Gaszähler misst m³, die Wärmemengenzähler kWh – gerechnet wird mit kWh."""
+    e = berechne(basis_stammdaten(), [waermezaehler()])
+    z = e.zeilen[0].zaehler
+    assert z.basis == 7900.0                      # 3200 + 2100 + 2600
+    assert z.menge_mieter == 3200.0
+    assert z.differenz == 0.0                     # Gaszähler bleibt außen vor
+    assert e.summe_anteil == round(2400 * 3200 / 7900, 2)
+
+
+def test_infozaehler_erzeugt_keine_warnung():
+    e = berechne(basis_stammdaten(), [waermezaehler()])
+    assert not any("Hauptzähler" in w for w in e.warnungen)
+
+
+# --- Zähler einer anderen Position mitbenutzen -----------------------------
+
+def test_abwasser_nutzt_die_wasserzaehler():
+    wasserposition = wasser_mit_differenz()
+    abwasser = Position("Abwasser", betrag=300.0, schluessel="verbrauch",
+                        einheit="m³", zaehler_von="Wasser")
+    e = berechne(basis_stammdaten(), [wasserposition, abwasser])
+    anteil_wasser, anteil_abwasser = e.zeilen[0], e.zeilen[1]
+    assert anteil_abwasser.quote == anteil_wasser.quote
+    assert anteil_abwasser.zaehler.quelle == "Wasser"
+    assert "Zähler von" in anteil_abwasser.schluessel_text
+
+
+def test_hinweis_wenn_die_quelle_der_zaehler_fehlt():
+    abwasser = Position("Abwasser", betrag=300.0, schluessel="verbrauch",
+                        zaehler_von="Gibt es nicht")
+    e = berechne(basis_stammdaten(), [abwasser])
+    assert any("gibt es nicht (mehr)" in w for w in e.warnungen)
+
+
+def test_meldungen_erscheinen_nur_einmal():
+    pos = wasser(haus=(1000.0, 1100.0), mieter=(500.0, 580.0), eigen=(200.0, 300.0))
+    abwasser = Position("Abwasser", betrag=300.0, schluessel="verbrauch", zaehler_von="Wasser")
+    e = berechne(basis_stammdaten(), [pos, abwasser])
+    assert len(e.warnungen) == len(set(e.warnungen))
+
+
+def test_alte_gespeicherte_daten_werden_uebernommen():
+    """Dateien aus der Fassung mit drei festen Zählern müssen weiter lesbar sein."""
+    alt = {"stammdaten": {"flaeche_gesamt": 200.0},
+           "positionen": [{"bezeichnung": "Wasser", "betrag": 600.0, "schluessel": "verbrauch",
+                           "zaehler_haus_alt": 1000, "zaehler_haus_neu": 1200,
+                           "zaehler_mieter_alt": 500, "zaehler_mieter_neu": 580,
+                           "zaehler_eigen_alt": 200, "zaehler_eigen_neu": 300}]}
+    _, positionen = from_dict(alt)
+    pos = positionen[0]
+    assert [z.partei for z in pos.zaehler] == ["haus", "mieter", "vermieter"]
+    assert pos.verbrauch_haus == 200.0 and pos.verbrauch_eigen == 100.0
 
 
 def test_endabrechnung_bei_auszug():

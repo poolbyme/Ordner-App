@@ -28,8 +28,8 @@ ABRECHNUNGSARTEN = {
 # Ohne andere Vereinbarung im Mietvertrag ist die Wohnfläche der gesetzliche
 # Maßstab (§ 556a Abs. 1 S. 1 BGB).
 DIFFERENZ_VERTEILUNG = {
-    "flaeche": "nach Wohnfläche",
     "verbrauch": "nach gemessenem Verbrauch",
+    "flaeche": "nach Wohnfläche",
 }
 
 # Positionen, die nach herrschender Rechtsprechung nicht auf den Mieter
@@ -42,6 +42,33 @@ NICHT_UMLAGEFAEHIG_STICHWORTE = [
 ]
 
 
+PARTEIEN = {
+    "haus": "Hauptzähler (ganzes Haus)",
+    "mieter": "Wohnung des Mieters",
+    "vermieter": "Deine Wohnung",
+}
+
+# Woraus sich der Anteil des Mieters ergibt
+ZAEHLER_GRUNDLAGE = {
+    "hauptzaehler": "Anteil am Hauptzähler (Differenz wird verteilt)",
+    "unterzaehler": "nur die Unterzähler im Verhältnis",
+}
+
+
+@dataclass
+class Zaehlerstand:
+    """Ein einzelner Zähler mit Stand am Anfang und am Ende des Zeitraums."""
+
+    name: str = ""
+    partei: str = "mieter"      # haus, mieter oder vermieter
+    alt: float = 0.0
+    neu: float = 0.0
+
+    @property
+    def verbrauch(self) -> float:
+        return max(0.0, float(self.neu) - float(self.alt))
+
+
 @dataclass
 class Position:
     """Eine Kostenart der Abrechnung (i. d. R. eine Position nach § 2 BetrKV)."""
@@ -49,45 +76,38 @@ class Position:
     bezeichnung: str
     betrag: float = 0.0            # Gesamtkosten des Hauses im Abrechnungszeitraum
     schluessel: str = "flaeche"
-    verbrauch_gesamt: float = 0.0  # nur bei schluessel == "verbrauch"
+    einheit: str = ""              # z. B. m³ oder kWh
+    zaehler: list[Zaehlerstand] = field(default_factory=list)
+    zaehler_grundlage: str = "hauptzaehler"
+    zaehler_von: str = ""          # Zähler einer anderen Position mitbenutzen
+    # Ersatz, wenn es gar keine Zähler gibt: Mengen direkt eintragen
+    verbrauch_gesamt: float = 0.0
     verbrauch_mieter: float = 0.0
-    # Zählerstände; sind sie gefüllt, ergibt die Differenz den Verbrauch
-    zaehler_haus_alt: float = 0.0
-    zaehler_haus_neu: float = 0.0
-    zaehler_mieter_alt: float = 0.0
-    zaehler_mieter_neu: float = 0.0
-    zaehler_eigen_alt: float = 0.0   # Zähler der selbst bewohnten Wohnung
-    zaehler_eigen_neu: float = 0.0
     verbrauch_eigen_direkt: float = 0.0
-    einheit: str = ""              # z. B. m³, kWh
     arbeitskosten: float = 0.0     # im Betrag enthaltene Lohnkosten (§ 35a EStG)
     zeitanteilig: bool = True      # bei unterjähriger Nutzung anteilig kürzen
     aktiv: bool = True
     hinweis: str = ""
 
+    def _summe(self, partei: str) -> float:
+        return sum(z.verbrauch for z in self.zaehler if z.partei == partei)
+
     @property
     def verbrauch_haus(self) -> float:
-        """Verbrauch des Hauses: aus den Zählerständen, sonst direkt eingetragen."""
-        differenz = self.zaehler_haus_neu - self.zaehler_haus_alt
-        return differenz if differenz > 0 else float(self.verbrauch_gesamt)
+        """Verbrauch laut Hauptzähler; ohne Hauptzähler die direkte Eingabe."""
+        return self._summe("haus") or float(self.verbrauch_gesamt)
 
     @property
     def verbrauch_wohnung(self) -> float:
-        """Verbrauch der Mietwohnung: aus den Zählerständen, sonst direkt eingetragen."""
-        differenz = self.zaehler_mieter_neu - self.zaehler_mieter_alt
-        return differenz if differenz > 0 else float(self.verbrauch_mieter)
+        return self._summe("mieter") or float(self.verbrauch_mieter)
 
     @property
     def verbrauch_eigen(self) -> float:
-        """Verbrauch der eigenen Wohnung – nötig für die Zählerdifferenz."""
-        differenz = self.zaehler_eigen_neu - self.zaehler_eigen_alt
-        return differenz if differenz > 0 else float(self.verbrauch_eigen_direkt)
+        return self._summe("vermieter") or float(self.verbrauch_eigen_direkt)
 
     @property
     def hat_zaehlerstaende(self) -> bool:
-        return any([self.zaehler_haus_alt, self.zaehler_haus_neu,
-                    self.zaehler_mieter_alt, self.zaehler_mieter_neu,
-                    self.zaehler_eigen_alt, self.zaehler_eigen_neu])
+        return any(z.alt or z.neu for z in self.zaehler)
 
 
 @dataclass
@@ -126,7 +146,7 @@ class Stammdaten:
     grundstuecksflaeche: float = 0.0   # nur zur Information im Abrechnungskopf
 
     # Verteilung der Differenz zwischen Hauptzähler und Wohnungszählern
-    zaehlerdifferenz: str = "flaeche"  # "flaeche" oder "verbrauch"
+    zaehlerdifferenz: str = "verbrauch"  # "verbrauch" oder "flaeche"
 
     # Vorauszahlungen
     vorauszahlung_monatlich: float = 0.0
@@ -158,21 +178,44 @@ class Stammdaten:
 def standard_positionen() -> list[Position]:
     """Die Kostenarten, die auf einen Mieter umgelegt werden dürfen (§ 2 BetrKV).
 
-    Der Hinweis sagt, welcher Beleg zu der Zeile gehört. Voreingestellt ist,
-    was in einem Zweifamilienhaus üblicherweise anfällt; der Rest ist
-    vorhanden, aber abgewählt.
+    Der Hinweis sagt, welcher Beleg zu der Zeile gehört. Die Zähler sind für ein
+    Zweifamilienhaus vorbereitet und lassen sich in der App ändern, löschen und
+    ergänzen.
     """
+    wasserzaehler = [
+        Zaehlerstand("Hauptzähler Wasser", "haus"),
+        Zaehlerstand("Kaltwasser Mieter", "mieter"),
+        Zaehlerstand("Warmwasser Mieter", "mieter"),
+        Zaehlerstand("Kaltwasser eigene Wohnung", "vermieter"),
+        Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
+    ]
     return [
         Position("Grundsteuer", schluessel="flaeche",
                  hinweis="Grundsteuerbescheid der Gemeinde"),
         Position("Wasser", schluessel="verbrauch", einheit="m³",
+                 zaehler=wasserzaehler,
                  hinweis="Jahresrechnung des Wasserversorgers"),
         Position("Abwasser", schluessel="verbrauch", einheit="m³",
-                 hinweis="Gebührenbescheid der Gemeinde oder Stadtwerke"),
-        Position("Heizung", schluessel="flaeche",
-                 hinweis="Rechnungen für Gas, Öl oder Pellets, Wartung, Betriebsstrom"),
-        Position("Warmwasser", schluessel="flaeche", aktiv=False,
-                 hinweis="nur nötig, wenn getrennt von der Heizung abgerechnet wird"),
+                 zaehler_von="Wasser",
+                 hinweis="Gebührenbescheid der Gemeinde; meist auf die Frischwassermenge"),
+        Position("Heizung (Gas)", schluessel="verbrauch", einheit="kWh",
+                 zaehler_grundlage="unterzaehler",
+                 zaehler=[
+                     Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus"),
+                     Zaehlerstand("Wärmemenge Fußbodenheizung Mieter", "mieter"),
+                     Zaehlerstand("Wärmemenge Fußbodenheizung eigene Wohnung", "vermieter"),
+                     Zaehlerstand("Wärmemenge Heizkörper eigene Wohnung", "vermieter"),
+                 ],
+                 hinweis="Gasrechnung, Wartung, Betriebsstrom – verteilt nach den "
+                         "Wärmemengenzählern"),
+        Position("Warmwasser (Gas)", schluessel="verbrauch", einheit="m³",
+                 zaehler_grundlage="unterzaehler",
+                 zaehler=[
+                     Zaehlerstand("Warmwasser Mieter", "mieter"),
+                     Zaehlerstand("Warmwasser eigene Wohnung", "vermieter"),
+                 ],
+                 hinweis="Anteil der Gaskosten für die Warmwasserbereitung – "
+                         "verteilt nach den Warmwasserzählern"),
         Position("Aufzug", schluessel="flaeche", aktiv=False,
                  hinweis="Wartungsvertrag, Notruf, Strom"),
         Position("Straßenreinigung und Winterdienst", schluessel="flaeche",
@@ -206,18 +249,37 @@ def standard_positionen() -> list[Position]:
 
 def as_dict(stammdaten: Stammdaten, positionen: list[Position]) -> dict:
     return {
-        "version": 1,
+        "version": 2,
         "stammdaten": asdict(stammdaten),
         "positionen": [asdict(p) for p in positionen],
     }
 
 
-def from_dict(daten: dict) -> tuple[Stammdaten, list[Position]]:
-    stamm_felder = {f for f in Stammdaten.__dataclass_fields__}
-    pos_felder = {f for f in Position.__dataclass_fields__}
-    stamm = Stammdaten(**{k: v for k, v in daten.get("stammdaten", {}).items() if k in stamm_felder})
-    positionen = [
-        Position(**{k: v for k, v in p.items() if k in pos_felder})
-        for p in daten.get("positionen", [])
+def _zaehler_aus_dict(daten: dict) -> list[Zaehlerstand]:
+    """Zähler einlesen – auch aus dem alten Format mit drei festen Zählern."""
+    if daten.get("zaehler"):
+        felder = set(Zaehlerstand.__dataclass_fields__)
+        return [Zaehlerstand(**{k: v for k, v in z.items() if k in felder})
+                for z in daten["zaehler"] if isinstance(z, dict)]
+
+    alt = [
+        ("Hauptzähler", "haus", "zaehler_haus_alt", "zaehler_haus_neu"),
+        ("Zähler Mieterwohnung", "mieter", "zaehler_mieter_alt", "zaehler_mieter_neu"),
+        ("Zähler eigene Wohnung", "vermieter", "zaehler_eigen_alt", "zaehler_eigen_neu"),
     ]
+    uebernommen = [Zaehlerstand(name, partei, float(daten.get(a) or 0), float(daten.get(n) or 0))
+                   for name, partei, a, n in alt
+                   if daten.get(a) or daten.get(n)]
+    return uebernommen
+
+
+def from_dict(daten: dict) -> tuple[Stammdaten, list[Position]]:
+    stamm_felder = set(Stammdaten.__dataclass_fields__)
+    pos_felder = set(Position.__dataclass_fields__) - {"zaehler"}
+    stamm = Stammdaten(**{k: v for k, v in daten.get("stammdaten", {}).items()
+                          if k in stamm_felder})
+    positionen = []
+    for p in daten.get("positionen", []):
+        werte = {k: v for k, v in p.items() if k in pos_felder}
+        positionen.append(Position(zaehler=_zaehler_aus_dict(p), **werte))
     return stamm, positionen or standard_positionen()

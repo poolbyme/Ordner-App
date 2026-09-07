@@ -206,59 +206,96 @@ def _kostentabelle(pdf: Abrechnung, e: Ergebnis) -> None:
         summe.cell(eur(e.summe_anteil))
 
 
+PARTEI_KURZ = {"haus": "Haus gesamt", "mieter": "Mieter", "vermieter": "Vermieter"}
+
+
 def _zaehlerstaende(pdf: Abrechnung, e: Ergebnis) -> None:
-    zeilen = [z for z in e.zeilen if z.zaehler]
-    if not zeilen:
+    eigene = [z for z in e.zeilen if z.zaehler and z.zaehler.messungen and not z.zaehler.quelle]
+    geliehen = [z for z in e.zeilen if z.zaehler and z.zaehler.quelle]
+    if not eigene and not geliehen:
         return
     pdf.abschnitt_ueberschrift("Zählerstände")
     breite = pdf.w - pdf.l_margin - pdf.r_margin
 
-    def messzeile(name: str, alt: float, neu: float, verbrauch: float,
-                  einheit: str, bold: bool = False) -> None:
-        pdf.font(9, bold)
-        pdf.cell(breite - 105, 5, pdf.t(name))
-        pdf.cell(30, 5, pdf.t(menge(alt)), align="R")
-        pdf.cell(30, 5, pdf.t(menge(neu)), align="R")
-        pdf.cell(45, 5, pdf.t(f"{menge(verbrauch)} {einheit}".strip()), align="R",
+    def messzeile(name: str, partei: str, alt: float, neu: float, verbrauch: float,
+                  einheit: str) -> None:
+        pdf.font(9)
+        namensbreite = breite - 110
+        text = pdf.t(name)
+        # Lange Zählernamen kleiner setzen, damit sie die Spalte nicht überlaufen
+        for groesse in (9, 8.5, 8, 7.5, 7):
+            pdf.font(groesse)
+            if pdf.get_string_width(text) <= namensbreite - 1:
+                break
+        else:
+            while text and pdf.get_string_width(text + "...") > namensbreite - 1:
+                text = text[:-1]
+            text += "..."
+        pdf.cell(namensbreite, 5, text)
+        pdf.font(9)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(30, 5, pdf.t(partei))
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(25, 5, pdf.t(menge(alt)), align="R")
+        pdf.cell(25, 5, pdf.t(menge(neu)), align="R")
+        pdf.cell(30, 5, pdf.t(f"{menge(verbrauch)} {einheit}".strip()), align="R",
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     def summenzeile(name: str, wert: str, bold: bool = False) -> None:
         pdf.font(9, bold)
-        pdf.cell(breite - 45, 5, pdf.t(name))
-        pdf.cell(45, 5, pdf.t(wert), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(breite - 30, 5, pdf.t(name))
+        pdf.cell(30, 5, pdf.t(wert), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    for z in zeilen:
-        zae = z.zaehler
-        einheit = zae.einheit or ""
-        if pdf.get_y() + 34 > pdf.h - pdf.b_margin:
+    for zeile in eigene:
+        zae = zeile.zaehler
+        einheit = zae.einheit
+        nur_unterzaehler = zae.grundlage == "unterzaehler"
+        platz = 12 + 5 * (len(zae.messungen) + (4 if zae.mit_differenz else 1))
+        if pdf.get_y() + min(platz, 60) > pdf.h - pdf.b_margin:
             pdf.add_page()
         pdf.abstand(2)
+
         pdf.font(9.5, bold=True)
-        pdf.cell(breite - 105, 5.5, pdf.t(z.bezeichnung))
+        pdf.cell(breite - 80, 5.5, pdf.t(zeile.bezeichnung))
         pdf.set_text_color(90, 90, 90)
         pdf.font(8)
-        pdf.cell(30, 5.5, pdf.t("Anfang"), align="R")
-        pdf.cell(30, 5.5, pdf.t("Ende"), align="R")
-        pdf.cell(45, 5.5, pdf.t("Verbrauch"), align="R",
+        pdf.cell(25, 5.5, pdf.t("Anfang"), align="R")
+        pdf.cell(25, 5.5, pdf.t("Ende"), align="R")
+        pdf.cell(30, 5.5, pdf.t("Verbrauch"), align="R",
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_text_color(0, 0, 0)
         pdf.set_draw_color(*LINIE)
         pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
 
-        messzeile("Hauptzähler des Hauses", zae.haus_alt, zae.haus_neu,
-                  zae.haus_verbrauch, einheit)
-        messzeile("Zähler der Mietwohnung", zae.mieter_alt, zae.mieter_neu,
-                  zae.mieter_verbrauch, einheit)
+        for m in zae.messungen:
+            partei = PARTEI_KURZ.get(m.partei, m.partei)
+            zeileneinheit = einheit
+            if nur_unterzaehler and m.partei == "haus":
+                partei, zeileneinheit = "nachrichtlich", ""
+            messzeile(m.name or "Zähler", partei, m.alt, m.neu, m.verbrauch, zeileneinheit)
+
         if zae.mit_differenz:
-            messzeile("Zähler der Vermieterwohnung", zae.eigen_alt, zae.eigen_neu,
-                      zae.eigen_verbrauch, einheit)
+            summenzeile("Summe der Wohnungszähler",
+                        f"{menge(zae.gemessen)} {einheit}".strip())
             summenzeile("nicht durch Wohnungszähler erfasste Differenz",
                         f"{menge(zae.differenz)} {einheit}".strip())
             summenzeile(f"davon auf den Mieter entfallend ({zae.differenz_text})",
                         f"{menge(zae.differenz_mieter)} {einheit}".strip())
-            summenzeile("angerechneter Verbrauch der Mietwohnung",
-                        f"{menge(zae.menge_mieter)} {einheit}".strip(), bold=True)
+        elif nur_unterzaehler:
+            summenzeile("Summe der Unterzähler", f"{menge(zae.basis)} {einheit}".strip())
+
+        summenzeile(f"angerechnet für die Mietwohnung – {zahl(zae.quote * 100)} % von "
+                    f"{menge(zae.basis)} {einheit}".strip(),
+                    f"{menge(zae.menge_mieter)} {einheit}".strip(), bold=True)
         pdf.abstand(1)
+
+    if geliehen:
+        pdf.abstand(2)
+        pdf.font(9)
+        for zeile in geliehen:
+            pdf.multi_cell(0, 4.6, pdf.t(f"{zeile.bezeichnung}: abgerechnet nach den "
+                                         f"Zählerständen von „{zeile.zaehler.quelle}“."),
+                           align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
 
 def _abrechnung(pdf: Abrechnung, e: Ergebnis) -> None:

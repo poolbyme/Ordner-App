@@ -362,6 +362,17 @@ _objekt = stamm.objekt_strasse or "noch kein Objekt eingetragen"
 design.kopfzeile("Nebenkostenabrechnung",
                  f"{_objekt} · {stamm.bezeichnung_abrechnung} {_zeitraum}")
 
+# Ob die Eingaben einen Neustart ueberleben, entscheidet alles - deshalb steht
+# das hier oben und nicht in der Seitenleiste, wo es niemand sucht.
+if speicher.beschreibung() == "Datei auf diesem Gerät":
+    st.warning(
+        "**Deine Eingaben sind noch nicht dauerhaft gespeichert.** Startet die App "
+        "neu, ist alles weg. Mach deine Abrechnung deshalb in einem Rutsch fertig "
+        "und lade am Ende in der Seitenleiste die **Sicherungskopie** herunter – "
+        "die kannst du jederzeit wieder einlesen.",
+        icon="⚠️",
+    )
+
 with st.expander("So geht's – bitte einmal lesen",
                  expanded=not (stamm.mieter_name or stamm.flaeche_gesamt)):
     st.markdown(

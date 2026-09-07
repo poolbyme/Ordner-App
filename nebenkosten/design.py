@@ -84,8 +84,22 @@ def _stil() -> str:
     padding-top: 1.2rem;
     padding-bottom: 4rem;
 }}
-[data-testid="stToolbar"], [data-testid="stDecoration"], footer {{ display: none !important; }}
+[data-testid="stDecoration"], footer {{ display: none !important; }}
 [data-testid="stHeader"] {{ background: transparent; height: 0; }}
+/* In der Werkzeugleiste sitzt neben „Deploy" und dem Menue auch der Knopf, der
+   die Seitenleiste aufklappt. Blendet man die Leiste ganz aus, gibt es auf dem
+   Handy keinen Weg mehr in die Seitenleiste - und damit keinen an Sichern,
+   Laden und die Angabe, wo die Daten liegen. Also nur die Teile ausblenden,
+   die niemand braucht, und den Knopf freistellen. */
+[data-testid="stToolbarActions"], [data-testid="stAppDeployButton"],
+#MainMenu, [data-testid="stMainMenu"] {{ display: none !important; }}
+[data-testid="stToolbar"] {{ background: transparent; }}
+[data-testid="stExpandSidebarButton"] {{
+    position: fixed; top: .45rem; left: .45rem; z-index: 1000;
+    background: var(--nk-flaeche); border: 1px solid var(--nk-rand);
+    border-radius: 10px; width: 2.6rem; height: 2.6rem;
+    box-shadow: 0 2px 8px rgba(16, 40, 66, .12);
+}}
 h1, h2, h3, h4 {{ color: var(--nk-text); letter-spacing: -.01em; }}
 h4 {{ font-size: 1.02rem; margin: 1.4rem 0 .4rem; }}
 

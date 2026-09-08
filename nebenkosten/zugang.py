@@ -14,10 +14,20 @@ Die alte Schreibweise mit einer einzigen Zeile funktioniert weiter:
 
 Dann heißt der Benutzer „vermieter“.
 
-**Angemeldet bleiben.** Wer das Häkchen setzt, bekommt einen Ausweis als Cookie,
-der 60 Tage gilt. Er trägt nur den Benutzernamen, das Ablaufdatum und eine
-Unterschrift – kein Passwort. Die Unterschrift entsteht aus den hinterlegten
-Passwörtern: Wird eines geändert, sind alle alten Ausweise sofort wertlos.
+**Angemeldet bleiben.** Wer das Häkchen setzt, bekommt einen Ausweis. Er trägt
+nur den Benutzernamen, ein Ablaufdatum und eine Unterschrift – kein Passwort.
+Die Unterschrift entsteht aus den hinterlegten Passwörtern: Wird eines
+geändert, sind alle alten Ausweise sofort wertlos.
+
+Der Ausweis liegt an **zwei** Stellen: als Cookie und im Speicher des Browsers.
+Ein Cookie allein hat sich als unzuverlässig erwiesen – Browser räumen sie auf,
+und der Server sieht sie nur beim ersten Verbindungsaufbau. Findet sich kein
+Cookie, holt ein kurzes Skript den Ausweis aus dem Browserspeicher und hängt
+ihn einmalig an die Adresse; die App liest ihn, meldet an und räumt die Adresse
+wieder auf.
+
+Bei jedem Besuch wird der Ausweis erneuert. Wer die App benutzt, bleibt also
+angemeldet, bis er auf „Abmelden" drückt.
 """
 
 from __future__ import annotations
@@ -30,7 +40,8 @@ import time
 import streamlit as st
 
 COOKIE = "nk_ausweis"
-GUELTIG_TAGE = 60
+SPEICHER = "nk_ausweis"          # derselbe Name im Speicher des Browsers
+GUELTIG_TAGE = 365
 STANDARDBENUTZER = "vermieter"
 
 
@@ -93,37 +104,48 @@ def _ausweis_pruefen(wert: str, benutzer: dict[str, str]) -> str:
 def _cookie_lesen() -> str:
     try:
         return str(st.context.cookies.get(COOKIE) or "")
-    except Exception:  # noqa: BLE001 – ältere Streamlit-Fassungen
+    except Exception:  # noqa: BLE001 - aeltere Streamlit-Fassungen
         return ""
 
 
-def _cookie_schreiben(wert: str, tage: int) -> None:
-    """Cookie im Browser setzen. Leerer Wert plus 0 Tage löscht ihn.
-
-    Streamlit kann Cookies nur lesen, nicht setzen. Deshalb erledigt das ein
-    kurzes Skript in einem Rahmen, das in die umgebende Seite schreibt.
-    """
+def _skript(inhalt: str) -> None:
+    """Ein kurzes Skript in der umgebenden Seite ausfuehren."""
     baustein = getattr(st, "iframe", None)
     hoehe = 1
-    if baustein is None:  # pragma: no cover – ältere Streamlit-Fassungen
+    if baustein is None:  # pragma: no cover - aeltere Streamlit-Fassungen
         hoehe = 0
         try:
             from streamlit.components.v1 import html as baustein
         except ImportError:
             return
-    sicher = "".join(c for c in wert if c.isalnum() or c in "-_=")
-    baustein(
-        f"""
-<script>
-(function () {{
-  const alter = {tage * 24 * 3600};
-  window.parent.document.cookie =
-    "{COOKIE}=" + "{sicher}" + "; path=/; max-age=" + alter + "; SameSite=Lax";
-}})();
-</script>
-""",
-        height=hoehe,
-    )
+    baustein("<script>\n(function () {\n" + inhalt + "\n})();\n</script>",
+             height=hoehe)
+
+
+def _sauber(wert: str) -> str:
+    """Nur das Alphabet des Ausweises durchlassen - nichts Ausfuehrbares."""
+    return "".join(c for c in wert if c.isalnum() or c in "-_=")
+
+
+def _ausweis_ablegen(wert: str, tage: int) -> None:
+    """Ausweis an beiden Stellen ablegen: Cookie und Browserspeicher.
+
+    Leerer Wert plus 0 Tage loescht ihn. Streamlit kann weder Cookies setzen
+    noch den Browserspeicher lesen, deshalb erledigt das ein Skript in der
+    umgebenden Seite.
+    """
+    _skript("\n".join([
+        '  const alter = %d;',
+        '  const w = "%s";',
+        '  try {',
+        '    window.parent.document.cookie =',
+        '      "%s=" + w + "; path=/; max-age=" + alter + "; SameSite=Lax";',
+        '  } catch (e) {}',
+        '  try {',
+        '    if (w) window.parent.localStorage.setItem("%s", w);',
+        '    else window.parent.localStorage.removeItem("%s");',
+        '  } catch (e) {}',
+    ]) % (tage * 24 * 3600, _sauber(wert), COOKIE, SPEICHER, SPEICHER))
 
 
 # --- Anmeldung -------------------------------------------------------------
@@ -157,16 +179,16 @@ def _maske(benutzer: dict[str, str]) -> None:
             st.caption(f"Angemeldet wird als **{name}**.")
         wort = st.text_input("Passwort", type="password", key="anm_wort")
         merken = st.checkbox("Auf diesem Gerät angemeldet bleiben", value=True,
-                             help=f"Gilt {GUELTIG_TAGE} Tage. Gespeichert wird nur ein "
-                                  "Ausweis für dieses Gerät, nicht dein Passwort.")
+                             help="Bleibt gesetzt, bis du auf ‚Abmelden‘ drückst. "
+                                  "Gespeichert wird nur ein Ausweis, nicht dein Passwort. "
+                                  "Er hängt danach auch in der Adresszeile – wer diesen "
+                                  "Link bekommt, ist angemeldet.")
         abgeschickt = st.form_submit_button("Anmelden", type="primary", width="stretch")
 
     if abgeschickt:
         hinterlegt = benutzer.get(name, "")
         if hinterlegt and hmac.compare_digest(wort, hinterlegt):
-            st.session_state["_benutzer"] = name
-            if merken:
-                st.session_state["_ausweis_setzen"] = _ausweis_bauen(name, benutzer)
+            _anmelden(name, benutzer, merken)
             st.rerun()
         else:
             st.error("Benutzername oder Passwort stimmt nicht."
@@ -174,27 +196,91 @@ def _maske(benutzer: dict[str, str]) -> None:
     st.stop()
 
 
+def _adresse_aufraeumen() -> None:
+    """Den Ausweis wieder aus der Adresszeile nehmen."""
+    try:
+        if "ausweis" in st.query_params:
+            del st.query_params["ausweis"]
+    except Exception:  # noqa: BLE001 - aeltere Streamlit-Fassungen
+        pass
+
+
+def _anmelden(name: str, benutzer: dict) -> None:
+    """Anmelden und den Ausweis erneuern.
+
+    Bei jedem Besuch neu ausgestellt: Wer die App benutzt, bleibt angemeldet,
+    bis er auf „Abmelden" drueckt.
+    """
+    st.session_state["_benutzer"] = name
+    st.session_state["_ausweis_setzen"] = _ausweis_bauen(name, benutzer)
+
+
+def _adresse_setzen(wert: str) -> None:
+    """Den Ausweis in die Adresszeile schreiben - oder ihn dort loeschen.
+
+    Das ist der zuverlaessigste Weg: Wer die App danach auf den Startbildschirm
+    legt, dessen Verknuepfung traegt den Ausweis fuer immer mit sich. Der Preis
+    steht in der Anmeldemaske: Wer diesen Link bekommt, ist angemeldet.
+    """
+    try:
+        if wert:
+            st.query_params["ausweis"] = wert
+        elif "ausweis" in st.query_params:
+            del st.query_params["ausweis"]
+    except Exception:  # noqa: BLE001 - aeltere Streamlit-Fassungen
+        pass
+
+
+def _anmelden(name: str, benutzer: dict, merken: bool = True) -> None:
+    """Anmelden und den Ausweis erneuern.
+
+    Bei jedem Besuch neu ausgestellt: Wer die App benutzt, bleibt angemeldet,
+    bis er auf „Abmelden" drueckt.
+    """
+    st.session_state["_benutzer"] = name
+    if merken:
+        ausweis = _ausweis_bauen(name, benutzer)
+        st.session_state["_ausweis_setzen"] = ausweis
+        _adresse_setzen(ausweis)
+
+
 def pruefen() -> None:
-    """Hält die App an, bis jemand angemeldet ist."""
+    """Haelt die App an, bis jemand angemeldet ist."""
     benutzer = benutzerliste()
     if not benutzer:
         st.session_state.setdefault("_benutzer", STANDARDBENUTZER)
         return
 
-    # Aufträge aus dem letzten Durchlauf zuerst ausführen: Ein Cookie lässt sich
-    # nur setzen, während die Seite gezeichnet wird.
+    # Auftraege aus dem letzten Durchlauf: Ablegen und Loeschen geht nur,
+    # waehrend die Seite gezeichnet wird.
     ausweis = st.session_state.pop("_ausweis_setzen", "")
     if ausweis:
-        _cookie_schreiben(ausweis, GUELTIG_TAGE)
+        _ausweis_ablegen(ausweis, GUELTIG_TAGE)
     if st.session_state.pop("_abmelden", False):
-        _cookie_schreiben("", 0)
+        _ausweis_ablegen("", 0)
+        _adresse_setzen("")
 
     if angemeldet_als():
         return
 
-    aus_cookie = _ausweis_pruefen(_cookie_lesen(), benutzer)
-    if aus_cookie:
-        st.session_state["_benutzer"] = aus_cookie
+    # 1. Ausweis in der Adresszeile - so traegt ihn auch die Verknuepfung auf
+    #    dem Startbildschirm mit sich.
+    try:
+        aus_adresse = str(st.query_params.get("ausweis") or "")
+    except Exception:  # noqa: BLE001 - aeltere Streamlit-Fassungen
+        aus_adresse = ""
+    name = _ausweis_pruefen(aus_adresse, benutzer) if aus_adresse else ""
+    if name:
+        _anmelden(name, benutzer)
         return
 
+    # 2. Cookie. Streamlit sieht ihn nur beim Verbindungsaufbau, und nicht jeder
+    #    Browser haelt ihn - deshalb ist er nur die zweite Reihe.
+    name = _ausweis_pruefen(_cookie_lesen(), benutzer)
+    if name:
+        _anmelden(name, benutzer)
+        return
+
+    if aus_adresse:      # abgelaufen oder verstuemmelt
+        _adresse_setzen("")
     _maske(benutzer)

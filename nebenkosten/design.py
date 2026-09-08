@@ -159,14 +159,17 @@ h4 {{ font-size: 1.02rem; margin: 1.4rem 0 .4rem; }}
 }}
 .nk-fortschritt .nk-fuellung {{
     height: 100%; border-radius: 99px;
-    background: linear-gradient(90deg, var(--nk-akzent), var(--nk-akzent-hell));
+    background: linear-gradient(90deg, var(--nk-warn), var(--nk-akzent), var(--nk-gut));
     transition: width .5s cubic-bezier(.4,0,.2,1);
 }}
 .nk-fortschritt .nk-schritte {{
     display: flex; flex-wrap: wrap; gap: 5px 8px; margin-top: 7px;
     font-size: .74rem; color: var(--nk-gedaempft);
 }}
+.nk-fortschritt .nk-schritt {{ cursor: help; }}
 .nk-fortschritt .nk-schritt.fertig {{ color: var(--nk-gut); font-weight: 600; }}
+.nk-fortschritt .nk-schritt.teils {{ color: var(--nk-warn); font-weight: 600; }}
+.nk-fortschritt .nk-schritt em {{ font-style: normal; opacity: .75; }}
 
 /* ---------- Sparten ---------- */
 .nk-sparte {{
@@ -511,18 +514,32 @@ def kennzahlen(eintraege: list[tuple[str, str, str, str]]) -> None:
     st.markdown(f'<div class="nk-zahlen">{kacheln}</div>', unsafe_allow_html=True)
 
 
-def fortschritt(schritte: list[tuple[str, bool]]) -> None:
-    """Balken mit den Etappen bis zur fertigen Abrechnung."""
-    fertig = sum(1 for _, erledigt in schritte if erledigt)
-    anteil = round(fertig / len(schritte) * 100) if schritte else 0
-    punkte = " ".join(
-        f'<span class="nk-schritt {"fertig" if erledigt else ""}">'
-        f'{"✓" if erledigt else "○"} {name}</span>'
-        for name, erledigt in schritte)
+def fortschritt(schritte: list[tuple[str, int, int, str]]) -> None:
+    """Balken mit den Etappen bis zur fertigen Abrechnung.
+
+    Je Etappe: Name, wie viele Angaben stehen, wie viele es sind, und was noch
+    fehlt. Drei Stufen, weil zwei zu wenig sind: Grün erst, wenn die Etappe
+    wirklich fertig ist – sonst hält man eine halb ausgefüllte Abrechnung für
+    fertig, weil ein einziger Betrag schon alles grün gefärbt hat.
+    """
+    steht = sum(erledigt for _, erledigt, _, _ in schritte)
+    gesamt = sum(anzahl for _, _, anzahl, _ in schritte) or 1
+    anteil = round(steht / gesamt * 100)
+    punkte = []
+    for name, erledigt, anzahl, offen in schritte:
+        if erledigt >= anzahl:
+            stufe, zeichen, titel = "fertig", "✓", "vollständig"
+        elif erledigt:
+            stufe, zeichen, titel = "teils", "◐", offen or "noch nicht vollständig"
+        else:
+            stufe, zeichen, titel = "", "○", offen or "noch nichts eingetragen"
+        zusatz = "" if erledigt >= anzahl else f' <em>{erledigt}/{anzahl}</em>'
+        punkte.append(f'<span class="nk-schritt {stufe}" title="{name}: {titel}">'
+                      f'{zeichen} {name}{zusatz}</span>')
     st.markdown(
         f'<div class="nk-fortschritt">'
         f'<div class="nk-balken"><div class="nk-fuellung" style="width:{anteil}%"></div></div>'
-        f'<div class="nk-schritte">{punkte}</div></div>',
+        f'<div class="nk-schritte">{" ".join(punkte)}</div></div>',
         unsafe_allow_html=True)
 
 

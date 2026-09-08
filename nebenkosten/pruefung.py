@@ -131,3 +131,65 @@ def pruefe(s: Stammdaten, positionen: list[Position], e: Ergebnis,
         gesehen: set[str] = set()
         liste[:] = [p for p in liste if not (p.was in gesehen or gesehen.add(p.was))]
     return bericht
+
+
+# --- Fortschritt: wie weit ist jede Etappe? --------------------------------
+
+def _zaehlerstaende(positionen) -> tuple[int, int]:
+    """Wie viele Zaehler haben einen Verbrauch, wie viele gibt es?"""
+    steht = anzahl = 0
+    for pos in positionen:
+        if not pos.aktiv:
+            continue
+        for z in pos.zaehler:
+            anzahl += 1
+            if z.alt or z.neu:
+                steht += 1
+    return steht, anzahl
+
+
+def etappen(s, positionen) -> list[tuple[str, int, int, str]]:
+    """Der Stand je Etappe: Name, erledigt, insgesamt, was noch fehlt.
+
+    Gruen erst, wenn die Etappe wirklich fertig ist. Ein einziger eingetragener
+    Betrag darf nicht die ganze Sparte gruen faerben - sonst haelt man eine halb
+    ausgefuellte Abrechnung fuer fertig.
+    """
+    def zaehle(name: str, angaben: list[tuple[str, object]]) -> tuple[str, int, int, str]:
+        offen = [feld for feld, wert in angaben if not wert]
+        return name, len(angaben) - len(offen), len(angaben), "fehlt: " + ", ".join(offen)
+
+    kosten = [p for p in positionen if p.aktiv and not p.berechnet]
+    mit_betrag = [p for p in kosten if p.betrag]
+    fehlende_betraege = [p.bezeichnung for p in kosten if not p.betrag]
+
+    zeitraum = [("Beginn", s.zeitraum_von), ("Ende", s.zeitraum_bis),
+                ("Mietzeit", s.nutzung_von and s.nutzung_bis)]
+    if s.ist_endabrechnung:
+        zeitraum.append(("Auszugstag", s.auszug_am))
+    if s.ist_zwischenabrechnung:
+        zeitraum.append(("Anlass", s.anlass))
+
+    staende, zaehler = _zaehlerstaende(positionen)
+
+    etappen_liste = [
+        zaehle("Vermieter", [("Name", s.vermieter_name), ("Straße", s.vermieter_strasse),
+                             ("PLZ und Ort", s.vermieter_plz_ort),
+                             ("IBAN", s.vermieter_iban),
+                             ("Anschrift des Hauses", s.objekt_strasse),
+                             ("Wohnfläche des Hauses", s.flaeche_gesamt),
+                             ("Personen im Haus", s.personen_gesamt)]),
+        zaehle("Mieter", [("Name", s.mieter_name)]),
+        zaehle("Wohnung", [("Bezeichnung", s.mieter_wohnung),
+                           ("Wohnfläche", s.flaeche_mieter),
+                           ("Personen", s.personen_mieter)]),
+        zaehle("Zeitraum", zeitraum),
+        ("Kosten", len(mit_betrag), max(len(kosten), 1),
+         ("ohne Betrag: " + ", ".join(fehlende_betraege[:4])
+          + (" …" if len(fehlende_betraege) > 4 else ""))
+         if fehlende_betraege else "vollständig"),
+        ("Zählerstände", staende, max(zaehler, 1),
+         f"{max(zaehler - staende, 0)} von {zaehler} Zählern noch leer"),
+        zaehle("Vorauszahlungen", [("Betrag", s.vorauszahlung_gesamt)]),
+    ]
+    return etappen_liste

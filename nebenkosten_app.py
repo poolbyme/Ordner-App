@@ -604,15 +604,7 @@ design.kennzahlen([
     ("Ergebnis", _saldo[0], _saldo[1], _saldo[2]),
 ])
 
-design.fortschritt([
-    ("Vermieter", bool(stamm.vermieter_name and stamm.vermieter_plz_ort)),
-    ("Mieter", bool(stamm.mieter_name)),
-    ("Wohnung", bool(stamm.flaeche_mieter and stamm.flaeche_gesamt)),
-    ("Zeitraum", bool(stamm.zeitraum_von and stamm.zeitraum_bis)),
-    ("Kosten", any(p.betrag for p in st.session_state.positionen if p.aktiv)),
-    ("Zählerstände", any(z.verbrauch for p in st.session_state.positionen for z in p.zaehler)),
-    ("Vorauszahlungen", bool(stamm.vorauszahlung_gesamt)),
-])
+design.fortschritt(pruefung.etappen(stamm, st.session_state.positionen))
 
 # Ob die Eingaben einen Neustart ueberleben, entscheidet alles - deshalb steht
 # das hier oben und nicht in der Seitenleiste, wo es niemand sucht.

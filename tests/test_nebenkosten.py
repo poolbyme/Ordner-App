@@ -1563,6 +1563,45 @@ def test_faelschlich_abgeschaltete_zeile_kommt_zurueck():
     assert nach_name["Gartenpflege"].aktiv is False
 
 
+def test_etappe_wird_erst_gruen_wenn_sie_fertig_ist():
+    """Ein einziger eingetragener Betrag darf nicht die ganze Sparte gruen
+    faerben - sonst haelt man eine halb ausgefuellte Abrechnung fuer fertig."""
+    from nebenkosten import pruefung
+    from nebenkosten.modell import standard_positionen
+
+    s = basis_stammdaten(vermieter_name="Andreas", vermieter_strasse="",
+                         vermieter_plz_ort="", vermieter_iban="")
+    positionen = standard_positionen()
+    positionen[0].betrag = 10.0
+    nach_name = {name: (a, b) for name, a, b, _ in pruefung.etappen(s, positionen)}
+
+    erledigt, gesamt = nach_name["Kosten"]
+    assert 0 < erledigt < gesamt, "eine von vielen Zeilen ist nicht fertig"
+    erledigt, gesamt = nach_name["Vermieter"]
+    assert 0 < erledigt < gesamt, "ohne Anschrift und IBAN ist es nicht fertig"
+    assert nach_name["Zählerstände"][0] == 0, "kein Zaehler eingetragen"
+
+
+def test_etappe_ist_gruen_wenn_wirklich_alles_steht():
+    from nebenkosten import pruefung
+    from nebenkosten.modell import standard_positionen
+
+    s = basis_stammdaten(
+        vermieter_name="A", vermieter_strasse="Weg 1", vermieter_plz_ort="12345 Ort",
+        vermieter_iban="DE02 1203 0000 0000 2020 51", objekt_strasse="Weg 1",
+        flaeche_gesamt=245.0, personen_gesamt=4.0, mieter_name="B",
+        mieter_wohnung="Obergeschoss", flaeche_mieter=91.0, personen_mieter=2.0,
+        vorauszahlung_monatlich=200.0, vorauszahlung_monate=12)
+    positionen = [p for p in standard_positionen() if not p.berechnet]
+    for p in positionen:
+        p.betrag = 100.0
+        for z in p.zaehler:
+            z.alt, z.neu = 100.0, 200.0
+    nach_name = {name: (a, b) for name, a, b, _ in pruefung.etappen(s, positionen)}
+    for name, (erledigt, gesamt) in nach_name.items():
+        assert erledigt >= gesamt, f"{name} sollte fertig sein: {erledigt}/{gesamt}"
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

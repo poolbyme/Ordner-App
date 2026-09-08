@@ -1013,7 +1013,7 @@ def test_suche_findet_die_richtige_stelle():
     assert "ergebnis" in bereiche("pdf")
     assert "art" in bereiche("auszug")
     assert "vermieter" in bereiche("iban")
-    assert "mieter" in bereiche("personen")
+    assert "objekt" in bereiche("personen")
     assert hilfe.suche("") == []
     assert hilfe.suche("xyzabc") == []
 

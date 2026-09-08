@@ -100,11 +100,11 @@ THEMEN: list[Thema] = [
           "Üblich sind 30 % nach Wohnfläche, der Rest nach Verbrauch."),
 
     # --- Stammdaten und Abrechnung ---------------------------------------
-    Thema("Wohnfläche und Grundstück", "objekt", "Felder „Wohnfläche des ganzen Hauses“ und „Grundstück“",
+    Thema("Wohnfläche und Grundstück", "vermieter", "Abschnitt „Das Haus insgesamt“",
           ["wohnfläche", "wohnflaeche", "quadratmeter", "qm", "grundstück", "fläche"]),
     Thema("Deine Bankverbindung", "vermieter", "Feld „Deine IBAN“",
           ["iban", "konto", "bank", "überweisung", "bankverbindung"]),
-    Thema("Mieter und Personenzahl", "mieter", "Bereich „Mieter“",
+    Thema("Mieter und Personenzahl", "objekt", "Bereich „Mietobjekt“",
           ["mieter", "name", "personen", "bewohner", "anschrift"]),
     Thema("Ein- oder Auszug im Jahr", "art", "Art der Abrechnung → „Abrechnung zum Mietende“",
           ["auszug", "einzug", "mietende", "kündigung", "umzug", "zeitanteilig"]),
@@ -129,14 +129,28 @@ THEMEN: list[Thema] = [
 # Was in jedem Bereich erklärt wird, wenn man auf das Fragezeichen klickt.
 ERKLAERUNGEN = {
     "vermieter": (
-        "Deine eigenen Angaben",
+        "Du und dein Haus",
         """
 Das trägst du **einmal** ein, danach steht es.
+
+**Du als Vermieter**
 
 * **Name und Anschrift** kommen so in den Briefkopf der Abrechnung.
 * **IBAN** erscheint im PDF, falls dein Mieter nachzahlen muss. Bei einem
   Guthaben braucht die App sie nicht.
 * **Ort** steht in der Datumszeile über dem Anschreiben.
+
+**Das Haus insgesamt** – die Zahlen für das ganze Gebäude, deine eigene Wohnung
+mitgezählt:
+
+* **Adresse des Hauses** muss auf der Abrechnung stehen.
+* **Wohnfläche des ganzen Hauses** – die wichtigste Zahl der ganzen App: Der
+  Anteil des Mieters ergibt sich aus seiner Fläche geteilt durch diese.
+* **Personen im Haus insgesamt** – alle Bewohner zusammen.
+* **Grundstück** ist nur eine Angabe im Kopf der Abrechnung.
+
+Die Zahlen der **vermieteten Wohnung** stehen nicht hier, sondern unter
+„3 · Mietobjekt".
 
 Diese Angaben überstehen „Alles auf null setzen" – sie lassen sich nur hier
 ändern.
@@ -145,27 +159,26 @@ Diese Angaben überstehen „Alles auf null setzen" – sie lassen sich nur hier
     "mieter": (
         "Wer die Abrechnung bekommt",
         """
-* **Name** steht im Anschreiben und in der Anrede.
-* **Wohnung** – die Bezeichnung, die im PDF erscheint, etwa „Wohnung Obergeschoss".
-* **Wohnfläche der Mietwohnung** – danach wird der größte Teil der Kosten verteilt.
-  Die Zahl steht im Mietvertrag.
-* **Personen beim Mieter** – nur für Kosten, die nach Köpfen geteilt werden,
-  vor allem die Müllabfuhr.
+Hier steht nur die **Person**: Name und Anrede für das Anschreiben.
 
-Zieht ein neuer Mieter ein, änderst du hier den Namen. Alles andere bleibt.
+Alles, was zur **Wohnung** gehört – Wohnfläche, Personenzahl, Bezeichnung –
+steht unter „3 · Mietobjekt". Das bleibt gleich, auch wenn ein neuer Mieter
+einzieht; dann änderst du hier nur den Namen.
         """,
     ),
     "objekt": (
-        "Das Mietobjekt – bleibt jedes Jahr gleich",
+        "Die vermietete Wohnung",
         """
-* **Adresse des Hauses** muss auf der Abrechnung stehen.
-* **Wohnfläche des ganzen Hauses** – die wichtigste Zahl der ganzen App: Der
-  Anteil des Mieters ergibt sich aus seiner Fläche geteilt durch diese.
-* **Personen im Haus insgesamt** – alle Bewohner zusammen, deine Familie
-  mitgezählt.
-* **Grundstück** ist nur eine Angabe im Kopf der Abrechnung.
+Die Zahlen der Wohnung, die du vermietest – nicht die des ganzen Hauses.
 
-Ändert sich nichts am Haus, musst du hier nie wieder etwas anfassen.
+* **Bezeichnung der Wohnung** erscheint so im PDF, etwa „Wohnung Obergeschoss".
+* **Wohnfläche der Mietwohnung** – danach wird der größte Teil der Kosten
+  verteilt. Die Zahl steht im Mietvertrag.
+* **Personen in der Mietwohnung** – nur für Kosten, die nach Köpfen geteilt
+  werden, vor allem die Müllabfuhr.
+
+Die Wohnfläche des **ganzen Hauses** steht unter „1 · Vermieter". Ändert sich
+nichts an der Wohnung, fasst du das nie wieder an.
         """,
     ),
     "art": (

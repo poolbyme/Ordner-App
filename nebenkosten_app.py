@@ -641,11 +641,12 @@ bereich = st.segmented_control(
     format_func=lambda b: hilfe.BEREICHE[b], label_visibility="collapsed") or "vermieter"
 
 # --------------------------------------------------------------------------
-# 1 Haus und Vermieter – die Daten, die jedes Jahr gleich bleiben
+# 1 Vermieter und Haus – alles, was das ganze Gebäude betrifft
 # --------------------------------------------------------------------------
 if bereich == "vermieter":
-    hilfe.ueberschrift("vermieter", "Du als Vermieter",
+    hilfe.ueberschrift("vermieter", "Du und dein Haus",
                        "Trägst du einmal ein. Bleibt beim Zurücksetzen erhalten.")
+    st.subheader("Du als Vermieter")
     links, rechts = st.columns(2)
     with links:
         stamm.vermieter_name = st.text_input("Dein Name", stamm.vermieter_name, key="v_name")
@@ -663,58 +664,21 @@ if bereich == "vermieter":
             "Ort für die Datumszeile", stamm.ort, key="s_ort",
             help="Steht über dem Anschreiben, zum Beispiel „Gries, 12.03.2026“.")
 
-# --------------------------------------------------------------------------
-# 2 Mieter
-# --------------------------------------------------------------------------
-if bereich == "mieter":
-    hilfe.ueberschrift("mieter", "Dein Mieter",
-                       "Wer die Abrechnung bekommt. Bleibt beim Zurücksetzen erhalten.")
-    links, rechts = st.columns(2)
-    with links:
-        stamm.mieter_name = st.text_input("Name des Mieters", stamm.mieter_name, key="m_name")
-        stamm.mieter_wohnung = st.text_input(
-            "Welche Wohnung ist vermietet?", stamm.mieter_wohnung, key="m_wohnung",
-            help="Zum Beispiel „Wohnung Obergeschoss“. Steht so im PDF.")
-        if erweitert:
-            stamm.anrede = st.text_input(
-                "Anrede im Brief", stamm.anrede, key="m_anrede",
-                help="Zum Beispiel „Sehr geehrter Herr Müller,“.")
-    with rechts:
-        stamm.flaeche_mieter = st.number_input(
-            "Wohnfläche der Mietwohnung (m²)", min_value=0.0, step=1.0,
-            value=float(stamm.flaeche_mieter), key="f_mieter",
-            help="Steht im Mietvertrag. Danach wird der größte Teil der Kosten verteilt.")
-        stamm.personen_mieter = st.number_input(
-            "Personen beim Mieter", min_value=0.0, step=1.0,
-            value=float(stamm.personen_mieter), key="p_mieter",
-            help="Nur für Kosten, die nach Köpfen geteilt werden – vor allem die Müllabfuhr.")
-        stamm.einheiten_mieter = st.number_input(
-            "vermietete Wohnungen", min_value=0.0, step=1.0,
-            value=float(stamm.einheiten_mieter), key="e_mieter")
-
-    if stamm.flaeche_gesamt and stamm.flaeche_mieter:
-        st.success(f"Anteil des Mieters an der Wohnfläche: "
-                   f"**{zahl(stamm.flaeche_mieter / stamm.flaeche_gesamt * 100)} %**")
-    elif not stamm.flaeche_gesamt:
-        st.info("Die Wohnfläche des ganzen Hauses fehlt noch – Bereich „3 · Mietobjekt“.")
-
-# --------------------------------------------------------------------------
-# 3 Mietobjekt
-# --------------------------------------------------------------------------
-if bereich == "objekt":
-    hilfe.ueberschrift("objekt", "Das Mietobjekt",
-                       "Ändert sich nichts am Haus, fasst du das nie wieder an.")
-    links, rechts = st.columns(2)
-    with links:
+    st.divider()
+    st.subheader("Das Haus insgesamt")
+    st.caption("Die Zahlen für das **ganze Gebäude** – deine Wohnung mitgezählt. "
+               "Die Angaben zur vermieteten Wohnung stehen unter „3 · Mietobjekt“.")
+    h1, h2 = st.columns(2)
+    with h1:
         stamm.objekt_strasse = st.text_input(
-            "Straße und Hausnummer", stamm.objekt_strasse, key="o_str")
+            "Straße und Hausnummer des Hauses", stamm.objekt_strasse, key="o_str")
         stamm.objekt_plz_ort = st.text_input("PLZ und Ort", stamm.objekt_plz_ort, key="o_ort")
         stamm.grundstuecksflaeche = st.number_input(
             "Grundstück (m²)", min_value=0.0, step=10.0,
             value=float(stamm.grundstuecksflaeche), key="g_flaeche",
             help="Nur zur Information im Kopf der Abrechnung. Für die Verteilung "
                  "der Kosten wird die Wohnfläche benutzt.")
-    with rechts:
+    with h2:
         stamm.flaeche_gesamt = st.number_input(
             "Wohnfläche des ganzen Hauses (m²)", min_value=0.0, step=1.0,
             value=float(stamm.flaeche_gesamt), key="f_gesamt",
@@ -726,6 +690,54 @@ if bereich == "objekt":
         stamm.einheiten_gesamt = st.number_input(
             "Wohnungen im Haus", min_value=1.0, step=1.0,
             value=float(stamm.einheiten_gesamt), key="e_gesamt")
+
+# --------------------------------------------------------------------------
+# 2 Mieter
+# --------------------------------------------------------------------------
+if bereich == "mieter":
+    hilfe.ueberschrift("mieter", "Dein Mieter",
+                       "Wer die Abrechnung bekommt. Bleibt beim Zurücksetzen erhalten.")
+    stamm.mieter_name = st.text_input("Name des Mieters", stamm.mieter_name, key="m_name",
+                                      help="So steht er im Anschreiben der Abrechnung.")
+    if erweitert:
+        stamm.anrede = st.text_input(
+            "Anrede im Brief", stamm.anrede, key="m_anrede",
+            help="Zum Beispiel „Sehr geehrter Herr Müller,“.")
+    st.caption("Wohnfläche, Personenzahl und Bezeichnung der Wohnung stehen unter "
+               "**„3 · Mietobjekt“** – die gehören zur Wohnung, nicht zur Person.")
+
+# --------------------------------------------------------------------------
+# 3 Mietobjekt – die vermietete Wohnung
+# --------------------------------------------------------------------------
+if bereich == "objekt":
+    hilfe.ueberschrift("objekt", "Die vermietete Wohnung",
+                       "Danach wird verteilt. Ändert sich nichts, fasst du es nie wieder an.")
+    links, rechts = st.columns(2)
+    with links:
+        stamm.mieter_wohnung = st.text_input(
+            "Bezeichnung der Wohnung", stamm.mieter_wohnung, key="m_wohnung",
+            help="Zum Beispiel „Wohnung Obergeschoss“. Steht so im PDF.")
+        stamm.flaeche_mieter = st.number_input(
+            "Wohnfläche der Mietwohnung (m²)", min_value=0.0, step=1.0,
+            value=float(stamm.flaeche_mieter), key="f_mieter",
+            help="Steht im Mietvertrag. Danach wird der größte Teil der Kosten verteilt.")
+    with rechts:
+        stamm.personen_mieter = st.number_input(
+            "Personen in der Mietwohnung", min_value=0.0, step=1.0,
+            value=float(stamm.personen_mieter), key="p_mieter",
+            help="Nur für Kosten, die nach Köpfen geteilt werden – vor allem die Müllabfuhr.")
+        stamm.einheiten_mieter = st.number_input(
+            "vermietete Wohnungen", min_value=0.0, step=1.0,
+            value=float(stamm.einheiten_mieter), key="e_mieter",
+            help="Im Zweifamilienhaus mit einer vermieteten Wohnung: 1.")
+
+    if stamm.flaeche_gesamt and stamm.flaeche_mieter:
+        st.success(f"Anteil des Mieters an der Wohnfläche: "
+                   f"**{zahl(stamm.flaeche_mieter / stamm.flaeche_gesamt * 100)} %** "
+                   f"({zahl(stamm.flaeche_mieter)} von {zahl(stamm.flaeche_gesamt)} m²)")
+    elif not stamm.flaeche_gesamt:
+        st.info("Die Wohnfläche des **ganzen Hauses** fehlt noch – die trägst du unter "
+                "„1 · Vermieter“ ein, Abschnitt „Das Haus insgesamt“.")
 
 # --------------------------------------------------------------------------
 # 4 Abrechnungsart und Zeitraum

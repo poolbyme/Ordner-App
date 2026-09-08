@@ -27,7 +27,7 @@ if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
 
 # Sichtbarer Stand der Anwendung. Nur so lässt sich vom Handy aus sagen, ob
 # der Betreiber die neue Fassung schon ausliefert oder noch die alte läuft.
-STAND = "2026-09-08 · Startbildschirm 4"
+STAND = "2026-09-08 · Startbildschirm 5"
 
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"
@@ -406,9 +406,12 @@ def _startbildschirm_angaben() -> dict:
 def _startbildschirm() -> None:
     """Symbol, Name und Farbe für „Zum Startbildschirm hinzufügen" hinterlegen.
 
-    Die Angaben gehören in den Kopf der Seite. Streamlit rendert Bausteine in
-    einem eigenen Rahmen, deshalb schreibt dieses Schnipsel sie von dort aus in
-    die umgebende Seite – einmal, danach ist alles schon vorhanden.
+    Die Angaben gehören in den Kopf der **obersten** Seite. Das ist der Kern
+    der Sache: Der Betreiber steckt die App noch einmal in einen Rahmen
+    (bei Streamlit Cloud unter /~/+/), und Streamlit rendert eigene Bausteine
+    in einen weiteren Rahmen darin. Wer nur eine Ebene nach oben geht, trägt
+    alles in einen Rahmen ein, den der Browser für die Verknüpfung gar nicht
+    ansieht – dann bleibt oben das Zeichen des Betreibers stehen.
 
     start_url und scope trägt erst das Skript ein: In einer Datenadresse sind
     relative Angaben ungültig und der Browser wirft das Manifest weg.
@@ -421,17 +424,32 @@ def _startbildschirm() -> None:
     # der Pruefkasten unsichtbar.
     with st.container(key="nk-startbildschirm"):
         _html_baustein(
-        """
+            """
 <script>
 (function () {
-  const kopf = window.parent.document.head;
+  // So weit nach oben, wie der Browser es erlaubt. Bei fremder Herkunft wirft
+  // der Zugriff auf .document - dann bleibt es bei der letzten Ebene.
+  function obersteSeite() {
+    let fenster = window;
+    while (fenster !== window.top) {
+      try {
+        const oben = fenster.parent;
+        void oben.document.head;
+        fenster = oben;
+      } catch (fehler) {
+        break;
+      }
+    }
+    return fenster;
+  }
+  const seite = obersteSeite();
+  const kopf = seite.document.head;
   if (!kopf || kopf.querySelector('link#nk-manifest')) return;
-  // Der Betreiber haengt womoeglich sein eigenes Manifest in die Seite - dann
-  // nimmt der Browser dessen Symbol und dessen Namen fuer den Startbildschirm.
-  // Frueher gab dieses Skript an der Stelle auf; jetzt raeumt es das fremde weg.
+  // Der Betreiber haengt sein eigenes Manifest in die Seite - dann nimmt der
+  // Browser dessen Symbol und dessen Namen fuer den Startbildschirm.
   for (const fremd of kopf.querySelectorAll('link[rel="manifest"]')) fremd.remove();
   const angaben = ANGABEN;
-  const ort = window.parent.location;
+  const ort = seite.location;
   // Im Manifest muss jede Adresse vollstaendig sein: es haengt selbst in einer
   // Datenadresse, und dagegen laesst sich nichts Relatives aufloesen.
   const voll = (a) => (a && a.startsWith('/') ? ort.origin + a : a);
@@ -456,17 +474,25 @@ def _startbildschirm() -> None:
     eintraege.push(['link', {rel: 'apple-touch-icon', sizes: '180x180', href: angaben.apfel}]);
   }
   if (angaben.symbol) {
-    for (const fremd of kopf.querySelectorAll('link[rel="shortcut icon"]')) {
+    for (const fremd of kopf.querySelectorAll('link[rel="shortcut icon"], link[rel="icon"]')) {
       if (!(fremd.getAttribute('href') || '').startsWith('data:')) fremd.remove();
     }
     eintraege.push(['link', {rel: 'icon', type: 'image/png', sizes: '512x512',
                              href: angaben.symbol}]);
   }
   for (const [art, eigenschaften] of eintraege) {
-    const knoten = window.parent.document.createElement(art);
+    const knoten = seite.document.createElement(art);
     for (const [name, wert] of Object.entries(eigenschaften)) knoten.setAttribute(name, wert);
     kopf.appendChild(knoten);
   }
+  // Der Name unter dem Symbol kommt vom Titel der obersten Seite. Beim
+  // Betreiber heisst die "Streamlit"; die App weiter unten kann daran nichts
+  // aendern. Nachfassen, falls der Betreiber ihn spaeter noch einmal setzt.
+  const namen = () => {
+    if (seite.document.title !== 'Nebenkosten') seite.document.title = 'Nebenkosten';
+  };
+  namen();
+  setInterval(namen, 1000);
 })();
 </script>
 """.replace("ANGABEN", angaben),
@@ -477,10 +503,10 @@ def _startbildschirm() -> None:
 def pruefansicht() -> None:
     """Zeigen, was der Browser für den Startbildschirm wirklich vorliegen hat.
 
-    Der Kniff mit dem Manifest spielt sich im Kopf der Seite ab – dort kann
-    niemand hineinsehen, und Raten hat schon genug Zeit gekostet. Dieser
-    Kasten liest genau das aus, was der Browser gerade hat, und zeigt es im
-    Klartext. Ein Bild davon genügt, um zu sagen, woran es liegt.
+    Der Kniff mit dem Manifest spielt sich im Kopf der obersten Seite ab –
+    dort kann niemand hineinsehen, und Raten hat schon genug Zeit gekostet.
+    Dieser Kasten liest genau das aus, was der Browser gerade hat, und zeigt
+    es im Klartext. Ein Bild davon genügt, um zu sagen, woran es liegt.
     """
     if _html_baustein is None:
         return
@@ -498,6 +524,19 @@ def pruefansicht() -> None:
 </style>
 <div id="bericht">wird geprüft …</div>
 <script>
+function obersteSeite() {
+  let fenster = window;
+  while (fenster !== window.top) {
+    try {
+      const oben = fenster.parent;
+      void oben.document.head;
+      fenster = oben;
+    } catch (fehler) {
+      break;
+    }
+  }
+  return fenster;
+}
 function nachsehen() {
   const zeilen = [];
   const sage = (name, wert, gut) => zeilen.push(
@@ -505,12 +544,17 @@ function nachsehen() {
     '<span>' + name + ': <span class="wert">' + wert + '</span></span></div>');
   let bild = '';
   try {
-    const kopf = window.parent.document.head;
+    const seite = obersteSeite();
+    const kopf = seite.document.head;
     const eigen = kopf.querySelector('link#nk-manifest');
     const fremde = Array.from(kopf.querySelectorAll('link[rel="manifest"]'))
       .filter((l) => l.id !== 'nk-manifest');
-    sage('Seitenname', window.parent.document.title || '(leer)',
-         (window.parent.document.title || '').indexOf('Nebenkosten') === 0);
+    sage('Oberste Seite erreicht', seite === window.top ? 'ja' : 'nein',
+         seite === window.top);
+    sage('Adresse dieser Seite', seite.location.pathname,
+         seite.location.pathname.indexOf('/~/') !== 0);
+    sage('Seitenname', seite.document.title || '(leer)',
+         (seite.document.title || '').indexOf('Nebenkosten') === 0);
     sage('Eigenes Manifest im Kopf', eigen ? 'ja' : 'nein', !!eigen);
     sage('Fremdes Manifest daneben', fremde.length ? fremde.length + ' Stück' : 'keines',
          fremde.length === 0);
@@ -521,7 +565,8 @@ function nachsehen() {
       sage('Name für den Startbildschirm', inhalt.short_name || '(leer)',
            inhalt.short_name === 'Nebenkosten');
       sage('Bilder im Manifest', symbole.length + ' Stück', symbole.length > 0);
-      sage('Startadresse', inhalt.start_url || '(leer)', !!inhalt.start_url);
+      sage('Startadresse', inhalt.start_url || '(leer)',
+           (inhalt.start_url || '').indexOf('/~/') < 0);
       if (symbole.length) {
         const gross = symbole[symbole.length - 1];
         bild = '<div class="bild"><img src="' + gross.src + '" alt="">' +
@@ -545,7 +590,7 @@ nachsehen();
 setInterval(nachsehen, 700);
 </script>
 """,
-        height=320,
+        height=350,
     )
 
 

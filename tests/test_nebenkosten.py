@@ -1680,3 +1680,46 @@ def test_stand_wird_angezeigt():
     text = quelle.read_text(encoding="utf-8")
     assert "design.STAND" in text
     assert "design.pruefansicht()" in text
+
+def test_eintrag_geht_bis_zur_obersten_seite():
+    """Der Betreiber steckt die App in einen weiteren Rahmen (bei Streamlit
+    Cloud unter /~/+/). Der Browser holt Symbol und Namen von der obersten
+    Seite. Wer nur eine Ebene hochgeht, schreibt in einen Rahmen, den für die
+    Verknüpfung niemand ansieht - genau das war der Fehler."""
+    import inspect
+
+    from nebenkosten import design
+
+    quelle = inspect.getsource(design)
+    assert "window.parent.document" not in quelle, (
+        "eine Ebene hoch reicht nicht - der Eintrag landet im falschen Rahmen")
+    fuer_kopf = inspect.getsource(design._startbildschirm)
+    assert "function obersteSeite()" in fuer_kopf
+    assert "fenster !== window.top" in fuer_kopf
+    assert "seite.document.head" in fuer_kopf
+    assert "seite.location" in fuer_kopf
+
+
+def test_name_der_obersten_seite_wird_gesetzt():
+    """Der Name unter dem Symbol kommt vom Titel der obersten Seite; beim
+    Betreiber heißt die 'Streamlit'. set_page_config erreicht nur den Rahmen
+    darin."""
+    import inspect
+
+    from nebenkosten import design
+
+    quelle = inspect.getsource(design._startbildschirm)
+    assert "seite.document.title = 'Nebenkosten'" in quelle
+    assert "setInterval(namen" in quelle
+
+
+def test_pruefkasten_zeigt_die_ebene():
+    """Ohne diese Zeile war von außen nicht zu sehen, dass der Eintrag im
+    falschen Rahmen landet."""
+    import inspect
+
+    from nebenkosten import design
+
+    quelle = inspect.getsource(design.pruefansicht)
+    assert "Oberste Seite erreicht" in quelle
+    assert "obersteSeite()" in quelle

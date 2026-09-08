@@ -120,6 +120,10 @@ class Position:
     # verteilt (Grundkosten), der Rest nach Verbrauch. 0 = alles nach Verbrauch.
     grundkosten_anteil: float = 0.0   # Prozent, 0 bis 50
     arbeitskosten: float = 0.0     # im Betrag enthaltene Lohnkosten (§ 35a EStG)
+    # Der Betrag wird nicht eingetippt, sondern aus der Brennstoffrechnung
+    # errechnet (Heizung und Warmwasser). Solche Zeilen stehen nicht in der
+    # Kostentabelle - sonst sucht man dort nach einer Rechnung, die es nicht gibt.
+    berechnet: bool = False
     zeitanteilig: bool = True      # bei unterjähriger Nutzung anteilig kürzen
     aktiv: bool = True
     hinweis: str = ""
@@ -188,6 +192,15 @@ class Stammdaten:
 
     # Verteilung der Differenz zwischen Hauptzähler und Wohnungszählern
     zaehlerdifferenz: str = "verbrauch"  # "verbrauch" oder "flaeche"
+
+    # Heizung und Warmwasser: eine Rechnung, zwei Kostenarten. Welche Angaben
+    # gebraucht werden, haengt an der Heizart (siehe nebenkosten/heizung.py).
+    heizart: str = "gas_zentral"
+    brennstoff_kosten: float = 0.0     # die Rechnung des Versorgers, brutto
+    brennstoff_menge: float = 0.0      # m³ Gas, Liter Öl, kg Pellets, kWh Fernwärme
+    energie_je_einheit: float = 0.0    # kWh je Einheit; 0 = Vorgabe der Heizart
+    warmwasser_zentral: bool = True    # macht dieselbe Anlage das Warmwasser?
+    warmwasser_temperatur: float = 60.0
 
     # Umrechnung des Gaszählers von Kubikmetern in Kilowattstunden.
     # Beide Werte stehen auf der Gasrechnung und ändern sich jedes Jahr etwas.
@@ -276,6 +289,7 @@ def standard_positionen() -> list[Position]:
         # Kilowattstunden. Beides an einer Kostenart, deshalb steht die Einheit
         # am einzelnen Zähler und nicht nur an der Kostenart.
         "Heizung (Gas)": dict(
+            berechnet=True,
             einheit="kWh", zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
             zaehler=[
                 Zaehlerstand("Gaszähler Haus (nur zur Information)", "haus", einheit="m³"),
@@ -289,6 +303,7 @@ def standard_positionen() -> list[Position]:
         # heißt zweimal Gelegenheit für einen Zahlendreher - und wenn die beiden
         # Eingaben auseinanderlaufen, rechnet die App mit zwei Wahrheiten.
         "Warmwasser (Gas)": dict(
+            berechnet=True,
             einheit="m³", zaehler_grundlage="unterzaehler", grundkosten_anteil=30.0,
             zaehler_von="Wasser",
             zaehler_nur=["Warmwasser Mieter", "Warmwasser eigene Wohnung"]),
@@ -420,7 +435,9 @@ def _nachziehen(positionen: list[Position]) -> list[Position]:
     """
     nach_name = {p.bezeichnung.strip().lower(): p for p in positionen}
     wasser = nach_name.get("wasser")
-    warm = nach_name.get("warmwasser (gas)")
+    # Die Zeile kann „Warmwasser (Gas)" oder „Warmwasser (Öl)" heissen.
+    warm = next((p for p in positionen
+                 if p.bezeichnung.strip().lower().startswith("warmwasser")), None)
     if wasser and warm:
         if warm.zaehler and not warm.zaehler_von:
             _warmwasser_zusammenlegen(wasser, warm)
@@ -435,6 +452,10 @@ def _nachziehen(positionen: list[Position]) -> list[Position]:
                 warm.zaehler_von = wasser.bezeichnung
 
     for pos in positionen:
+        anfang = pos.bezeichnung.strip().lower()
+        if anfang.startswith(("heizung", "warmwasser")):
+            # Diese Betraege kommen aus der Brennstoffrechnung, nicht aus der Tabelle.
+            pos.berechnet = True
         for z in pos.zaehler:
             if z.einheit:
                 continue

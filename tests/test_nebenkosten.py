@@ -1358,6 +1358,90 @@ def test_katalog_deckt_alle_nummern_der_betriebskostenverordnung_ab():
     assert not fehlt, f"§ 2 BetrKV Nr. {fehlt} kommen im Katalog nicht vor"
 
 
+# --- Heizung: eine Rechnung, zwei Kostenarten ------------------------------
+
+def _heizdaten(**abweichungen):
+    from nebenkosten.modell import Stammdaten
+
+    werte = dict(heizart="gas_zentral", brennstoff_kosten=2740.0,
+                 brennstoff_menge=2440.0, gas_zustandszahl=0.95, gas_brennwert=10.5,
+                 warmwasser_zentral=True, warmwasser_temperatur=60.0)
+    werte.update(abweichungen)
+    return basis_stammdaten(**werte) if False else Stammdaten(**werte)
+
+
+def test_gasrechnung_wird_in_heizung_und_warmwasser_geteilt():
+    from nebenkosten.heizung import aufteilen
+
+    a = aufteilen(_heizdaten(), 61.271)
+    assert round(a.energie_gesamt) == 24339          # 2440 x 0,95 x 10,5
+    assert round(a.energie_warmwasser) == 7659       # 2,5 x 61,271 x 50
+    assert round(a.kosten_warmwasser + a.kosten_heizung, 2) == 2740.0
+    assert round(a.kosten_warmwasser, 2) == 862.21
+
+
+def test_ohne_warmwasserzaehler_steht_alles_bei_der_heizung():
+    from nebenkosten.heizung import aufteilen
+
+    a = aufteilen(_heizdaten(), 0.0)
+    assert a.kosten_warmwasser == 0.0
+    assert a.kosten_heizung == 2740.0
+    assert any("ganze Rechnung" in h for h in a.hinweise)
+
+
+def test_oel_und_pellets_rechnen_mit_ihrem_eigenen_energiegehalt():
+    from nebenkosten.heizung import aufteilen
+
+    oel = aufteilen(_heizdaten(heizart="oel", brennstoff_menge=3000.0), 61.271)
+    assert round(oel.energie_gesamt) == 30000        # 3000 l x 10 kWh
+
+    pellets = aufteilen(_heizdaten(heizart="pellets", brennstoff_menge=6000.0), 61.271)
+    assert round(pellets.energie_gesamt) == 28800    # 6000 kg x 4,8 kWh
+
+
+def test_fernwaerme_braucht_keine_umrechnung():
+    from nebenkosten.heizung import aufteilen
+
+    a = aufteilen(_heizdaten(heizart="fernwaerme", brennstoff_menge=24339.0), 61.271)
+    assert round(a.energie_gesamt) == 24339
+    assert not a.rechenweg or "kWh/kWh" not in a.rechenweg[0]
+
+
+def test_etagenheizung_rechnet_keine_brennstoffkosten_ab():
+    """Jede Wohnung hat einen eigenen Vertrag - da laeuft nichts ueber die
+    Nebenkosten."""
+    from nebenkosten.heizung import aufteilen
+
+    a = aufteilen(_heizdaten(heizart="gas_etage"), 61.271)
+    assert a.kosten_heizung == 0.0 and a.kosten_warmwasser == 0.0
+    assert a.hinweise
+
+
+def test_warmwasser_ueber_eigene_anlage_bleibt_bei_der_heizung():
+    from nebenkosten.heizung import aufteilen
+
+    a = aufteilen(_heizdaten(warmwasser_zentral=False), 61.271)
+    assert a.kosten_warmwasser == 0.0
+    assert a.kosten_heizung == 2740.0
+
+
+def test_zu_viel_warmwasser_wird_gemeldet():
+    """Rechnerisch mehr Warmwasser als Gesamtenergie - da stimmt eine Eingabe nicht."""
+    from nebenkosten.heizung import aufteilen
+
+    a = aufteilen(_heizdaten(brennstoff_menge=100.0), 200.0)
+    assert a.anteil_warmwasser == 1.0
+    assert any("mehr Energie" in h for h in a.hinweise)
+
+
+def test_heizzeilen_stehen_nicht_in_der_kostentabelle():
+    """Fuer Warmwasser gibt es keine Rechnung - ein Eingabefeld dafuer verwirrt."""
+    from nebenkosten.modell import standard_positionen
+
+    berechnet = [p.bezeichnung for p in standard_positionen() if p.berechnet]
+    assert sorted(berechnet) == ["Heizung (Gas)", "Warmwasser (Gas)"]
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

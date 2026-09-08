@@ -12,11 +12,11 @@ import pandas as pd
 import streamlit as st
 
 from nebenkosten.berechnung import (
-    berechne, co2_vermieteranteil, eur, gas_kwh, menge, parse_datum,
-    verbrauchsaufteilung, warmwasser_kwh, zahl,
+    berechne, co2_vermieteranteil, eur, menge, parse_datum, verbrauchsaufteilung, zahl,
 )
 from nebenkosten import cloud as cloud_blatt
-from nebenkosten import design, hilfe, katalog, pruefung, speicher, zugang
+from nebenkosten import (design, heizung, hilfe, katalog, pruefung, speicher,
+                         zugang)
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
@@ -87,6 +87,127 @@ def init_state() -> None:
         nutzung_bis=date(jahr, 12, 31).isoformat(),
     )
     st.session_state.positionen = standard_positionen()
+
+
+def warmwassermenge_haus() -> float:
+    """Warmwasser im ganzen Haus in m³ – die Summe der Warmwasserzähler."""
+    menge = 0.0
+    for p in st.session_state.get("positionen", []):
+        for z in p.zaehler:
+            if "warmwasser" in z.name.strip().lower():
+                menge += z.verbrauch
+    return menge
+
+
+def heizungsaufteilung() -> heizung.Aufteilung:
+    return heizung.aufteilen(st.session_state.stamm, warmwassermenge_haus())
+
+
+def betraege_uebernehmen(a: heizung.Aufteilung) -> None:
+    """Die errechneten Beträge in die beiden berechneten Zeilen schreiben."""
+    for p in st.session_state.positionen:
+        if not p.berechnet:
+            continue
+        name = p.bezeichnung.strip().lower()
+        if name.startswith("warmwasser"):
+            p.betrag = a.kosten_warmwasser
+            p.aktiv = bool(a.kosten_warmwasser)
+        elif name.startswith("heizung"):
+            p.betrag = a.kosten_heizung
+            p.aktiv = bool(a.kosten_heizung)
+
+
+def heizungsblock() -> None:
+    """Heizung und Warmwasser: eintragen, was auf der Rechnung steht.
+
+    Die Aufteilung in Heizkosten und Warmwasserkosten rechnet die App selbst
+    aus – für Warmwasser gibt es keine eigene Rechnung, nach der man suchen
+    könnte. Deshalb stehen die beiden Zeilen auch nicht in der Kostentabelle.
+    """
+    stamm = st.session_state.stamm
+    with st.container(border=True):
+        st.markdown("#### 🔥 Heizung und Warmwasser")
+        schluessel = list(heizung.HEIZARTEN)
+        gewaehlt = st.selectbox(
+            "Womit wird geheizt?", schluessel,
+            index=schluessel.index(stamm.heizart) if stamm.heizart in schluessel else 0,
+            format_func=lambda k: heizung.HEIZARTEN[k].name, key="heizart",
+            help="Danach richtet sich, welche Angaben gebraucht werden.")
+        stamm.heizart = gewaehlt
+        art = heizung.heizart(gewaehlt)
+        st.caption(art.hinweis)
+
+        if not art.zentral:
+            betraege_uebernehmen(heizungsaufteilung())
+            return
+
+        h1, h2 = st.columns(2)
+        stamm.brennstoff_kosten = h1.number_input(
+            "Rechnung des Versorgers (€)", min_value=0.0, step=10.0,
+            value=float(stamm.brennstoff_kosten), key="br_kosten",
+            help="Der Bruttobetrag der Jahresrechnung für den Brennstoff.")
+        stamm.brennstoff_menge = h2.number_input(
+            f"{art.mengenfeld} ({art.einheit})", min_value=0.0, step=1.0,
+            value=float(stamm.brennstoff_menge), key="br_menge",
+            help="Steht auf der Rechnung oder ergibt sich aus dem Zähler: "
+                 "Endstand minus Anfangsstand.")
+
+        if art.gasumrechnung:
+            g1, g2 = st.columns(2)
+            stamm.gas_zustandszahl = g1.number_input(
+                "Zustandszahl", min_value=0.0, max_value=2.0, step=0.0001, format="%.4f",
+                value=float(stamm.gas_zustandszahl), key="z_zahl",
+                help="Rechnet Druck und Temperatur am Zähler auf Normbedingungen um. "
+                     "Steht auf der Gasrechnung, meist zwischen 0,90 und 1,00.")
+            stamm.gas_brennwert = g2.number_input(
+                "Brennwert (kWh/m³)", min_value=0.0, max_value=20.0, step=0.01, format="%.4f",
+                value=float(stamm.gas_brennwert), key="brennwert",
+                help="Energiegehalt eines Kubikmeters Gas. Steht auf der Gasrechnung, "
+                     "meist zwischen 9,8 und 11,5.")
+        elif art.energie_beschriftung:
+            stamm.energie_je_einheit = st.number_input(
+                art.energie_beschriftung, min_value=0.0, step=0.1,
+                value=float(stamm.energie_je_einheit or art.energie_je_einheit),
+                key="energie_je",
+                help="Vorbelegt mit dem üblichen Wert. Steht auf deiner Rechnung "
+                     "etwas anderes, hat die Rechnung Vorrang.")
+
+        if art.macht_warmwasser:
+            w1, w2 = st.columns(2)
+            stamm.warmwasser_zentral = w1.checkbox(
+                "Diese Anlage macht auch das Warmwasser", value=stamm.warmwasser_zentral,
+                key="ww_zentral",
+                help="Wenn nicht, entfällt die ganze Rechnung auf die Heizung.")
+            if stamm.warmwasser_zentral:
+                stamm.warmwasser_temperatur = w2.number_input(
+                    "Warmwassertemperatur (°C)", min_value=20.0, max_value=80.0, step=5.0,
+                    value=float(stamm.warmwasser_temperatur), key="ww_temp",
+                    help="Ohne gemessene Temperatur schreibt die Heizkostenverordnung "
+                         "60 °C vor. Einen niedrigeren Wert darfst du nur ansetzen, "
+                         "wenn du ihn wirklich misst.")
+
+        a = heizungsaufteilung()
+        betraege_uebernehmen(a)
+        menge = warmwassermenge_haus()
+        if not a.energie_gesamt:
+            st.info("Trag die Rechnung und die Verbrauchsmenge ein – dann teilt die App "
+                    "sie in Heizkosten und Warmwasserkosten auf.")
+        else:
+            for zeile in a.rechenweg:
+                st.caption(zeile)
+            if a.kosten_warmwasser:
+                st.success(
+                    f"Davon **{eur(a.kosten_warmwasser)} €** für das Warmwasser "
+                    f"({zahl(a.anteil_warmwasser * 100)} % der Energie) und "
+                    f"**{eur(a.kosten_heizung)} €** für die Heizung.")
+            else:
+                st.info(f"Die ganze Rechnung steht bei der Heizung: "
+                        f"**{eur(a.kosten_heizung)} €**.")
+        if art.macht_warmwasser and stamm.warmwasser_zentral and not menge:
+            st.warning("Für die Aufteilung fehlt das Warmwasser in m³. Trag die "
+                       "Warmwasserzähler im Bereich „6 · Zählerstände“ bei **Wasser** ein.")
+        for hinweis in a.hinweise:
+            st.warning(hinweis)
 
 
 def _blattname(benutzer: str) -> str:
@@ -695,6 +816,8 @@ if bereich == "kosten":
         "einfach links abwählen. Eigene Zeilen unten anfügen."
     )
 
+    heizungsblock()
+
     st.session_state["_abgelehnt"] = []
 
     def kostenart_anbieten(schluessel: str, vorhandene: list[Position]) -> None:
@@ -723,20 +846,33 @@ if bereich == "kosten":
                 neu_zeichnen()
 
     def kategorie_positionen(schluessel: str) -> list[Position]:
-        return [p for p in st.session_state.positionen if p.kategorie == schluessel]
+        """Die eintippbaren Zeilen einer Kategorie.
+
+        Berechnete Zeilen (Heizung, Warmwasser) bleiben draussen: Fuer sie gibt
+        es keine eigene Rechnung, aus der man einen Betrag abschreiben koennte.
+        Sie stehen im Heizungsblock und in der fertigen Abrechnung.
+        """
+        return [p for p in st.session_state.positionen
+                if p.kategorie == schluessel and not p.berechnet]
 
     def zusammenfuehren(schluessel: str, neue: list[Position]) -> None:
-        """Bearbeitete Zeilen einer Kategorie zurück in die Gesamtliste."""
+        """Bearbeitete Zeilen einer Kategorie zurück in die Gesamtliste.
+
+        Die berechneten Zeilen standen nicht im Editor und duerfen dabei nicht
+        verlorengehen - sie werden vor den bearbeiteten wieder eingehaengt.
+        """
+        berechnete = [p for p in st.session_state.positionen
+                      if p.kategorie == schluessel and p.berechnet]
         zusammen: list[Position] = []
         eingefuegt = False
         for p in st.session_state.positionen:
             if p.kategorie != schluessel:
                 zusammen.append(p)
             elif not eingefuegt:
-                zusammen.extend(neue)
+                zusammen.extend(berechnete + neue)
                 eingefuegt = True
         if not eingefuegt:
-            zusammen.extend(neue)
+            zusammen.extend(berechnete + neue)
         st.session_state.positionen = zusammen
 
     if handy:
@@ -823,103 +959,6 @@ if bereich == "kosten":
 
     summe = sum(p.betrag for p in st.session_state.positionen if p.aktiv)
     st.info(f"Kosten des Hauses insgesamt: **{eur(summe)} €**")
-
-    with st.expander("🔥 Gasrechnung auf Heizung und Warmwasser aufteilen"):
-        st.caption(
-            "Wenn deine Wärmemengenzähler nur die Heizung messen, steckt im Gas auch das "
-            "Warmwasser. Die Heizkostenverordnung (§ 9) rechnet den Warmwasseranteil so heraus: "
-            "**Q = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur − 10 °C)**, plus Zuschlag "
-            "für die Verluste der Anlage."
-        )
-        st.markdown("**Warmwasser**")
-        w1, w2, w3 = st.columns(3)
-        ww_menge = w1.number_input("Warmwasser im ganzen Haus (m³)", min_value=0.0, step=1.0,
-                                   value=float(st.session_state.get("ww_menge", 0.0)),
-                                   key="ww_menge")
-        ww_temp = w2.number_input(
-            "Warmwassertemperatur (°C)", min_value=20.0, max_value=80.0, step=5.0,
-            value=float(st.session_state.get("ww_temp", 60.0)), key="ww_temp",
-            help="Ohne gemessene Temperatur schreibt die Heizkostenverordnung 60 °C vor. "
-                 "Einen niedrigeren Wert darfst du nur ansetzen, wenn du ihn wirklich misst.")
-        w3.markdown("**Formel**")
-        w3.caption("2,5 × m³ × (°C − 10) — § 9 Abs. 2 HeizkostenV, ohne Zuschlag.")
-
-        st.markdown("**Gasverbrauch**")
-        st.caption(
-            "Der Gaszähler zählt Kubikmeter, abgerechnet wird in Kilowattstunden. "
-            "Umgerechnet wird mit **Zustandszahl** und **Brennwert** – beide stehen auf "
-            "deiner Gasrechnung und ändern sich jedes Jahr ein wenig."
-        )
-        # Kubikmeter aus dem Gaszähler der Heizung holen, falls vorhanden
-        gemessen_m3 = 0.0
-        for p_gas in st.session_state.positionen:
-            if p_gas.kategorie == "gas" and p_gas.zaehler:
-                gemessen_m3 = max(gemessen_m3, p_gas.verbrauch_haus)
-        u1, u2, u3 = st.columns(3)
-        gas_m3 = u1.number_input(
-            "Gasverbrauch (m³)", min_value=0.0, step=10.0,
-            value=float(st.session_state.get("gas_m3", gemessen_m3)), key="gas_m3",
-            help="Endstand minus Anfangsstand des Gaszählers. Steht der Zähler im Tab "
-                 "„Zählerstände“, ist der Wert schon eingetragen.")
-        stamm.gas_zustandszahl = u2.number_input(
-            "Zustandszahl", min_value=0.0, max_value=2.0, step=0.0001, format="%.4f",
-            value=float(stamm.gas_zustandszahl), key="z_zahl",
-            help="Rechnet Druck und Temperatur am Zähler auf Normbedingungen um. "
-                 "Meist zwischen 0,90 und 1,00.")
-        stamm.gas_brennwert = u3.number_input(
-            "Brennwert (kWh/m³)", min_value=0.0, max_value=20.0, step=0.01, format="%.4f",
-            value=float(stamm.gas_brennwert), key="brennwert",
-            help="Energiegehalt eines Kubikmeters Gas. Meist zwischen 9,8 und 11,5.")
-
-        umgerechnet = gas_kwh(gas_m3, stamm.gas_zustandszahl, stamm.gas_brennwert)
-        if umgerechnet:
-            st.info(f"{menge(gas_m3)} m³ × {zahl(stamm.gas_zustandszahl, 4)} × "
-                    f"{zahl(stamm.gas_brennwert, 4)} = **{menge(round(umgerechnet))} kWh**")
-            if umgerechnet > 100000:
-                st.warning(
-                    "Das sind ungewöhnlich viele Kilowattstunden für ein Wohnhaus. Zählt dein "
-                    "Zähler vielleicht schon in kWh? Dann gehört der Wert direkt ins Feld "
-                    "„Gasverbrauch im Zeitraum (kWh)“, ohne Umrechnung.")
-
-        g1, g2 = st.columns(2)
-        verbrauch_kwh = g1.number_input(
-            "Gasverbrauch im Zeitraum (kWh)", min_value=0.0, step=100.0,
-            value=float(st.session_state.get("gas_kwh", round(umgerechnet, 1))), key="gas_kwh",
-            help="Wird aus der Umrechnung oben vorbelegt. Steht auf deiner Rechnung eine "
-                 "andere Kilowattstundenzahl, hat die Rechnung Vorrang.")
-        gas_kosten = g2.number_input("Gaskosten im Zeitraum (€)", min_value=0.0, step=10.0,
-                                     value=float(st.session_state.get("gas_kosten", 0.0)),
-                                     key="gas_kosten")
-
-        st.markdown("**Aufteilung**")
-        if ww_menge > 0 and verbrauch_kwh > 0 and gas_kosten > 0:
-            ww_bedarf = warmwasser_kwh(ww_menge, ww_temp)
-            anteil = min(ww_bedarf / verbrauch_kwh, 1.0)
-            kosten_ww = round(gas_kosten * anteil, 2)
-            kosten_heizung = round(gas_kosten - kosten_ww, 2)
-            st.success(
-                f"Warmwasser braucht **{menge(round(ww_bedarf))} kWh** = **{zahl(anteil * 100)} %** "
-                f"des Gases → **{eur(kosten_ww)} €** für Warmwasser, "
-                f"**{eur(kosten_heizung)} €** für die Heizung."
-            )
-            if st.button("Diese Beträge in die Kostenzeilen übernehmen", key="ww_uebernehmen"):
-                getroffen = []
-                for p in st.session_state.positionen:
-                    name = p.bezeichnung.lower()
-                    if "warmwasser" in name:
-                        p.betrag, p.aktiv = kosten_ww, True
-                        getroffen.append(p.bezeichnung)
-                    elif "heizung" in name:
-                        p.betrag, p.aktiv = kosten_heizung, True
-                        getroffen.append(p.bezeichnung)
-                if getroffen:
-                    sichern()
-                    neu_zeichnen()
-                else:
-                    st.warning("Keine Zeile mit „Heizung“ oder „Warmwasser“ gefunden.")
-        else:
-            st.caption("Trag Warmwassermenge, Gasverbrauch und Gaskosten ein, dann rechnet "
-                       "die App die Aufteilung aus.")
 
     with st.expander("📋 Alle Kosten, die du abrechnen darfst"):
         st.caption(

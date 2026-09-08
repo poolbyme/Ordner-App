@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
+from .heizung import warmwasser_kwh as _warmwasser_kwh
 from .modell import (
     NICHT_UMLAGEFAEHIG_STICHWORTE, Position, Stammdaten, sicht_vermieter,
 )
@@ -185,19 +186,9 @@ def gas_kwh(kubikmeter: float, zustandszahl: float, brennwert: float) -> float:
     return kubikmeter * zustandszahl * brennwert
 
 
-def warmwasser_kwh(volumen: float, temperatur: float = 60.0) -> float:
-    """Wärmemenge für die Warmwasserbereitung nach § 9 Abs. 2 HeizkostenV.
-
-    Q = 2,5 × V × (tw − 10), wobei V die Warmwassermenge in m³ und tw die
-    Warmwassertemperatur in °C ist; ohne gemessene Temperatur gilt tw = 60 °C.
-
-    Die Verordnung schreibt genau diese Formel vor, ohne Zuschlag: Der Faktor
-    2,5 deckt die Verluste der Anlage bereits ab (rechnerisch braucht ein
-    Kubikmeter je Grad nur rund 1,16 kWh). Ein zusaetzlicher Zuschlag schiebt
-    Kosten von der Heizung zum Warmwasser und damit zwischen den Parteien hin
-    und her - angreifbar, sobald der Mieter nachrechnet.
-    """
-    return max(0.0, 2.5 * volumen * (temperatur - 10.0))
+# Die Formel steht in nebenkosten/heizung.py, wo auch die Heizarten liegen.
+# Hier bleibt der Name, damit alte Aufrufe weiter funktionieren.
+warmwasser_kwh = _warmwasser_kwh
 
 
 # Stufenmodell des CO2-Kostenaufteilungsgesetzes für Wohngebäude (§ 5 CO2KostAufG):

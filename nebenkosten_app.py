@@ -117,6 +117,22 @@ def betraege_uebernehmen(a: heizung.Aufteilung) -> None:
             p.aktiv = bool(a.kosten_heizung)
 
 
+# In der Kostentabelle stehen die berechneten Zeilen nicht - dort waere
+# „Heizung und Warmwasser" eine Ueberschrift ueber lauter Nebensachen und die
+# Suche nach der Gasrechnung ginge genau dorthin. Im PDF bleibt es beim
+# gesetzlichen Namen der Sparte.
+KOSTEN_UEBERSCHRIFT = {
+    "wasser": "Wasser und Abwasser",
+    "gas": "Weitere Kosten rund um die Heizung",
+    "sonstiges": "Sonstige Betriebskosten",
+}
+KOSTEN_ERKLAERUNG = {
+    "gas": "Die Rechnung für Gas, Öl oder Pellets selbst gehört **oben in den "
+           "roten Kasten**. Hier steht nur, was zusätzlich anfällt: "
+           "Schornsteinfeger, Wartung, Messdienst.",
+}
+
+
 def heizungsblock() -> None:
     """Heizung und Warmwasser: eintragen, was auf der Rechnung steht.
 
@@ -126,7 +142,10 @@ def heizungsblock() -> None:
     """
     stamm = st.session_state.stamm
     with st.container(border=True):
-        st.markdown("#### 🔥 Heizung und Warmwasser")
+        st.markdown("#### 🔥 Deine Heizkostenrechnung")
+        st.caption("Die **eine** Rechnung deines Versorgers – Gas, Öl, Pellets oder "
+                   "Fernwärme. Wie viel davon aufs Warmwasser entfällt, rechnet die App "
+                   "aus; eine eigene Warmwasserrechnung gibt es nicht.")
         schluessel = list(heizung.HEIZARTEN)
         gewaehlt = st.selectbox(
             "Womit wird geheizt?", schluessel,
@@ -890,8 +909,10 @@ if bereich == "kosten":
         st.session_state.positionen = zusammen
 
     if handy:
-        for schluessel, name in KATEGORIEN.items():
-            st.markdown(f"#### {name}")
+        for schluessel in KATEGORIEN:
+            st.markdown(f"#### {KOSTEN_UEBERSCHRIFT[schluessel]}")
+            if KOSTEN_ERKLAERUNG.get(schluessel):
+                st.caption(KOSTEN_ERKLAERUNG[schluessel])
             gruppe = kategorie_positionen(schluessel)
             for i, p in enumerate(gruppe):
                 if not p.aktiv:
@@ -899,7 +920,8 @@ if bereich == "kosten":
                 p.betrag = st.number_input(
                     f"{p.bezeichnung} (€)", min_value=0.0, step=10.0,
                     value=float(p.betrag), key=f"kos_{schluessel}_{i}_betrag", help=p.hinweis)
-            with st.expander(f"Zeilen für „{name}“ ein- und ausschalten"):
+            with st.expander("Zeilen für „{}“ ein- und ausschalten".format(
+                    KOSTEN_UEBERSCHRIFT[schluessel])):
                 for i, p in enumerate(gruppe):
                     p.aktiv = st.checkbox(p.bezeichnung, value=p.aktiv,
                                           key=f"kos_{schluessel}_{i}_aktiv", help=p.hinweis)
@@ -928,10 +950,12 @@ if bereich == "kosten":
                         f"{p.bezeichnung}: davon Lohnkosten (€)", min_value=0.0, step=10.0,
                         value=float(p.arbeitskosten), key=f"kos{i}_lohn")
     else:
-        for schluessel, name in KATEGORIEN.items():
+        for schluessel in KATEGORIEN:
             gruppe = kategorie_positionen(schluessel)
             teilsumme = sum(p.betrag for p in gruppe if p.aktiv)
-            st.markdown(f"#### {name} · {eur(teilsumme)} €")
+            st.markdown(f"#### {KOSTEN_UEBERSCHRIFT[schluessel]} · {eur(teilsumme)} €")
+            if KOSTEN_ERKLAERUNG.get(schluessel):
+                st.caption(KOSTEN_ERKLAERUNG[schluessel])
             bearbeitet = st.data_editor(
                 positionen_als_df(gruppe),
                 key=f"kosten_editor_{schluessel}",

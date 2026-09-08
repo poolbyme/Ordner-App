@@ -14,12 +14,13 @@ import streamlit as st
 BEREICHE = {
     "vermieter": "1 · Vermieter",
     "mieter": "2 · Mieter",
-    "haus": "3 · Haus",
-    "diese": "4 · Diese Abrechnung",
+    "objekt": "3 · Mietobjekt",
+    "art": "4 · Abrechnungsart",
     "kosten": "5 · Kosten",
     "zaehler": "6 · Zählerstände",
-    "vz": "7 · Vorauszahlungen",
-    "ergebnis": "8 · Fertige Abrechnung",
+    "weitere": "7 · Sonstige Angaben",
+    "vz": "8 · Vorauszahlungen",
+    "ergebnis": "9 · Fertige Abrechnung",
 }
 
 
@@ -99,21 +100,21 @@ THEMEN: list[Thema] = [
           "Üblich sind 30 % nach Wohnfläche, der Rest nach Verbrauch."),
 
     # --- Stammdaten und Abrechnung ---------------------------------------
-    Thema("Wohnfläche und Grundstück", "haus", "Felder „Wohnfläche des ganzen Hauses“ und „Grundstück“",
+    Thema("Wohnfläche und Grundstück", "objekt", "Felder „Wohnfläche des ganzen Hauses“ und „Grundstück“",
           ["wohnfläche", "wohnflaeche", "quadratmeter", "qm", "grundstück", "fläche"]),
     Thema("Deine Bankverbindung", "vermieter", "Feld „Deine IBAN“",
           ["iban", "konto", "bank", "überweisung", "bankverbindung"]),
     Thema("Mieter und Personenzahl", "mieter", "Bereich „Mieter“",
           ["mieter", "name", "personen", "bewohner", "anschrift"]),
-    Thema("Ein- oder Auszug im Jahr", "diese", "Art der Abrechnung → „Abrechnung zum Mietende“",
+    Thema("Ein- oder Auszug im Jahr", "art", "Art der Abrechnung → „Abrechnung zum Mietende“",
           ["auszug", "einzug", "mietende", "kündigung", "umzug", "zeitanteilig"]),
-    Thema("Zwischenabrechnung", "diese", "Art der Abrechnung → „Zwischenabrechnung“",
+    Thema("Zwischenabrechnung", "art", "Art der Abrechnung → „Zwischenabrechnung“",
           ["zwischenabrechnung", "anbieterwechsel", "zwischenstand", "momentaufnahme"]),
-    Thema("Abrechnungszeitraum", "diese", "Abschnitt oben, „Vom“ und „Bis“",
+    Thema("Abrechnungszeitraum", "art", "Abschnitt oben, „Vom“ und „Bis“",
           ["zeitraum", "jahr", "abrechnungsjahr", "von bis", "frist"]),
     Thema("Vorauszahlungen des Mieters", "vz", "Abschnitt „Was hat dein Mieter schon gezahlt?“",
           ["vorauszahlung", "abschlag", "monatlich", "vorschuss", "nebenkostenvorauszahlung"]),
-    Thema("CO2-Kosten", "vz", "Abschnitt „Heizt du mit Gas oder Öl?“",
+    Thema("CO2-Kosten", "weitere", "Abschnitt „CO2-Kosten“",
           ["co2", "co2-kosten", "emission", "klima", "behg", "stufenmodell"],
           "Bei Gas oder Öl musst du einen Teil selbst tragen."),
     Thema("PDF erstellen", "ergebnis", "unten, Knopf „Abrechnung für den Mieter als PDF speichern“",
@@ -154,8 +155,8 @@ Diese Angaben überstehen „Alles auf null setzen" – sie lassen sich nur hier
 Zieht ein neuer Mieter ein, änderst du hier den Namen. Alles andere bleibt.
         """,
     ),
-    "haus": (
-        "Das Haus – bleibt jedes Jahr gleich",
+    "objekt": (
+        "Das Mietobjekt – bleibt jedes Jahr gleich",
         """
 * **Adresse des Hauses** muss auf der Abrechnung stehen.
 * **Wohnfläche des ganzen Hauses** – die wichtigste Zahl der ganzen App: Der
@@ -167,8 +168,8 @@ Zieht ein neuer Mieter ein, änderst du hier den Namen. Alles andere bleibt.
 Ändert sich nichts am Haus, musst du hier nie wieder etwas anfassen.
         """,
     ),
-    "diese": (
-        "Was diese eine Abrechnung betrifft",
+    "art": (
+        "Was für eine Abrechnung ist das?",
         """
 * **Art der Abrechnung** – *Jahresabrechnung* ist der Normalfall.
   *Zum Mietende* rechnet bis zum Auszugstag und teilt alles tageweise.
@@ -178,6 +179,22 @@ Zieht ein neuer Mieter ein, änderst du hier den Namen. Alles andere bleibt.
 
 Diese Angaben gelten für genau eine Abrechnung und werden von „Alles auf null
 setzen" geleert.
+        """,
+    ),
+    "weitere": (
+        "Angaben, die man selten braucht",
+        """
+Alles, was nicht jedes Jahr anfällt oder nicht in die anderen Bereiche passt.
+
+* **CO2-Kosten** – heizt du mit Gas oder Öl, trägst du seit 2023 einen Teil der
+  CO2-Abgabe selbst. Wie viel, hängt davon ab, wie schlecht das Haus gedämmt ist
+  (Stufenmodell des CO2KostAufG). Ausstoß und Kosten stehen auf der Rechnung des
+  Versorgers.
+* **Zählerdifferenz** – der Hauptzähler zeigt fast immer mehr an als die
+  Wohnungszähler zusammen. Hier stellst du ein, nach welchem Maßstab diese
+  Differenz auf die Wohnungen verteilt wird.
+* **Anschreiben** – Datum der Abrechnung und die Frist, bis wann eine Nachzahlung
+  überwiesen sein soll.
         """,
     ),
     "kosten": (

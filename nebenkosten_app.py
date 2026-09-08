@@ -631,6 +631,11 @@ if begriff.strip():
                         st.session_state["_suche_leeren"] = True
                         st.rerun()
 
+# Ein Bereichsname aus einer aelteren Fassung („haus", „diese") wuerde die
+# Auswahl sprengen - deshalb vorher zurechtruecken.
+if st.session_state.get("bereich") not in hilfe.BEREICHE:
+    st.session_state["bereich"] = next(iter(hilfe.BEREICHE))
+
 bereich = st.segmented_control(
     "Bereich", list(hilfe.BEREICHE), key="bereich",
     format_func=lambda b: hilfe.BEREICHE[b], label_visibility="collapsed") or "vermieter"
@@ -691,13 +696,13 @@ if bereich == "mieter":
         st.success(f"Anteil des Mieters an der Wohnfläche: "
                    f"**{zahl(stamm.flaeche_mieter / stamm.flaeche_gesamt * 100)} %**")
     elif not stamm.flaeche_gesamt:
-        st.info("Die Wohnfläche des ganzen Hauses fehlt noch – Bereich „3 · Haus“.")
+        st.info("Die Wohnfläche des ganzen Hauses fehlt noch – Bereich „3 · Mietobjekt“.")
 
 # --------------------------------------------------------------------------
-# 3 Haus
+# 3 Mietobjekt
 # --------------------------------------------------------------------------
-if bereich == "haus":
-    hilfe.ueberschrift("haus", "Das Haus",
+if bereich == "objekt":
+    hilfe.ueberschrift("objekt", "Das Mietobjekt",
                        "Ändert sich nichts am Haus, fasst du das nie wieder an.")
     links, rechts = st.columns(2)
     with links:
@@ -723,10 +728,10 @@ if bereich == "haus":
             value=float(stamm.einheiten_gesamt), key="e_gesamt")
 
 # --------------------------------------------------------------------------
-# 2 Diese Abrechnung – Art, Zeitraum, Mieter
+# 4 Abrechnungsart und Zeitraum
 # --------------------------------------------------------------------------
-if bereich == "diese":
-    hilfe.ueberschrift("diese", "Was für eine Abrechnung ist das?")
+if bereich == "art":
+    hilfe.ueberschrift("art", "Was für eine Abrechnung ist das?")
     arten = list(ABRECHNUNGSARTEN)
     stamm.abrechnungsart = st.radio(
         "Art der Abrechnung",
@@ -793,17 +798,6 @@ if bereich == "diese":
         else:
             stamm.nutzung_von, stamm.nutzung_bis = stamm.zeitraum_von, stamm.zeitraum_bis
 
-    if erweitert:
-        st.divider()
-        st.subheader("Anschreiben")
-        a1, a2 = st.columns(2)
-        with a1:
-            stamm.datum = datum_feld("Datum der Abrechnung", stamm.datum, "s_datum")
-        with a2:
-            if stamm.ist_verbindlich:
-                stamm.zahlungsfrist_tage = int(st.number_input(
-                    "Zahlungsfrist (Tage)", min_value=0, max_value=90, step=1,
-                    value=int(stamm.zahlungsfrist_tage), key="s_frist"))
 
 # --------------------------------------------------------------------------
 # 3 Kosten
@@ -1007,39 +1001,6 @@ if bereich == "zaehler":
             "Verbrauch rechnet die App. Zeilen lassen sich ändern, löschen und unten "
             "ergänzen."
         )
-        st.radio(
-            "Der Hauptzähler zeigt mehr an als die Wohnungszähler zusammen. Wie soll diese "
-            "Differenz auf euch beide verteilt werden?",
-            list(DIFFERENZ_VERTEILUNG),
-            index=list(DIFFERENZ_VERTEILUNG).index(stamm.zaehlerdifferenz)
-            if stamm.zaehlerdifferenz in DIFFERENZ_VERTEILUNG else 0,
-            format_func=lambda k: DIFFERENZ_VERTEILUNG[k],
-            horizontal=True,
-            key="differenz_art",
-            help="Die Differenz entsteht durch Messtoleranz, den Gartenwasserhahn oder "
-                 "undichte Leitungen – und dadurch, dass kein Zähler exakt misst. "
-                 "„Nach gemessenem Verbrauch“ heißt: Wer mehr verbraucht hat, trägt auch "
-                 "mehr von der Differenz. „Nach Wohnfläche“ ist der gesetzliche "
-                 "Ersatzmaßstab (§ 556a BGB).")
-        stamm.zaehlerdifferenz = st.session_state["differenz_art"]
-
-    with st.expander("Wie teile ich die Gasrechnung auf Heizung und Warmwasser auf?"):
-        st.markdown(
-            """
-Wenn deine Wärmemengenzähler nur die Heizung messen, steckt im Gasverbrauch auch die
-Wärme fürs Warmwasser. Diesen Teil rechnet man üblicherweise so heraus
-(Faustformel aus der Heizkostenverordnung):
-
-**Wärme fürs Warmwasser in kWh = 2,5 × Warmwassermenge in m³ × (Warmwassertemperatur in °C − 10)**
-
-Beispiel: 55 m³ Warmwasser bei 60 °C → 2,5 × 55 × 50 = **6.875 kWh**.
-
-Bei einem Gaspreis von z. B. 0,12 €/kWh sind das rund 825 € der Gasrechnung. Diesen
-Betrag trägst du in die Zeile **Warmwasser (Gas)** ein, den Rest der Gasrechnung in
-**Heizung (Gas)**. So wird der Warmwasseranteil nach den Warmwasserzählern verteilt
-und der Heizungsanteil nach den Wärmemengenzählern.
-            """
-        )
 
     namen_aller = [p.bezeichnung for p in st.session_state.positionen
                    if p.aktiv and p.schluessel == "verbrauch"]
@@ -1204,36 +1165,15 @@ und der Heizungsanteil nach den Wärmemengenzählern.
 # --------------------------------------------------------------------------
 # 5 Vorauszahlungen
 # --------------------------------------------------------------------------
-if bereich == "vz":
-    hilfe.ueberschrift("vz", "Was hat dein Mieter schon gezahlt?")
-    st.caption(
-        "Die monatliche Nebenkostenvorauszahlung aus dem Mietvertrag – der Betrag, den "
-        "er zusätzlich zur Kaltmiete überweist."
-    )
-    v1, v2 = st.columns(2)
-    with v1:
-        stamm.vorauszahlung_monatlich = st.number_input(
-            "Vorauszahlung pro Monat (€)", min_value=0.0, step=10.0,
-            value=float(stamm.vorauszahlung_monatlich), key="vz_monat")
-        stamm.vorauszahlung_monate = int(st.number_input(
-            "Für wie viele Monate?", min_value=0, max_value=12, step=1,
-            value=int(stamm.vorauszahlung_monate), key="vz_monate"))
-        st.info(f"Zusammen: **{eur(stamm.vorauszahlung_monatlich * stamm.vorauszahlung_monate)} €**")
-    with v2:
-        abweichend = st.checkbox(
-            "Er hat tatsächlich etwas anderes gezahlt", key="vz_abweichend",
-            value=stamm.vorauszahlung_manuell is not None,
-            help="Zum Beispiel, wenn sich die Vorauszahlung im Jahr geändert hat oder "
-                 "eine Zahlung ausgefallen ist.")
-        if abweichend:
-            stamm.vorauszahlung_manuell = st.number_input(
-                "Tatsächlich gezahlt (€)", min_value=0.0, step=10.0,
-                value=float(stamm.vorauszahlung_manuell or 0.0), key="vz_manuell")
-        else:
-            stamm.vorauszahlung_manuell = None
+# --------------------------------------------------------------------------
+# 7 Sonstige Angaben
+# --------------------------------------------------------------------------
+if bereich == "weitere":
+    hilfe.ueberschrift("weitere", "Sonstige Angaben",
+                       "Alles, was man selten braucht – aber manchmal eben doch.")
 
-    st.divider()
-    st.subheader("Heizt du mit Gas oder Öl?")
+    st.subheader("CO2-Kosten (nur bei Gas oder Öl)")
+
     st.caption(
         "Dann trägst du seit 2023 einen Teil der CO2-Abgabe selbst – je schlechter das "
         "Haus gedämmt ist, desto mehr. Den Betrag findest du in der Jahresrechnung deines "
@@ -1269,6 +1209,68 @@ if bereich == "vz":
             "Dein Anteil an den CO2-Kosten (€)", min_value=0.0, step=1.0,
             value=float(stamm.co2_abzug), key="co2",
             help="Wird vom Anteil des Mieters abgezogen.")
+
+
+    st.divider()
+    st.subheader("Differenz zwischen Hauptzähler und Wohnungszählern")
+    st.radio(
+        "Der Hauptzähler zeigt mehr an als die Wohnungszähler zusammen. Wie soll diese "
+        "Differenz auf euch beide verteilt werden?",
+        list(DIFFERENZ_VERTEILUNG),
+        index=list(DIFFERENZ_VERTEILUNG).index(stamm.zaehlerdifferenz)
+        if stamm.zaehlerdifferenz in DIFFERENZ_VERTEILUNG else 0,
+        format_func=lambda k: DIFFERENZ_VERTEILUNG[k],
+        horizontal=True,
+        key="differenz_art",
+        help="Die Differenz entsteht durch Messtoleranz, den Gartenwasserhahn oder "
+             "undichte Leitungen – und dadurch, dass kein Zähler exakt misst. "
+             "„Nach gemessenem Verbrauch“ heißt: Wer mehr verbraucht hat, trägt auch "
+             "mehr von der Differenz. „Nach Wohnfläche“ ist der gesetzliche "
+             "Ersatzmaßstab (§ 556a BGB).")
+    stamm.zaehlerdifferenz = st.session_state["differenz_art"]
+
+    st.divider()
+    st.subheader("Anschreiben")
+    a1, a2 = st.columns(2)
+    with a1:
+        stamm.datum = datum_feld("Datum der Abrechnung", stamm.datum, "s_datum")
+    with a2:
+        if stamm.ist_verbindlich:
+            stamm.zahlungsfrist_tage = int(st.number_input(
+                "Zahlungsfrist (Tage)", min_value=0, max_value=90, step=1,
+                value=int(stamm.zahlungsfrist_tage), key="s_frist",
+                help="Nach so vielen Tagen soll eine Nachzahlung beim dir sein."))
+
+# --------------------------------------------------------------------------
+# 8 Vorauszahlungen
+# --------------------------------------------------------------------------
+if bereich == "vz":
+    hilfe.ueberschrift("vz", "Was hat dein Mieter schon gezahlt?")
+    st.caption(
+        "Die monatliche Nebenkostenvorauszahlung aus dem Mietvertrag – der Betrag, den "
+        "er zusätzlich zur Kaltmiete überweist."
+    )
+    v1, v2 = st.columns(2)
+    with v1:
+        stamm.vorauszahlung_monatlich = st.number_input(
+            "Vorauszahlung pro Monat (€)", min_value=0.0, step=10.0,
+            value=float(stamm.vorauszahlung_monatlich), key="vz_monat")
+        stamm.vorauszahlung_monate = int(st.number_input(
+            "Für wie viele Monate?", min_value=0, max_value=12, step=1,
+            value=int(stamm.vorauszahlung_monate), key="vz_monate"))
+        st.info(f"Zusammen: **{eur(stamm.vorauszahlung_monatlich * stamm.vorauszahlung_monate)} €**")
+    with v2:
+        abweichend = st.checkbox(
+            "Er hat tatsächlich etwas anderes gezahlt", key="vz_abweichend",
+            value=stamm.vorauszahlung_manuell is not None,
+            help="Zum Beispiel, wenn sich die Vorauszahlung im Jahr geändert hat oder "
+                 "eine Zahlung ausgefallen ist.")
+        if abweichend:
+            stamm.vorauszahlung_manuell = st.number_input(
+                "Tatsächlich gezahlt (€)", min_value=0.0, step=10.0,
+                value=float(stamm.vorauszahlung_manuell or 0.0), key="vz_manuell")
+        else:
+            stamm.vorauszahlung_manuell = None
 
     st.divider()
     st.subheader("Vorauszahlung anpassen")

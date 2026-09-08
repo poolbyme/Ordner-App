@@ -1009,9 +1009,9 @@ def test_suche_findet_die_richtige_stelle():
 
     assert "kosten" in bereiche("gasrechnung")
     assert "zaehler" in bereiche("gaszähler")
-    assert "vz" in bereiche("co2")
+    assert "weitere" in bereiche("co2")
     assert "ergebnis" in bereiche("pdf")
-    assert "diese" in bereiche("auszug")
+    assert "art" in bereiche("auszug")
     assert "vermieter" in bereiche("iban")
     assert "mieter" in bereiche("personen")
     assert hilfe.suche("") == []
@@ -1440,6 +1440,21 @@ def test_heizzeilen_stehen_nicht_in_der_kostentabelle():
 
     berechnet = [p.bezeichnung for p in standard_positionen() if p.berechnet]
     assert sorted(berechnet) == ["Heizung (Gas)", "Warmwasser (Gas)"]
+
+
+def test_jedes_suchthema_zeigt_auf_einen_bereich_den_es_gibt():
+    """Sonst springt die Suche ins Leere."""
+    from nebenkosten import hilfe
+
+    unbekannt = {t.bereich for t in hilfe.THEMEN} - set(hilfe.BEREICHE)
+    assert not unbekannt, f"Themen zeigen auf: {sorted(unbekannt)}"
+
+
+def test_jeder_bereich_hat_eine_erklaerung():
+    from nebenkosten import hilfe
+
+    ohne = set(hilfe.BEREICHE) - set(hilfe.ERKLAERUNGEN)
+    assert not ohne, f"ohne Fragezeichen-Text: {sorted(ohne)}"
 
 
 if __name__ == "__main__":

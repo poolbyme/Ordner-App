@@ -66,17 +66,17 @@ def pruefe(s: Stammdaten, positionen: list[Position], e: Ergebnis,
     if not s.mieter_name.strip():
         bericht.pflicht.append(Punkt("Name des Mieters", "mieter", "die Abrechnung ist an ihn gerichtet"))
     if not s.objekt_strasse.strip():
-        bericht.pflicht.append(Punkt("Adresse des Hauses", "haus", "muss auf der Abrechnung stehen"))
+        bericht.pflicht.append(Punkt("Adresse des Hauses", "objekt", "muss auf der Abrechnung stehen"))
 
     if "flaeche" in schluessel or any(p.grundkosten_anteil for p in positionen if p.aktiv):
         if s.flaeche_gesamt <= 0:
-            bericht.pflicht.append(Punkt("Wohnfläche des ganzen Hauses", "haus",
+            bericht.pflicht.append(Punkt("Wohnfläche des ganzen Hauses", "objekt",
                                          "danach werden die meisten Kosten verteilt"))
         if s.flaeche_mieter <= 0:
             bericht.pflicht.append(Punkt("Wohnfläche der Mietwohnung", "mieter",
                                          "ohne sie lässt sich kein Anteil ausrechnen"))
     if "personen" in schluessel and s.personen_gesamt <= 0:
-        bericht.pflicht.append(Punkt("Personen im Haus", "haus",
+        bericht.pflicht.append(Punkt("Personen im Haus", "objekt",
                                      "eine Kostenart wird nach Personenzahl verteilt"))
 
     if not any(p.aktiv and p.betrag for p in positionen):

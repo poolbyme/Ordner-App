@@ -196,25 +196,6 @@ def _maske(benutzer: dict[str, str]) -> None:
     st.stop()
 
 
-def _adresse_aufraeumen() -> None:
-    """Den Ausweis wieder aus der Adresszeile nehmen."""
-    try:
-        if "ausweis" in st.query_params:
-            del st.query_params["ausweis"]
-    except Exception:  # noqa: BLE001 - aeltere Streamlit-Fassungen
-        pass
-
-
-def _anmelden(name: str, benutzer: dict) -> None:
-    """Anmelden und den Ausweis erneuern.
-
-    Bei jedem Besuch neu ausgestellt: Wer die App benutzt, bleibt angemeldet,
-    bis er auf „Abmelden" drueckt.
-    """
-    st.session_state["_benutzer"] = name
-    st.session_state["_ausweis_setzen"] = _ausweis_bauen(name, benutzer)
-
-
 def _adresse_setzen(wert: str) -> None:
     """Den Ausweis in die Adresszeile schreiben - oder ihn dort loeschen.
 

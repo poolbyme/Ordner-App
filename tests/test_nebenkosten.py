@@ -1736,3 +1736,20 @@ def test_ohne_abrufbare_dateien_gar_kein_manifest():
     assert "rel: 'manifest'" not in notfall, (
         "im Notfall-Weg darf kein Manifest gesetzt werden")
     assert "angaben.symbol" in notfall, "dort zaehlt das Bild aus der Seite"
+
+def test_kein_name_verdeckt_einen_anderen():
+    """In zugang.py stand _anmelden zweimal; die erste Fassung wurde still von
+    der zweiten verdeckt. Solche Dubletten fallen ohne Test nicht auf - Python
+    nimmt kommentarlos die letzte."""
+    import ast
+
+    ordner = Path(__file__).resolve().parents[1] / "nebenkosten"
+    for datei in sorted(ordner.glob("*.py")):
+        baum = ast.parse(datei.read_text(encoding="utf-8"))
+        gesehen = {}
+        for knoten in baum.body:
+            if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                assert knoten.name not in gesehen, (
+                    f"{datei.name}: {knoten.name} steht in Zeile {gesehen.get(knoten.name)} "
+                    f"und noch einmal in Zeile {knoten.lineno}")
+                gesehen[knoten.name] = knoten.lineno

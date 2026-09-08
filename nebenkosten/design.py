@@ -29,7 +29,7 @@ if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
 # der Betreiber die neue Fassung schon ausliefert.
 # Regel: Bei jeder Änderung, die ausgeliefert wird, eine Stelle weiterzählen –
 # hinten für Kleinigkeiten und Korrekturen, in der Mitte für neue Funktionen.
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"

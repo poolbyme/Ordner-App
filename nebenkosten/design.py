@@ -356,28 +356,6 @@ input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {{
 """
 
 
-def _statisch_wird_ausgeliefert() -> bool:
-    """Liefert Streamlit den Ordner static/ unter /app/static/ aus?"""
-    try:
-        return bool(st.get_option("server.enableStaticServing"))
-    except Exception:  # pragma: no cover - je nach Streamlit-Fassung
-        return False
-
-
-def _symboladresse(datei: Path, ausgeliefert: bool) -> str:
-    """Echte Adresse, wenn der Ordner static/ ausgeliefert wird – sonst leer.
-
-    Nur das apple-touch-icon braucht das: iOS nimmt für den Startbildschirm
-    keine Datenadresse an, sondern ausschließlich eine echte URL. Auf der
-    Streamlit Community Cloud wird static/ aber nicht zuverlässig ausgeliefert,
-    auch mit enableStaticServing nicht – deshalb ist das hier ein Angebot und
-    keine Zusage, und alles andere kommt ohne aus.
-    """
-    if not datei.exists() or not ausgeliefert:
-        return ""
-    return "/app/static/" + datei.name
-
-
 def _startbildschirm_angaben() -> dict:
     """Manifest und Symbole für den Startbildschirm.
 
@@ -397,12 +375,15 @@ def _startbildschirm_angaben() -> dict:
         symbole.append({"src": gross, "sizes": "512x512", "type": "image/png"})
         symbole.append({"src": gross, "sizes": "512x512", "type": "image/png",
                         "purpose": "maskable"})
-    # Fürs iPhone die echte Adresse, wenn es sie gibt; sonst bleibt nur die
-    # Datenadresse, mit der iOS zwar nichts anfängt, Chrome aber schon.
-    apfel = _symboladresse(ICON_APPLE, _statisch_wird_ausgeliefert()) or daten(ICON_APPLE) or klein
+    # Immer die Datenadresse. Die echte Adresse /app/static/... funktioniert auf
+    # der Streamlit Community Cloud nicht - dort liefe das Symbol ins Leere, und
+    # der Browser nimmt dann sein eigenes Ersatzbild. Ein Bild, das da ist, ist
+    # besser als eine Adresse, die vielleicht stimmt.
+    apfel = daten(ICON_APPLE) or klein
     return {
         "manifest": {
-            "name": "Nebenkostenabrechnung",
+            # Beide gleich: Android nimmt mal das eine, mal das andere.
+            "name": "Nebenkosten",
             "short_name": "Nebenkosten",
             "description": "Betriebskostenabrechnung für die vermietete Wohnung",
             "display": "standalone",

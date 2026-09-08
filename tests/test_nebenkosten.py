@@ -745,13 +745,17 @@ def test_manifest_symbole_haengen_an_keiner_dateiablage():
     assert all(s["src"].startswith("data:image/png;base64,") for s in manifest["icons"])
 
 
-def test_symboladresse_nur_wenn_ausgeliefert_wird():
-    """iOS nimmt fuer den Startbildschirm keine Datenadresse, nur eine URL."""
+def test_kein_symbol_zeigt_auf_die_tote_dateiablage():
+    """/app/static/... liefert die Streamlit Community Cloud nicht aus. Zeigt ein
+    Symbol dorthin, laeuft es ins Leere und der Browser nimmt sein eigenes
+    Ersatzbild - genau das landet dann auf dem Startbildschirm."""
     from nebenkosten import design
 
-    assert design._symboladresse(design.ICON_APPLE, True) == "/app/static/app-icon-apple.png"
-    assert design._symboladresse(design.ICON_APPLE, False) == ""
-    assert design._symboladresse(design.STATISCH / "gibt-es-nicht.png", True) == ""
+    angaben = design._startbildschirm_angaben()
+    adressen = [s["src"] for s in angaben["manifest"]["icons"]]
+    adressen += [angaben["symbol"], angaben["apfel"]]
+    for adresse in adressen:
+        assert adresse.startswith("data:image/png;base64,"), adresse
 
 
 def test_apple_symbol_ist_randfuellend_und_undurchsichtig():

@@ -31,7 +31,11 @@ from nebenkosten.pdf import dateiname, erzeuge_pdf
 # Streamlit-Segel. Fehlt die Datei, bleibt das Emoji.
 _SEITENSYMBOL = design.ICON_GROSS if design.ICON_GROSS.exists() else "🏠"
 
-st.set_page_config(page_title="Nebenkostenabrechnung", page_icon=_SEITENSYMBOL,
+# Der Seitentitel ist zugleich der Name unter dem Symbol auf dem
+# Startbildschirm: Android legt eine Verknuepfung mit Seitentitel und
+# Seitensymbol an. Deshalb kurz halten - „Nebenkostenabrechnung" wuerde
+# abgeschnitten.
+st.set_page_config(page_title="Nebenkosten", page_icon=_SEITENSYMBOL,
                    layout="wide", initial_sidebar_state="collapsed")
 
 SCHLUESSEL_LABELS = list(SCHLUESSEL.values())

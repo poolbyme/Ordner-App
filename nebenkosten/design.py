@@ -25,9 +25,11 @@ if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
     except ImportError:
         _html_baustein = None
 
-# Sichtbarer Stand der Anwendung. Nur so lässt sich von einem fremden Gerät
-# aus sagen, ob der Betreiber die neue Fassung schon ausliefert.
-STAND = "2026-09-08"
+# Sichtbare Version. Nur so lässt sich von einem fremden Gerät aus sagen, ob
+# der Betreiber die neue Fassung schon ausliefert.
+# Regel: Bei jeder Änderung, die ausgeliefert wird, eine Stelle weiterzählen –
+# hinten für Kleinigkeiten und Korrekturen, in der Mitte für neue Funktionen.
+VERSION = "1.0.0"
 
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"

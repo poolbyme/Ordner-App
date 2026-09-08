@@ -570,7 +570,7 @@ with st.sidebar:
 
     # Leise Zeile am Ende: Daran ist von jedem Gerät aus zu sehen, ob schon die
     # neue Fassung ausgeliefert wird - sonst bleibt bei Fragen nur Raten.
-    st.caption(f"Nebenkosten · Stand {design.STAND}")
+    st.caption(f"Nebenkosten · Version {design.VERSION}")
     st.caption("Namen, Anschriften, Wohnflächen und Personenzahl bleiben dabei erhalten – "
                "die änderst du nur von Hand in den Bereichen 1 bis 3.")
 

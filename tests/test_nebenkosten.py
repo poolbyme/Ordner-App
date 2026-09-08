@@ -1655,16 +1655,18 @@ def test_nur_der_kopf_baustein_wird_flach_gezogen():
     assert 'st.container(key="nk-startbildschirm")' in quelle
 
 
-def test_stand_wird_angezeigt():
-    """Ohne sichtbaren Stand lässt sich vom Handy aus nicht sagen, ob der
+def test_version_wird_angezeigt():
+    """Ohne sichtbare Version lässt sich vom Handy aus nicht sagen, ob der
     Betreiber die neue Fassung schon ausliefert."""
+    import re
+
     from nebenkosten import design
 
-    assert design.STAND
+    assert re.fullmatch(r"\d+\.\d+\.\d+", design.VERSION), design.VERSION
     quelle = Path(__file__).resolve().parents[1] / "nebenkosten_app.py"
     if not quelle.exists():
         quelle = Path(__file__).resolve().parents[1] / "streamlit_app.py"
-    assert "design.STAND" in quelle.read_text(encoding="utf-8")
+    assert "design.VERSION" in quelle.read_text(encoding="utf-8")
 
 def test_eintrag_geht_bis_zur_obersten_seite():
     """Der Betreiber steckt die App in einen weiteren Rahmen (bei Streamlit

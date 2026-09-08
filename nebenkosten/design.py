@@ -416,7 +416,11 @@ def _startbildschirm() -> None:
 <script>
 (function () {
   const kopf = window.parent.document.head;
-  if (!kopf || kopf.querySelector('link[rel="manifest"]')) return;
+  if (!kopf || kopf.querySelector('link#nk-manifest')) return;
+  // Der Betreiber haengt womoeglich sein eigenes Manifest in die Seite - dann
+  // nimmt der Browser dessen Symbol und dessen Namen fuer den Startbildschirm.
+  // Frueher gab dieses Skript an der Stelle auf; jetzt raeumt es das fremde weg.
+  for (const fremd of kopf.querySelectorAll('link[rel="manifest"]')) fremd.remove();
   const angaben = ANGABEN;
   const ort = window.parent.location;
   // Im Manifest muss jede Adresse vollstaendig sein: es haengt selbst in einer
@@ -431,7 +435,7 @@ def _startbildschirm() -> None:
   const alsAdresse = 'data:application/manifest+json;base64,' +
     btoa(unescape(encodeURIComponent(JSON.stringify(manifest))));
   const eintraege = [
-    ['link', {rel: 'manifest', href: alsAdresse}],
+    ['link', {id: 'nk-manifest', rel: 'manifest', href: alsAdresse}],
     ['meta', {name: 'apple-mobile-web-app-capable', content: 'yes'}],
     ['meta', {name: 'apple-mobile-web-app-title', content: 'Nebenkosten'}],
     ['meta', {name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent'}],
@@ -443,7 +447,11 @@ def _startbildschirm() -> None:
     eintraege.push(['link', {rel: 'apple-touch-icon', sizes: '180x180', href: angaben.apfel}]);
   }
   if (angaben.symbol) {
-    eintraege.push(['link', {rel: 'icon', type: 'image/png', href: angaben.symbol}]);
+    for (const fremd of kopf.querySelectorAll('link[rel="shortcut icon"]')) {
+      if (!(fremd.getAttribute('href') || '').startsWith('data:')) fremd.remove();
+    }
+    eintraege.push(['link', {rel: 'icon', type: 'image/png', sizes: '512x512',
+                             href: angaben.symbol}]);
   }
   for (const [art, eigenschaften] of eintraege) {
     const knoten = window.parent.document.createElement(art);

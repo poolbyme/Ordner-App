@@ -1606,6 +1606,23 @@ def test_etappe_ist_gruen_wenn_wirklich_alles_steht():
         assert erledigt >= gesamt, f"{name} sollte fertig sein: {erledigt}/{gesamt}"
 
 
+def test_fremdes_manifest_wird_verdraengt():
+    """Der Betreiber haengt ein eigenes Manifest in die Seite. Frueher gab das
+    Skript an der Stelle auf - der Browser nahm dann dessen Symbol und Namen
+    fuer den Startbildschirm, also das rote Streamlit-Zeichen."""
+    import inspect
+
+    from nebenkosten import design
+
+    quelle = inspect.getsource(design._startbildschirm)
+    assert "link#nk-manifest" in quelle, "ohne eigene Kennung wird doppelt eingehaengt"
+    assert "querySelectorAll('link[rel=\"manifest\"]')" in quelle
+    assert "fremd.remove()" in quelle
+    assert "id: 'nk-manifest'" in quelle
+    # Der alte Abbruch darf nicht zurueckkommen.
+    assert "kopf.querySelector('link[rel=\"manifest\"]')) return" not in quelle
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

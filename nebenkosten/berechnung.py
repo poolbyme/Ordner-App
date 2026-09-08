@@ -185,15 +185,19 @@ def gas_kwh(kubikmeter: float, zustandszahl: float, brennwert: float) -> float:
     return kubikmeter * zustandszahl * brennwert
 
 
-def warmwasser_kwh(volumen: float, temperatur: float = 60.0,
-                   nutzungsgrad: float = 1.11) -> float:
+def warmwasser_kwh(volumen: float, temperatur: float = 60.0) -> float:
     """Wärmemenge für die Warmwasserbereitung nach § 9 Abs. 2 HeizkostenV.
 
     Q = 2,5 × V × (tw − 10), wobei V die Warmwassermenge in m³ und tw die
     Warmwassertemperatur in °C ist; ohne gemessene Temperatur gilt tw = 60 °C.
-    Der Nutzungsgrad rechnet die Verluste der Anlage hinzu.
+
+    Die Verordnung schreibt genau diese Formel vor, ohne Zuschlag: Der Faktor
+    2,5 deckt die Verluste der Anlage bereits ab (rechnerisch braucht ein
+    Kubikmeter je Grad nur rund 1,16 kWh). Ein zusaetzlicher Zuschlag schiebt
+    Kosten von der Heizung zum Warmwasser und damit zwischen den Parteien hin
+    und her - angreifbar, sobald der Mieter nachrechnet.
     """
-    return max(0.0, 2.5 * volumen * (temperatur - 10.0) * nutzungsgrad)
+    return max(0.0, 2.5 * volumen * (temperatur - 10.0))
 
 
 # Stufenmodell des CO2-Kostenaufteilungsgesetzes für Wohngebäude (§ 5 CO2KostAufG):
@@ -517,6 +521,7 @@ def berechne(s: Stammdaten, positionen: list[Position],
         e.hochrechnung_jahr = round(e.umlage / e.tage_nutzung * 365, 2)
 
     _doppelte_zaehler(positionen, e)
+    _kabel_pruefen(e, von, bis)
     _plausibilitaet(s, e, bis)
     e.fehler = list(dict.fromkeys(e.fehler))
     e.warnungen = list(dict.fromkeys(e.warnungen))
@@ -547,6 +552,34 @@ def _doppelte_zaehler(positionen: list[Position], e: Ergebnis) -> None:
                     f"„{pos.bezeichnung}“ mit verschiedenen Ständen "
                     f"({menge(frueher[2] - frueher[1])} gegenüber "
                     f"{menge(z.verbrauch)} Verbrauch). Einer der beiden ist falsch.")
+
+
+# Das Nebenkostenprivileg fuer Kabel- und Antennenanlagen ist zum 30.06.2024
+# entfallen (§ 2 Nr. 15 BetrKV gestrichen, Uebergangsfrist nach TKG abgelaufen).
+KABEL_ENDE = date(2024, 6, 30)
+KABELWOERTER = ("kabelanschluss", "kabelfernsehen", "breitband",
+                "gemeinschaftsantenne", "antennenanlage")
+
+
+def _kabel_pruefen(e: Ergebnis, von: date | None, bis: date | None) -> None:
+    """Kabelgebuehren nach dem 30.06.2024 gehoeren nicht mehr in die Abrechnung."""
+    if bis is None or bis <= KABEL_ENDE:
+        return
+    for zeile in e.zeilen:
+        name = zeile.bezeichnung.lower()
+        if not any(wort in name for wort in KABELWOERTER) or not zeile.gesamtkosten:
+            continue
+        if von is not None and von <= KABEL_ENDE:
+            e.warnungen.append(
+                f"„{zeile.bezeichnung}“: Seit dem 01.07.2024 sind Kabel- und "
+                "Antennengebühren nicht mehr umlagefähig. Für diesen Zeitraum darf "
+                f"höchstens der Teil bis zum {KABEL_ENDE.strftime('%d.%m.%Y')} "
+                "abgerechnet werden.")
+        else:
+            e.fehler.append(
+                f"„{zeile.bezeichnung}“: Kabel- und Antennengebühren sind seit dem "
+                "01.07.2024 nicht mehr umlagefähig (§ 2 Nr. 15 BetrKV gestrichen). "
+                "Diese Kosten trägt der Vermieter.")
 
 
 def _plausibilitaet(s: Stammdaten, e: Ergebnis, bis: date | None) -> None:

@@ -149,6 +149,20 @@ KATALOG: tuple[Kostenart, ...] = (
               erlaeuterung="laufender Betrieb gemeinschaftlicher Anlagen",
               vertrag_noetig=True),
 
+    # --- Nr. 6: verbundene Anlage ----------------------------------------
+    # Eine Therme, die heizt und zugleich das Warmwasser macht - der Normalfall
+    # im Zweifamilienhaus. Wer die Gasrechnung nicht in Heizung und Warmwasser
+    # aufteilt, rechnet ueber diese Nummer ab.
+    Kostenart("Verbundene Heizungs- und Warmwasseranlage", "§ 2 Nr. 6 BetrKV", "gas",
+              "verbrauch",
+              erlaeuterung="Eine Anlage, die Heizung und Warmwasser zusammen erzeugt. "
+                           "Die Heizkostenverordnung verlangt, den Warmwasseranteil "
+                           "herauszurechnen (§ 9 HeizkostenV) – dafür gibt es im Bereich "
+                           "Zählerstände eine Hilfe."),
+    Kostenart("Wartung der verbundenen Anlage", "§ 2 Nr. 6 BetrKV", "gas", "flaeche",
+              erlaeuterung="Wartung und Prüfung der Anlage, die Heizung und Warmwasser "
+                           "zusammen erzeugt."),
+
     # --- Nr. 15: seit 01.07.2024 gestrichen ------------------------------
     Kostenart("Kabelanschluss (bis 30.06.2024)", "§ 2 Nr. 15 BetrKV", "sonstiges", "einheiten",
               erlaeuterung="Seit dem 01.07.2024 nicht mehr über die Nebenkosten umlegbar. "

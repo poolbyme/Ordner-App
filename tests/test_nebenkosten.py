@@ -2,7 +2,7 @@
 
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -516,10 +516,15 @@ def test_warmwasserformel_nach_paragraf_9_heizkostenv():
     from nebenkosten.berechnung import warmwasser_kwh
 
     # Beispiel aus einer echten Abrechnung: 61,271 m³ bei 40 °C
-    assert round(warmwasser_kwh(61.271, 40.0), 1) == 5100.8
+    # 2,5 x 61,271 x 30 = 4.595,3 kWh - ohne jeden Zuschlag, so steht es im Gesetz.
+    assert round(warmwasser_kwh(61.271, 40.0), 1) == 4595.3
     # ohne gemessene Temperatur schreibt die Verordnung 60 °C vor
-    assert round(warmwasser_kwh(61.271), 1) == 8501.4
+    assert round(warmwasser_kwh(61.271), 1) == 7658.9
     assert warmwasser_kwh(0.0) == 0.0
+    # Gegenprobe: der Faktor 2,5 deckt die Anlagenverluste schon ab. Rechnerisch
+    # braucht ein Kubikmeter je Grad rund 1,16 kWh - wer zusaetzlich aufschlaegt,
+    # verschiebt Kosten zwischen Heizung und Warmwasser.
+    assert warmwasser_kwh(10.0, 60.0) == 1250.0
 
 
 def test_co2_stufenmodell():
@@ -1198,11 +1203,159 @@ def test_sonstige_betriebskosten_brauchen_eine_vereinbarung():
         assert "Nr. 17" in art.nummer, art.name
 
 
-def test_ohne_hinterlegtes_passwort_bleibt_die_app_offen():
-    """Auf dem eigenen Rechner soll kein Passwort im Weg stehen."""
+def test_ohne_hinterlegte_benutzer_bleibt_die_app_offen():
+    """Auf dem eigenen Rechner soll keine Anmeldung im Weg stehen."""
     from nebenkosten import zugang
 
-    assert zugang._hinterlegtes_passwort() == ""    # keine secrets.toml in den Tests
+    assert zugang.benutzerliste() == {}    # keine secrets.toml in den Tests
+
+
+def test_ausweis_gilt_nur_mit_passender_unterschrift():
+    from nebenkosten import zugang
+
+    benutzer = {"andreas": "geheim", "claudia": "anders"}
+    ausweis = zugang._ausweis_bauen("andreas", benutzer)
+    assert zugang._ausweis_pruefen(ausweis, benutzer) == "andreas"
+
+    # Passwort geaendert: alle alten Ausweise sind wertlos.
+    assert zugang._ausweis_pruefen(ausweis, {"andreas": "neu", "claudia": "anders"}) == ""
+    # Benutzer entfernt.
+    assert zugang._ausweis_pruefen(ausweis, {"claudia": "anders"}) == ""
+    # Unsinn faellt nicht durch.
+    assert zugang._ausweis_pruefen("kaputt", benutzer) == ""
+    assert zugang._ausweis_pruefen("", benutzer) == ""
+
+
+def test_ausweis_laeuft_ab():
+    import base64
+    import hashlib
+    import hmac
+
+    from nebenkosten import zugang
+
+    benutzer = {"andreas": "geheim"}
+    nutzlast = "andreas|1"      # 1970, also laengst abgelaufen
+    unterschrift = hmac.new(zugang._unterschriftsgeheimnis(benutzer),
+                            nutzlast.encode(), hashlib.sha256).hexdigest()[:32]
+    alt = base64.urlsafe_b64encode(f"{nutzlast}|{unterschrift}".encode()).decode()
+    assert zugang._ausweis_pruefen(alt, benutzer) == ""
+
+
+def test_ausweis_traegt_kein_passwort():
+    """Auf dem Geraet liegt nur ein Ausweis, nicht das Passwort."""
+    import base64
+
+    from nebenkosten import zugang
+
+    benutzer = {"andreas": "streng-geheim"}
+    klartext = base64.urlsafe_b64decode(
+        zugang._ausweis_bauen("andreas", benutzer).encode()).decode()
+    assert "streng-geheim" not in klartext
+
+
+def test_abmelden_raeumt_die_daten_des_benutzers_weg():
+    """Sonst saehe der naechste Benutzer auf demselben Geraet die Daten des
+    vorigen - in derselben Sitzung wird nichts neu geladen."""
+    from nebenkosten import zugang
+
+    class Sitzung(dict):
+        pass
+
+    class StreamlitAttrappe:
+        def __init__(self):
+            self.session_state = Sitzung()
+
+    echt = zugang.st
+    zugang.st = StreamlitAttrappe()
+    try:
+        zugang.st.session_state.update({
+            "_benutzer": "andreas", "_ablage_geprueft": "andreas",
+            "_ablagegrund": "irgendwas", "stamm": object(), "positionen": [1, 2],
+            "bereich": "kosten",
+        })
+        zugang.abmelden()
+        uebrig = set(zugang.st.session_state)
+        assert uebrig == {"_abmelden", "bereich"}, uebrig
+    finally:
+        zugang.st = echt
+
+
+def test_die_app_laesst_sich_ohne_fehlende_namen_uebersetzen():
+    """Faengt Tippfehler und vergessene Importe ab, die erst beim Klicken
+    auffallen wuerden - etwa ein fehlendes aus_katalog beim „Hinzufuegen"."""
+    import ast
+    import builtins
+    from pathlib import Path
+
+    wurzel = Path(__file__).resolve().parents[1]
+    datei = wurzel / "streamlit_app.py"
+    if not datei.exists():                       # in der anderen Ablage anders benannt
+        datei = wurzel / "nebenkosten_app.py"
+    baum = ast.parse(datei.read_text(encoding="utf-8"))
+
+    bekannt = set(dir(builtins))
+    for knoten in ast.walk(baum):
+        if isinstance(knoten, ast.Import):
+            bekannt.update((a.asname or a.name.split(".")[0]) for a in knoten.names)
+        elif isinstance(knoten, ast.ImportFrom):
+            bekannt.update((a.asname or a.name) for a in knoten.names)
+        elif isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bekannt.add(knoten.name)
+        elif isinstance(knoten, ast.Name) and isinstance(knoten.ctx, ast.Store):
+            bekannt.add(knoten.id)
+        elif isinstance(knoten, ast.arg):
+            bekannt.add(knoten.arg)
+        elif isinstance(knoten, ast.ExceptHandler) and knoten.name:
+            bekannt.add(knoten.name)
+        elif isinstance(knoten, (ast.comprehension,)):
+            for ziel in ast.walk(knoten.target):
+                if isinstance(ziel, ast.Name):
+                    bekannt.add(ziel.id)
+
+    unbekannt = {k.id for k in ast.walk(baum)
+                 if isinstance(k, ast.Name) and isinstance(k.ctx, ast.Load)
+                 and k.id not in bekannt}
+    assert not unbekannt, f"nirgends definiert: {sorted(unbekannt)}"
+
+
+def test_kabelanschluss_ist_seit_juli_2024_nicht_mehr_umlagefaehig():
+    """Das Nebenkostenprivileg fuer Kabel und Antenne ist zum 30.06.2024
+    entfallen. Wer es danach abrechnet, bekommt vom Mieter Aerger."""
+    kabel = Position("Kabelanschluss (bis 30.06.2024)", "sonstiges", betrag=240.0,
+                     schluessel="einheiten")
+
+    # Zeitraum komplett danach: Fehler, kein PDF.
+    e = berechne(basis_stammdaten(zeitraum_von="2025-01-01", zeitraum_bis="2025-12-31",
+                                  nutzung_von="2025-01-01", nutzung_bis="2025-12-31"),
+                 [kabel])
+    assert any("nicht mehr umlagefähig" in f for f in e.fehler), e.fehler
+
+    # Zeitraum ueber den Stichtag: nur der Teil davor waere erlaubt - Warnung.
+    e = berechne(basis_stammdaten(zeitraum_von="2024-01-01", zeitraum_bis="2024-12-31",
+                                  nutzung_von="2024-01-01", nutzung_bis="2024-12-31"),
+                 [kabel])
+    assert not any("nicht mehr umlagefähig" in f for f in e.fehler)
+    assert any("höchstens der Teil" in w for w in e.warnungen), e.warnungen
+
+    # Zeitraum komplett davor: in Ordnung.
+    e = berechne(basis_stammdaten(zeitraum_von="2023-01-01", zeitraum_bis="2023-12-31",
+                                  nutzung_von="2023-01-01", nutzung_bis="2023-12-31"),
+                 [kabel])
+    assert not e.fehler and not any("umlagefähig" in w for w in e.warnungen)
+
+
+def test_katalog_deckt_alle_nummern_der_betriebskostenverordnung_ab():
+    import re
+
+    from nebenkosten.katalog import KATALOG
+
+    gefunden = set()
+    for art in KATALOG:
+        treffer = re.search(r"Nr\.\s*(\d+)", art.nummer)
+        if treffer:
+            gefunden.add(int(treffer.group(1)))
+    fehlt = sorted(set(range(1, 18)) - gefunden)
+    assert not fehlt, f"§ 2 BetrKV Nr. {fehlt} kommen im Katalog nicht vor"
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ def verlauf(groesse: int) -> Image.Image:
     zeichnung = ImageDraw.Draw(bild)
     for i in range(groesse):
         anteil = i / max(groesse - 1, 1)
-        farbe = tuple(round(d + (h - d) * anteil) for d, h in zip(DUNKEL, HELL))
+        farbe = tuple(round(d + (h - d) * anteil) for d, h in zip(DUNKEL, HELL, strict=True))
         zeichnung.line([(0, i), (groesse, i)], fill=farbe)
     return bild
 

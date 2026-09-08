@@ -241,9 +241,10 @@ Bitte alle Zähler am selben Tag ablesen, sonst passen die Zeiträume nicht zusa
 }
 
 
-def knopf(bereich: str, schluessel: str = "") -> None:
+def knopf(bereich: str) -> None:
     """Fragezeichen, das die Erklärung zum Bereich aufklappt."""
-    titel, text = ERKLAERUNGEN.get(bereich, ("Hilfe", "Für diesen Bereich gibt es noch keine Erklärung."))
+    titel, text = ERKLAERUNGEN.get(
+        bereich, ("Hilfe", "Für diesen Bereich gibt es noch keine Erklärung."))
     with st.popover("?", help=f"Was gehört hier hin? – {titel}"):
         st.markdown(f"### {titel}")
         st.markdown(text)

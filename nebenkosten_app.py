@@ -13,13 +13,14 @@ import streamlit as st
 
 from nebenkosten.berechnung import (
     berechne, co2_vermieteranteil, eur, gas_kwh, menge, parse_datum,
-    verbrauchsaufteilung, warmwasser_kwh, zaehlerquelle, zahl,
+    verbrauchsaufteilung, warmwasser_kwh, zahl,
 )
+from nebenkosten import cloud as cloud_blatt
 from nebenkosten import design, hilfe, katalog, pruefung, speicher, zugang
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
-    as_dict, from_dict, neue_abrechnung, standard_positionen,
+    as_dict, aus_katalog, from_dict, neue_abrechnung, standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
@@ -88,6 +89,14 @@ def init_state() -> None:
     st.session_state.positionen = standard_positionen()
 
 
+def _blattname(benutzer: str) -> str:
+    """Arbeitsblatt fuer diesen Benutzer. Ohne Anmeldung das alte Blatt."""
+    sauber = "".join(c for c in benutzer.strip().lower() if c.isalnum() or c in "-_")
+    if not sauber or sauber == zugang.STANDARDBENUTZER:
+        return cloud_blatt.BLATT
+    return f"{cloud_blatt.BLATT}-{sauber}"
+
+
 def ablage_einrichten() -> None:
     """Falls Zugangsdaten hinterlegt sind, in die Google-Tabelle speichern.
 
@@ -95,11 +104,17 @@ def ablage_einrichten() -> None:
     schrieb weiter in die fluechtige Datei - man sah nur, dass die Daten nach
     einem Neustart weg waren, aber nicht, woran es lag.
     """
-    if st.session_state.get("_ablage_geprueft"):
+    # Der Benutzer entscheidet ueber das Arbeitsblatt. Meldet sich ein anderer
+    # an, muss die Ablage neu eingerichtet werden - sonst schriebe er in die
+    # Tabelle des vorigen.
+    benutzer = zugang.angemeldet_als()
+    if st.session_state.get("_ablage_geprueft") == (benutzer or "-"):
         return
-    st.session_state["_ablage_geprueft"] = True
+    st.session_state["_ablage_geprueft"] = benutzer or "-"
+    st.session_state.pop("_ablagegrund", None)
     try:
-        zugang = st.secrets.get("gcp_json")
+        # Nicht „zugang" nennen: das ist oben schon das Modul mit der Anmeldung.
+        schluesseldaten = st.secrets.get("gcp_json")
         adresse = st.secrets.get("nebenkosten_sheet_url")
     except Exception as fehler:  # noqa: BLE001 – ohne oder mit kaputter secrets.toml
         # „No secrets found" heißt: gar nicht eingerichtet. Alles andere heißt:
@@ -116,7 +131,7 @@ def ablage_einrichten() -> None:
                 f"an der falschen Stelle. Meldung: {fehler}")
         return
     fehlend = [name for name, wert in (("nebenkosten_sheet_url", adresse),
-                                       ("gcp_json", zugang)) if not wert]
+                                       ("gcp_json", schluesseldaten)) if not wert]
     if fehlend:
         st.session_state["_ablagegrund"] = (
             "In den Secrets fehlt: " + " und ".join(f"`{n}`" for n in fehlend))
@@ -124,8 +139,13 @@ def ablage_einrichten() -> None:
     try:
         from nebenkosten.cloud import TabellenSpeicher
 
-        daten = json.loads(zugang) if isinstance(zugang, str) else dict(zugang)
-        speicher.konfiguriere(TabellenSpeicher(str(adresse), daten))
+        daten = (json.loads(schluesseldaten) if isinstance(schluesseldaten, str)
+                 else dict(schluesseldaten))
+        # Jeder Benutzer bekommt sein eigenes Arbeitsblatt in derselben Tabelle.
+        # So kommen sich zwei Vermieter nicht ins Gehege, wenn spaeter mehr als
+        # einer die App benutzt.
+        blatt = _blattname(benutzer)
+        speicher.konfiguriere(TabellenSpeicher(str(adresse), daten, blatt=blatt))
     except json.JSONDecodeError as fehler:
         st.session_state["_ablagegrund"] = (
             "Der Google-Schlüssel in `gcp_json` ist unvollständig oder verstümmelt. "
@@ -189,8 +209,8 @@ def df_als_positionen(df: pd.DataFrame, bestehend: list[Position],
             abgelehnt.append((name, grund))
             continue
 
-        def zahlwert(spalte: str, standard: float = 0.0) -> float:
-            wert = r.get(spalte, standard)
+        def zahlwert(spalte: str, standard: float = 0.0, zeile=r) -> float:
+            wert = zeile.get(spalte, standard)
             try:
                 return float(wert) if pd.notna(wert) else standard
             except (TypeError, ValueError):
@@ -245,9 +265,9 @@ def df_als_zaehler(df: pd.DataFrame) -> list[Zaehlerstand]:
         if not name:
             continue
 
-        def wert(spalte: str) -> float:
+        def wert(spalte: str, zeile=r) -> float:
             try:
-                roh = r.get(spalte)
+                roh = zeile.get(spalte)
                 return float(roh) if pd.notna(roh) else 0.0
             except (TypeError, ValueError):
                 return 0.0
@@ -290,6 +310,15 @@ with st.sidebar:
         "Mehr Einstellungen anzeigen", key="erweitert",
         help="Zeigt zusätzliche Felder: Lohnkosten für die Steuererklärung des "
              "Mieters, anteilige Abrechnung bei Ein- oder Auszug, Anschreiben.")
+
+    if zugang.benutzerliste():
+        st.divider()
+        a1, a2 = st.columns([2, 1], vertical_alignment="center")
+        a1.caption(f"Angemeldet als **{zugang.angemeldet_als()}**")
+        if a2.button("Abmelden", key="abmelden", width="stretch"):
+            zugang.abmelden()
+            neu_zeichnen()
+        st.divider()
 
     st.header("Gespeichert wird automatisch")
     stand = speicher.gespeichert_am()
@@ -812,10 +841,8 @@ if bereich == "kosten":
             value=float(st.session_state.get("ww_temp", 60.0)), key="ww_temp",
             help="Ohne gemessene Temperatur schreibt die Heizkostenverordnung 60 °C vor. "
                  "Einen niedrigeren Wert darfst du nur ansetzen, wenn du ihn wirklich misst.")
-        ww_nutzung = w3.number_input(
-            "Zuschlag für Anlagenverluste", min_value=1.0, max_value=1.5, step=0.01,
-            value=float(st.session_state.get("ww_nutzung", 1.11)), key="ww_nutzung",
-            help="1,11 entspricht einem Nutzungsgrad von 90 % – der übliche Wert.")
+        w3.markdown("**Formel**")
+        w3.caption("2,5 × m³ × (°C − 10) — § 9 Abs. 2 HeizkostenV, ohne Zuschlag.")
 
         st.markdown("**Gasverbrauch**")
         st.caption(
@@ -866,7 +893,7 @@ if bereich == "kosten":
 
         st.markdown("**Aufteilung**")
         if ww_menge > 0 and verbrauch_kwh > 0 and gas_kosten > 0:
-            ww_bedarf = warmwasser_kwh(ww_menge, ww_temp, ww_nutzung)
+            ww_bedarf = warmwasser_kwh(ww_menge, ww_temp)
             anteil = min(ww_bedarf / verbrauch_kwh, 1.0)
             kosten_ww = round(gas_kosten * anteil, 2)
             kosten_heizung = round(gas_kosten - kosten_ww, 2)

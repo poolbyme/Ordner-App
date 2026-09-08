@@ -1,0 +1,30 @@
+{
+  "name": "Nebenkosten",
+  "short_name": "Nebenkosten",
+  "description": "Betriebskostenabrechnung für die vermietete Wohnung",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f8fb",
+  "theme_color": "#0e2b47",
+  "lang": "de",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "app-icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

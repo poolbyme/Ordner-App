@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+daten/
+# Zugangsdaten gehoeren nie ins Repository.
+.streamlit/secrets.toml

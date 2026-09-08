@@ -1,5 +1,6 @@
-streamlit
+streamlit>=1.49
 streamlit-calendar
 streamlit-cookies-controller
 gspread
 oauth2client
+fpdf2>=2.8

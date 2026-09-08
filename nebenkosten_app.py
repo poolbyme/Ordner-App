@@ -486,6 +486,12 @@ with st.sidebar:
     else:
         st.info("Wird gespeichert, sobald du etwas eingibst.")
 
+    with st.expander("🔎 Symbol für den Startbildschirm prüfen"):
+        st.caption(f"Stand der App: {design.STAND}")
+        st.caption("Haken überall: Der Browser hat alles fürs Symbol. "
+                   "Ein Kreuz sagt, woran es hakt.")
+        design.pruefansicht()
+
     with st.expander("Wo liegen meine Daten?"):
         st.markdown(f"**Ablage:** {speicher.beschreibung()}")
         st.code(speicher.adresse(), language=None)

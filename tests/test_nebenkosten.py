@@ -1635,3 +1635,48 @@ if __name__ == "__main__":
                 print(f"  FAIL {name}: {fehler}")
     print("Alle Tests bestanden." if not fehlgeschlagen else f"{fehlgeschlagen} Test(s) fehlgeschlagen.")
     sys.exit(1 if fehlgeschlagen else 0)
+
+def test_pruefkasten_bleibt_sichtbar():
+    """Der Prüfkasten darf nicht von der Regel getroffen werden, die den
+    unsichtbaren Kopf-Baustein flach zieht. Genau das ist einmal passiert:
+    Die Regel galt für jeden eingebetteten Rahmen."""
+    import inspect
+
+    from nebenkosten import design
+
+    stil = design._stil()
+    for zeile in stil.splitlines():
+        if '[data-testid="stIFrame"]' in zeile and "height: 0" in zeile:
+            assert zeile.lstrip().startswith(".st-key-nk-startbildschirm"), (
+                "die Regel gilt wieder für alle Rahmen - der Prüfkasten wäre "
+                f"unsichtbar: {zeile}")
+    assert '.st-key-nk-startbildschirm [data-testid="stIFrame"]' in stil
+    quelle = inspect.getsource(design._startbildschirm)
+    assert 'st.container(key="nk-startbildschirm")' in quelle
+
+
+def test_pruefkasten_sieht_immer_wieder_nach():
+    """Kopf-Baustein und Prüfkasten laden unabhängig voneinander. Wer nur einmal
+    misst, meldet ein Fehlen, das eine Zehntelsekunde später keines mehr ist."""
+    import inspect
+
+    from nebenkosten import design
+
+    quelle = inspect.getsource(design.pruefansicht)
+    assert "setInterval(nachsehen" in quelle
+    assert "link#nk-manifest" in quelle
+    assert "STAND" in inspect.getsource(design).split("def ")[0]
+
+
+def test_stand_wird_angezeigt():
+    """Ohne sichtbaren Stand lässt sich vom Handy aus nicht sagen, ob der
+    Betreiber die neue Fassung schon ausliefert."""
+    from nebenkosten import design
+
+    assert design.STAND
+    quelle = Path(__file__).resolve().parents[1] / "nebenkosten_app.py"
+    if not quelle.exists():
+        quelle = Path(__file__).resolve().parents[1] / "streamlit_app.py"
+    text = quelle.read_text(encoding="utf-8")
+    assert "design.STAND" in text
+    assert "design.pruefansicht()" in text

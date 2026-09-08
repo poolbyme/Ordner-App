@@ -14,8 +14,8 @@ import streamlit as st
 from nebenkosten.berechnung import (
     berechne, co2_vermieteranteil, eur, menge, parse_datum, verbrauchsaufteilung, zahl,
 )
-from nebenkosten import cloud as cloud_blatt
-from nebenkosten import (design, heizung, hilfe, katalog, pruefung, speicher,
+from nebenkosten import (design, heizung, hilfe, katalog, konten, pruefung,
+                         speicher,
                          zugang)
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
@@ -239,29 +239,12 @@ def heizungsblock() -> None:
                     st.markdown(f"- {zeile}")
 
 
-def _blattname(benutzer: str) -> str:
-    """Arbeitsblatt fuer diesen Benutzer. Ohne Anmeldung das alte Blatt."""
-    sauber = "".join(c for c in benutzer.strip().lower() if c.isalnum() or c in "-_")
-    if not sauber or sauber == zugang.STANDARDBENUTZER:
-        return cloud_blatt.BLATT
-    return f"{cloud_blatt.BLATT}-{sauber}"
+def google_zugangsdaten() -> tuple[str, dict] | None:
+    """Adresse der Tabelle und Schluessel - oder None mit Grund in der Sitzung.
 
-
-def ablage_einrichten() -> None:
-    """Falls Zugangsdaten hinterlegt sind, in die Google-Tabelle speichern.
-
-    Schlaegt das fehl, sagt die App warum. Frueher schwieg sie einfach und
-    schrieb weiter in die fluechtige Datei - man sah nur, dass die Daten nach
-    einem Neustart weg waren, aber nicht, woran es lag.
+    Zwei Dinge brauchen das: die Abrechnung und die Liste der Konten. Deshalb
+    steht es hier einmal und nicht zweimal.
     """
-    # Der Benutzer entscheidet ueber das Arbeitsblatt. Meldet sich ein anderer
-    # an, muss die Ablage neu eingerichtet werden - sonst schriebe er in die
-    # Tabelle des vorigen.
-    benutzer = zugang.angemeldet_als()
-    if st.session_state.get("_ablage_geprueft") == (benutzer or "-"):
-        return
-    st.session_state["_ablage_geprueft"] = benutzer or "-"
-    st.session_state.pop("_ablagegrund", None)
     try:
         # Nicht „zugang" nennen: das ist oben schon das Modul mit der Anmeldung.
         schluesseldaten = st.secrets.get("gcp_json")
@@ -279,27 +262,68 @@ def ablage_einrichten() -> None:
                 "Die Zugangsdaten (Secrets) lassen sich nicht lesen. Meistens ist ein "
                 "Zeichen zu viel oder zu wenig drin – häufig drei Anführungsstriche "
                 f"an der falschen Stelle. Meldung: {fehler}")
-        return
+        return None
     fehlend = [name for name, wert in (("nebenkosten_sheet_url", adresse),
                                        ("gcp_json", schluesseldaten)) if not wert]
     if fehlend:
         st.session_state["_ablagegrund"] = (
             "In den Secrets fehlt: " + " und ".join(f"`{n}`" for n in fehlend))
-        return
+        return None
     try:
-        from nebenkosten.cloud import TabellenSpeicher
-
         daten = (json.loads(schluesseldaten) if isinstance(schluesseldaten, str)
                  else dict(schluesseldaten))
-        # Jeder Benutzer bekommt sein eigenes Arbeitsblatt in derselben Tabelle.
-        # So kommen sich zwei Vermieter nicht ins Gehege, wenn spaeter mehr als
-        # einer die App benutzt.
-        blatt = _blattname(benutzer)
-        speicher.konfiguriere(TabellenSpeicher(str(adresse), daten, blatt=blatt))
     except json.JSONDecodeError as fehler:
         st.session_state["_ablagegrund"] = (
             "Der Google-Schlüssel in `gcp_json` ist unvollständig oder verstümmelt. "
             f"Meldung: {fehler}")
+        return None
+    return str(adresse), daten
+
+
+def konten_einrichten() -> None:
+    """Die Benutzerliste in die Google-Tabelle legen, wenn moeglich.
+
+    Muss **vor** der Anmeldung laufen: Ohne die Liste weiss niemand, welche
+    Zugaenge es gibt. Klappt es nicht, bleibt die Liste in einer Datei - dann
+    ist sie nach einem Neustart in der Cloud weg, und es greift wieder die
+    Erstanmeldung mit dem Startpasswort. Aussperren kann das niemanden.
+    """
+    if st.session_state.get("_konten_geprueft"):
+        return
+    st.session_state["_konten_geprueft"] = True
+    angaben = google_zugangsdaten()
+    if angaben is None:
+        return
+    try:
+        from nebenkosten.cloud import TabellenKonten
+
+        konten.konfiguriere(TabellenKonten(angaben[0], angaben[1]))
+    except Exception as fehler:  # noqa: BLE001 – Netz, Rechte, Tabelle fehlt
+        st.session_state["_kontenfehler"] = str(fehler)
+
+
+def ablage_einrichten() -> None:
+    """Falls Zugangsdaten hinterlegt sind, in die Google-Tabelle speichern.
+
+    Schlaegt das fehl, sagt die App warum. Frueher schwieg sie einfach und
+    schrieb weiter in die fluechtige Datei - man sah nur, dass die Daten nach
+    einem Neustart weg waren, aber nicht, woran es lag.
+    """
+    # Das Arbeitsblatt steht im Konto, nicht im Namen. Meldet sich jemand
+    # anderes an, muss die Ablage neu eingerichtet werden - sonst schriebe er
+    # in die Tabelle des vorigen.
+    blatt = zugang.blatt()
+    if st.session_state.get("_ablage_geprueft") == blatt:
+        return
+    st.session_state["_ablage_geprueft"] = blatt
+    st.session_state.pop("_ablagegrund", None)
+    angaben = google_zugangsdaten()
+    if angaben is None:
+        return
+    try:
+        from nebenkosten.cloud import TabellenSpeicher
+
+        speicher.konfiguriere(TabellenSpeicher(angaben[0], angaben[1], blatt=blatt))
     except Exception as fehler:  # noqa: BLE001 – Netz, Rechte, Tabelle fehlt
         st.session_state["_ablagegrund"] = (
             "Google lässt die App nicht an die Tabelle. Häufigste Ursachen: die "
@@ -307,6 +331,95 @@ def ablage_einrichten() -> None:
             "freigegeben, oder im Google-Projekt sind Google Sheets API und "
             f"Google Drive API nicht eingeschaltet. Meldung: {fehler}")
         st.session_state["_ablagefehler"] = str(fehler)
+
+
+def kontoverwaltung() -> None:
+    """Eigenen Zugang ändern und weitere Personen anlegen.
+
+    Der Benutzername lässt sich gefahrlos ändern: Das Arbeitsblatt steht im
+    Konto, nicht im Namen. Beim Anlegen einer weiteren Person ist deshalb auch
+    die Frage möglich, ob sie **dieselbe** Abrechnung sehen soll – für Eheleute
+    der Normalfall – oder eine eigene.
+    """
+    ich = zugang.angemeldet_als()
+    if konten.finden(ich) is None:
+        return
+
+    with st.expander("👤 Mein Zugang"):
+        with st.form("konto_name"):
+            neuer = st.text_input("Benutzername", value=ich,
+                                  key="konto_name").strip().lower()
+            if st.form_submit_button("Namen ändern", width="stretch"):
+                fehler = konten.name_pruefen(neuer) if neuer != ich else ""
+                if fehler:
+                    st.error(fehler)
+                elif neuer != ich:
+                    try:
+                        konten.umbenennen(ich, neuer)
+                        st.session_state["_benutzer"] = neuer
+                        st.success(f"Du heißt jetzt **{neuer}**. Deine Abrechnung "
+                                   "bleibt unverändert.")
+                    except ValueError as fehler:
+                        st.error(str(fehler))
+
+        with st.form("konto_wort"):
+            alt = st.text_input("Jetziges Passwort", type="password", key="kw_alt")
+            eins = st.text_input("Neues Passwort", type="password", key="kw_eins",
+                                 help=f"Mindestens {konten.MINDESTLAENGE} Zeichen.")
+            zwei = st.text_input("Neues Passwort wiederholen", type="password",
+                                 key="kw_zwei")
+            if st.form_submit_button("Passwort ändern", width="stretch"):
+                if konten.pruefen(ich, alt) is None:
+                    st.error("Das jetzige Passwort stimmt nicht.")
+                elif eins != zwei:
+                    st.error("Die beiden neuen Passwörter sind nicht gleich.")
+                elif konten.passwort_pruefen(eins):
+                    st.error(konten.passwort_pruefen(eins))
+                else:
+                    konten.passwort_setzen(ich, eins)
+                    st.success("Passwort geändert. Andere Geräte müssen sich neu "
+                               "anmelden.")
+
+    with st.expander("👥 Weitere Personen"):
+        for konto in konten.alle():
+            z1, z2 = st.columns([3, 1], vertical_alignment="center")
+            geteilt = "dieselbe Abrechnung" if konto.blatt == zugang.blatt() \
+                else "eigene Abrechnung"
+            z1.markdown(f"**{konto.name}** · {geteilt}"
+                        + (" · Passwort noch zu vergeben" if konto.muss_wechseln else ""))
+            if konto.name != ich and z2.button("Löschen", key=f"weg_{konto.name}",
+                                               width="stretch"):
+                try:
+                    konten.loeschen(konto.name)
+                    st.rerun()
+                except ValueError as fehler:
+                    st.error(str(fehler))
+
+        st.markdown("**Person hinzufügen**")
+        with st.form("konto_neu"):
+            name = st.text_input("Benutzername", key="neu_name").strip().lower()
+            start = st.text_input("Startpasswort", type="password", key="neu_wort",
+                                  help="Sagst du der Person. Sie muss beim ersten "
+                                       "Anmelden ein eigenes vergeben.")
+            zusammen = st.checkbox("Sieht dieselbe Abrechnung wie ich", value=True,
+                                   key="neu_zusammen",
+                                   help="Für Eheleute der Normalfall. Ohne Haken "
+                                        "bekommt die Person eine eigene, leere "
+                                        "Abrechnung.")
+            if st.form_submit_button("Anlegen", type="primary", width="stretch"):
+                fehler = konten.name_pruefen(name) or konten.passwort_pruefen(start)
+                if fehler:
+                    st.error(fehler)
+                else:
+                    try:
+                        konten.anlegen(name, start,
+                                       blatt=zugang.blatt() if zusammen else "",
+                                       wechseln=True)
+                        st.success(f"**{name}** ist angelegt. Sag ihr das "
+                                   "Startpasswort – beim ersten Anmelden vergibt "
+                                   "sie ihr eigenes.")
+                    except ValueError as fehler:
+                        st.error(str(fehler))
 
 
 def sichern() -> None:
@@ -443,6 +556,9 @@ def datum_feld(label: str, wert: str, key: str, hilfe: str | None = None) -> str
 
 
 design.anwenden()
+# Erst die Konten erreichbar machen, dann anmelden - ohne Liste weiss
+# niemand, welche Zugaenge es gibt.
+konten_einrichten()
 zugang.pruefen()
 
 init_state()
@@ -465,13 +581,14 @@ with st.sidebar:
         help="Zeigt zusätzliche Felder: Lohnkosten für die Steuererklärung des "
              "Mieters, anteilige Abrechnung bei Ein- oder Auszug, Anschreiben.")
 
-    if zugang.benutzerliste():
+    if zugang.aktiv():
         st.divider()
         a1, a2 = st.columns([2, 1], vertical_alignment="center")
         a1.caption(f"Angemeldet als **{zugang.angemeldet_als()}**")
         if a2.button("Abmelden", key="abmelden", width="stretch"):
             zugang.abmelden()
             neu_zeichnen()
+        kontoverwaltung()
         st.divider()
 
     st.header("Gespeichert wird automatisch")

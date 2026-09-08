@@ -20,22 +20,40 @@ BEREICHE = ["https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"]
 
 
+KONTEN_BLATT = "benutzer"
+KONTEN_SPALTEN = ["name", "passwort", "blatt", "wechseln", "geaendert"]
+
+
+def tabelle_oeffnen(sheet_url: str, zugangsdaten: dict):
+    """Die Google-Tabelle oeffnen. Getrennt, weil zwei Blaetter sie brauchen:
+    die Abrechnung und die Liste der Konten."""
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    anmeldung = Credentials.from_service_account_info(zugangsdaten, scopes=BEREICHE)
+    return gspread.authorize(anmeldung).open_by_url(sheet_url)
+
+
+def blatt_holen(tabelle, name: str, spalten: list[str]):
+    """Ein Arbeitsblatt holen und anlegen, falls es noch nicht da ist."""
+    import gspread
+
+    try:
+        return tabelle.worksheet(name)
+    except gspread.WorksheetNotFound:
+        blatt = tabelle.add_worksheet(title=name, rows=200, cols=max(len(spalten), 3))
+        blatt.append_row(spalten)
+        return blatt
+
+
 class TabellenSpeicher:
     """Ablage in einem Arbeitsblatt: je Zeile ein gespeicherter Stand."""
 
     def __init__(self, sheet_url: str, zugangsdaten: dict, blatt: str = BLATT):
-        import gspread
-        from google.oauth2.service_account import Credentials
-
         self.beschreibung = "Google-Tabelle"
         self.adresse = sheet_url
-        anmeldung = Credentials.from_service_account_info(zugangsdaten, scopes=BEREICHE)
-        tabelle = gspread.authorize(anmeldung).open_by_url(sheet_url)
-        try:
-            self.blatt = tabelle.worksheet(blatt)
-        except gspread.WorksheetNotFound:
-            self.blatt = tabelle.add_worksheet(title=blatt, rows=200, cols=len(SPALTEN))
-            self.blatt.append_row(SPALTEN)
+        tabelle = tabelle_oeffnen(sheet_url, zugangsdaten)
+        self.blatt = blatt_holen(tabelle, blatt, SPALTEN)
 
     # --- intern ----------------------------------------------------------
     def _zeilen(self) -> list[list[str]]:
@@ -79,3 +97,39 @@ class TabellenSpeicher:
 
     def schluessel(self) -> list[str]:
         return [z[0] for z in self._zeilen()[1:] if z and z[0] and z[0] != "aktuell"]
+
+
+class TabellenKonten:
+    """Die Benutzerliste in einem eigenen Arbeitsblatt derselben Tabelle.
+
+    Sie steht bewusst nicht in den Streamlit-Einstellungen: Wer sein Passwort
+    selbst vergibt, darf dafuer nicht auf eine Einstellungsseite angewiesen
+    sein, an die nur der Betreiber herankommt. Gespeichert wird nie das
+    Passwort, sondern nur eine Pruefsumme daraus.
+
+    Die Liste ist kurz - ein paar Zeilen. Deshalb wird sie beim Schreiben
+    komplett neu gesetzt; das ist einfacher und kann nicht halb misslingen.
+    """
+
+    beschreibung = "Google-Tabelle"
+
+    def __init__(self, sheet_url: str, zugangsdaten: dict):
+        self.adresse = sheet_url
+        tabelle = tabelle_oeffnen(sheet_url, zugangsdaten)
+        self.blatt = blatt_holen(tabelle, KONTEN_BLATT, KONTEN_SPALTEN)
+
+    def lesen(self) -> list[dict]:
+        zeilen = self.blatt.get_all_values()
+        gefunden = []
+        for zeile in zeilen[1:]:
+            if not zeile or not zeile[0].strip():
+                continue
+            eintrag = dict(zip(KONTEN_SPALTEN, list(zeile) + [""] * len(KONTEN_SPALTEN)))
+            gefunden.append(eintrag)
+        return gefunden
+
+    def schreiben(self, konten: list[dict]) -> None:
+        werte = [KONTEN_SPALTEN]
+        werte += [[str(k.get(spalte, "")) for spalte in KONTEN_SPALTEN] for k in konten]
+        self.blatt.clear()
+        self.blatt.update("A1", werte)

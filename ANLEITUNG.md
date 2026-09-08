@@ -42,10 +42,14 @@ Du brauchst dein GitHub-Konto (**poolbyme**) mit Passwort.
 
 ---
 
-## Teil 2 – Passwort setzen (5 Minuten)
+## Teil 2 – Startpasswort setzen (5 Minuten)
 
 Ohne Passwort kann jeder, der die Adresse errät, die Namen, die Anschrift, deine
 IBAN und die Zählerstände lesen. Das willst du nicht.
+
+Das Wort hier ist nur der **Startschlüssel**: Beim ersten Öffnen legst du damit
+deinen eigenen Benutzernamen und dein eigenes Passwort an. Danach brauchst du es
+nur noch, falls du dein Passwort vergisst.
 
 1. Im selben Formular unten auf **„Advanced settings"** klicken.
 2. Es öffnet sich ein Kasten mit der Überschrift **„Secrets"**.
@@ -61,9 +65,15 @@ IBAN und die Zählerstände lesen. Das willst du nicht.
 6. Es läuft ein paar Minuten Text durch – das ist normal, die App wird
    aufgebaut. Wenn oben „Your app is live" steht oder die Anmeldemaske
    erscheint, ist es fertig.
-7. Passwort eingeben → die App erscheint.
+7. Startpasswort eingeben → die App fragt nach deinem eigenen Benutzernamen und
+   deinem eigenen Passwort. Beides vergibst du jetzt selbst.
 
-**Notier dir jetzt die Adresse und das Passwort.** Beides brauchst du gleich noch.
+**Notier dir jetzt die Adresse, das Startpasswort und deinen eigenen Zugang.**
+
+Weitere Personen (zum Beispiel deine Frau) legst du später **in der App** an:
+Seitenleiste → **Weitere Personen**. Dort entscheidest du auch, ob die Person
+dieselbe Abrechnung sieht wie du oder eine eigene. Sie bekommt von dir ein
+Startpasswort und vergibt beim ersten Anmelden ihr eigenes.
 
 ---
 

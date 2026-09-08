@@ -1,5 +1,6 @@
 """Tests für die Nebenkostenabrechnung: python -m pytest tests/ (oder direkt ausführen)."""
 
+import contextlib
 import json
 import sys
 from datetime import date
@@ -1207,27 +1208,132 @@ def test_sonstige_betriebskosten_brauchen_eine_vereinbarung():
         assert "Nr. 17" in art.nummer, art.name
 
 
-def test_ohne_hinterlegte_benutzer_bleibt_die_app_offen():
-    """Auf dem eigenen Rechner soll keine Anmeldung im Weg stehen."""
-    from nebenkosten import zugang
+class _KontenAttrappe:
+    """Konten im Arbeitsspeicher - wie die Google-Tabelle, nur ohne Netz."""
 
-    assert zugang.benutzerliste() == {}    # keine secrets.toml in den Tests
+    beschreibung = "Test"
+
+    def __init__(self, zeilen=None):
+        self.zeilen = list(zeilen or [])
+
+    def lesen(self):
+        return [dict(z) for z in self.zeilen]
+
+    def schreiben(self, eintraege):
+        self.zeilen = [dict(e) for e in eintraege]
+
+
+@contextlib.contextmanager
+def _konten(zeilen=None):
+    from nebenkosten import konten
+
+    vorher = konten._ablage
+    konten.konfiguriere(_KontenAttrappe(zeilen))
+    try:
+        yield konten
+    finally:
+        konten.konfiguriere(vorher)
+
+
+def test_passwort_wird_nie_im_klartext_abgelegt():
+    """Aus der Pruefsumme laesst sich das Passwort nicht zurueckrechnen - genau
+    darum steht es nicht mehr in den Einstellungen."""
+    from nebenkosten import konten
+
+    pruefsumme = konten.verschluesseln("streng-geheim-123")
+    assert "streng-geheim-123" not in pruefsumme
+    assert pruefsumme.startswith("scrypt$")
+    assert konten.stimmt("streng-geheim-123", pruefsumme)
+    assert not konten.stimmt("streng-geheim-124", pruefsumme)
+    # Zweimal dasselbe Passwort ergibt zwei verschiedene Pruefsummen (Zufallssalz).
+    assert pruefsumme != konten.verschluesseln("streng-geheim-123")
+    assert not konten.stimmt("egal", "unsinn")
+
+
+def test_umbenennen_laesst_die_abrechnung_stehen():
+    """Frueher hing das Arbeitsblatt am Namen: Wer sich umbenannte, sass vor
+    einer leeren App. Jetzt steht es im Konto."""
+    with _konten() as konten:
+        konten.anlegen("vermieter", "startwort-123", blatt=konten.BLATT)
+        konten.umbenennen("vermieter", "andreas")
+        konto = konten.finden("andreas")
+        assert konto is not None
+        assert konto.blatt == konten.BLATT
+        assert konten.finden("vermieter") is None
+
+
+def test_zweite_person_kann_dieselbe_abrechnung_sehen():
+    """Eheleute teilen ein Haus, sollen aber je ein eigenes Passwort haben."""
+    with _konten() as konten:
+        ich = konten.anlegen("andreas", "startwort-123", blatt=konten.BLATT)
+        sie = konten.anlegen("claudia", "anderes-wort", blatt=ich.blatt,
+                             wechseln=True)
+        assert sie.blatt == ich.blatt
+        assert sie.muss_wechseln
+        # Eigene Abrechnung: eigenes Blatt.
+        allein = konten.anlegen("fremder", "drittes-wort")
+        assert allein.blatt != ich.blatt
+
+
+def test_startpasswort_muss_gewechselt_werden():
+    with _konten() as konten:
+        konten.anlegen("claudia", "startwort-123", wechseln=True)
+        assert konten.finden("claudia").muss_wechseln
+        konten.passwort_setzen("claudia", "eigenes-wort-9")
+        assert not konten.finden("claudia").muss_wechseln
+        assert konten.pruefen("claudia", "eigenes-wort-9")
+        assert konten.pruefen("claudia", "startwort-123") is None
+
+
+def test_der_letzte_zugang_bleibt():
+    """Sonst sperrt man sich mit einem Klick selbst aus."""
+    with _konten() as konten:
+        konten.anlegen("andreas", "startwort-123")
+        try:
+            konten.loeschen("andreas")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("der letzte Zugang liess sich loeschen")
+
+
+def test_zu_kurzes_passwort_und_krummer_name_werden_abgelehnt():
+    from nebenkosten import konten
+
+    assert konten.passwort_pruefen("kurz")
+    assert konten.passwort_pruefen(" mitLeerzeichen ")
+    assert konten.passwort_pruefen("langgenug123") == ""
+    assert konten.name_pruefen("Mit Leerzeichen")
+    assert konten.name_pruefen("a")
+    assert konten.name_pruefen("Ümlaut")
+    assert konten.name_pruefen("andreas") == ""
 
 
 def test_ausweis_gilt_nur_mit_passender_unterschrift():
     from nebenkosten import zugang
 
-    benutzer = {"andreas": "geheim", "claudia": "anders"}
-    ausweis = zugang._ausweis_bauen("andreas", benutzer)
-    assert zugang._ausweis_pruefen(ausweis, benutzer) == "andreas"
+    with _konten() as konten:
+        andreas = konten.anlegen("andreas", "startwort-123")
+        konten.anlegen("claudia", "anderes-wort")
+        ausweis = zugang._ausweis_bauen(andreas)
+        geprueft = zugang._ausweis_pruefen(ausweis)
+        assert geprueft is not None and geprueft.name == "andreas"
 
-    # Passwort geaendert: alle alten Ausweise sind wertlos.
-    assert zugang._ausweis_pruefen(ausweis, {"andreas": "neu", "claudia": "anders"}) == ""
-    # Benutzer entfernt.
-    assert zugang._ausweis_pruefen(ausweis, {"claudia": "anders"}) == ""
-    # Unsinn faellt nicht durch.
-    assert zugang._ausweis_pruefen("kaputt", benutzer) == ""
-    assert zugang._ausweis_pruefen("", benutzer) == ""
+        # Passwort geaendert: die eigenen Ausweise sind wertlos ...
+        konten.passwort_setzen("andreas", "ganz-neues-wort")
+        assert zugang._ausweis_pruefen(ausweis) is None
+        # ... die der anderen bleiben gueltig.
+        claudia = konten.finden("claudia")
+        ihrer = zugang._ausweis_bauen(claudia)
+        konten.passwort_setzen("andreas", "schon-wieder-neu")
+        assert zugang._ausweis_pruefen(ihrer) is not None
+
+        # Benutzer entfernt.
+        konten.loeschen("claudia")
+        assert zugang._ausweis_pruefen(ihrer) is None
+        # Unsinn faellt nicht durch.
+        assert zugang._ausweis_pruefen("kaputt") is None
+        assert zugang._ausweis_pruefen("") is None
 
 
 def test_ausweis_laeuft_ab():
@@ -1237,12 +1343,13 @@ def test_ausweis_laeuft_ab():
 
     from nebenkosten import zugang
 
-    benutzer = {"andreas": "geheim"}
-    nutzlast = "andreas|1"      # 1970, also laengst abgelaufen
-    unterschrift = hmac.new(zugang._unterschriftsgeheimnis(benutzer),
-                            nutzlast.encode(), hashlib.sha256).hexdigest()[:32]
-    alt = base64.urlsafe_b64encode(f"{nutzlast}|{unterschrift}".encode()).decode()
-    assert zugang._ausweis_pruefen(alt, benutzer) == ""
+    with _konten() as konten:
+        konto = konten.anlegen("andreas", "startwort-123")
+        nutzlast = "andreas|1"      # 1970, also laengst abgelaufen
+        unterschrift = hmac.new(zugang._unterschriftsgeheimnis(konto),
+                                nutzlast.encode(), hashlib.sha256).hexdigest()[:32]
+        alt = base64.urlsafe_b64encode(f"{nutzlast}|{unterschrift}".encode()).decode()
+        assert zugang._ausweis_pruefen(alt) is None
 
 
 def test_ausweis_traegt_kein_passwort():
@@ -1251,10 +1358,12 @@ def test_ausweis_traegt_kein_passwort():
 
     from nebenkosten import zugang
 
-    benutzer = {"andreas": "streng-geheim"}
-    klartext = base64.urlsafe_b64decode(
-        zugang._ausweis_bauen("andreas", benutzer).encode()).decode()
-    assert "streng-geheim" not in klartext
+    with _konten() as konten:
+        konto = konten.anlegen("andreas", "streng-geheim-123")
+        klartext = base64.urlsafe_b64decode(
+            zugang._ausweis_bauen(konto).encode()).decode()
+        assert "streng-geheim-123" not in klartext
+        assert konto.passwort not in klartext
 
 
 def test_abmelden_raeumt_die_daten_des_benutzers_weg():

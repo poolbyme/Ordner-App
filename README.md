@@ -105,16 +105,26 @@ hinzufügen" wird daraus ein Symbol wie bei einer App.
 
 **B · Streamlit Community Cloud** (überall erreichbar, Rechner kann aus bleiben)
 
-**Vorher ein Passwort setzen.** Im Netz ist die App sonst für jeden erreichbar, der die
-Adresse kennt – mitsamt Namen, Anschriften, IBAN und Zählerständen. In den
+**Vorher ein Startpasswort setzen.** Im Netz ist die App sonst für jeden erreichbar, der
+die Adresse kennt – mitsamt Namen, Anschriften, IBAN und Zählerständen. In den
 Streamlit-Secrets genügt eine Zeile:
 
 ```toml
 passwort = "einGutesWort"
 ```
 
-Dann fragt die App danach, bevor sie irgendetwas anzeigt. Ohne diese Zeile bleibt sie
-offen – richtig so, solange sie nur auf dem eigenen Rechner läuft.
+Dieses Wort ist zweierlei:
+
+* **Erstanmeldung.** Beim ersten Öffnen kommt man damit hinein und legt sofort einen
+  eigenen Benutzernamen mit eigenem Passwort an. Der erste Zugang übernimmt das
+  vorhandene Arbeitsblatt, damit eine schon eingetragene Abrechnung erhalten bleibt.
+* **Notfallschlüssel.** Wer sein Passwort vergisst, setzt sich damit ein neues.
+
+Alles Weitere passiert in der App: Benutzername und Passwort ändern, weitere Personen
+anlegen – wahlweise auf dieselbe Abrechnung (Eheleute) oder auf eine eigene. Die
+Zugänge liegen in der Google-Tabelle im Blatt `benutzer`, die Passwörter nur als
+Prüfsumme (scrypt), nie im Klartext. Ohne die Zeile und ohne angelegten Zugang bleibt
+die App offen – richtig so, solange sie nur auf dem eigenen Rechner läuft.
 
 Dort ist der Dateispeicher flüchtig. Damit die Daten einen Neustart überleben,
 speichert die App in eine Google-Tabelle, sobald in den Streamlit-Secrets steht:

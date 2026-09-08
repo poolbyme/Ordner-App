@@ -897,45 +897,22 @@ def test_gleiche_staende_werden_einfach_zusammengelegt():
     assert warm.zaehler == [] and warm.zaehler_von == "Wasser"
 
 
-def test_widersprechende_staende_bleiben_beide_stehen():
-    """Zwei verschiedene Zahlen fuer denselben Zaehler: Da darf sich die App
-    nicht stillschweigend fuer eine entscheiden."""
+def test_wasserstand_hat_vorrang():
+    """Es ist derselbe Zaehler. Massgeblich ist, was beim Wasser steht - dort
+    traegt man ihn ein."""
     from nebenkosten.modell import from_dict
 
     daten = _alter_stand()
     daten["positionen"][0]["zaehler"][1]["alt"] = 100
     daten["positionen"][0]["zaehler"][1]["neu"] = 148
     daten["positionen"][1]["zaehler"][0]["alt"] = 100
-    daten["positionen"][1]["zaehler"][0]["neu"] = 184   # Zahlendreher
+    daten["positionen"][1]["zaehler"][0]["neu"] = 184   # alter Tippfehler
 
     _, positionen = from_dict(daten)
-    warm = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
-    assert len(warm.zaehler) == 2, "widersprechende Staende duerfen nicht verschwinden"
-    assert warm.zaehler_von == ''
-
-
-def test_derselbe_zaehler_mit_zwei_staenden_wird_gemeldet():
-    from nebenkosten.modell import Position, Zaehlerstand
-
-    a = Position("Wasser", "wasser", betrag=400.0, schluessel="verbrauch", einheit="m³",
-                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 148)])
-    b = Position("Warmwasser (Gas)", "gas", betrag=600.0, schluessel="verbrauch",
-                 einheit="m³",
-                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 184)])
-    e = berechne(basis_stammdaten(), [a, b])
-    assert any("verschiedenen Ständen" in w for w in e.warnungen)
-
-
-def test_derselbe_zaehler_mit_gleichem_stand_ist_kein_fehler():
-    from nebenkosten.modell import Position, Zaehlerstand
-
-    a = Position("Wasser", "wasser", betrag=400.0, schluessel="verbrauch", einheit="m³",
-                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 148)])
-    b = Position("Warmwasser (Gas)", "gas", betrag=600.0, schluessel="verbrauch",
-                 einheit="m³",
-                 zaehler=[Zaehlerstand("Warmwasser Mieter", "mieter", 100, 148)])
-    e = berechne(basis_stammdaten(), [a, b])
-    assert not any("verschiedenen Ständen" in w for w in e.warnungen)
+    nach_name = {p.bezeichnung: p for p in positionen}
+    assert nach_name["Warmwasser (Gas)"].zaehler == []
+    behalten = next(z for z in nach_name["Wasser"].zaehler if z.name == "Warmwasser Mieter")
+    assert (behalten.alt, behalten.neu) == (100, 148)
 
 
 # --- Gas: Kubikmeter in Kilowattstunden ------------------------------------
@@ -997,7 +974,8 @@ def test_suche_findet_die_richtige_stelle():
     assert "vz" in bereiche("co2")
     assert "ergebnis" in bereiche("pdf")
     assert "diese" in bereiche("auszug")
-    assert "haus" in bereiche("iban")
+    assert "vermieter" in bereiche("iban")
+    assert "mieter" in bereiche("personen")
     assert hilfe.suche("") == []
     assert hilfe.suche("xyzabc") == []
 
@@ -1041,7 +1019,7 @@ def vollstaendige_daten():
 
 
 def test_pruefung_meldet_fehlende_pflichtangaben():
-    from nebenkosten import pruefung
+    from nebenkosten import hilfe, pruefung
 
     s = basis_stammdaten(vermieter_name="", mieter_name="", objekt_strasse="",
                          flaeche_gesamt=0.0, flaeche_mieter=0.0)
@@ -1054,7 +1032,7 @@ def test_pruefung_meldet_fehlende_pflichtangaben():
     assert "Wohnfläche des ganzen Hauses" in fehlt
     assert not bericht.vollstaendig
     # jeder Punkt sagt, wo er nachzutragen ist
-    assert all(p.bereich in ("haus", "diese", "kosten", "zaehler", "vz", "ergebnis")
+    assert all(p.bereich in hilfe.BEREICHE
                for p in bericht.pflicht)
 
 

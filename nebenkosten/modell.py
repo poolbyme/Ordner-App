@@ -320,6 +320,31 @@ def sicht_vermieter(s: Stammdaten) -> Stammdaten:
     )
 
 
+# Angaben, die Jahr für Jahr gleich bleiben. Sie überstehen „Neue Abrechnung
+# beginnen" und lassen sich nur von Hand ändern - alles andere gehört zu genau
+# einer Abrechnung und wird dabei geleert.
+FESTE_ANGABEN = (
+    "vermieter_name", "vermieter_strasse", "vermieter_plz_ort",
+    "vermieter_iban", "vermieter_bank",
+    "mieter_name", "anrede", "mieter_wohnung",
+    "objekt_strasse", "objekt_plz_ort",
+    "flaeche_gesamt", "flaeche_mieter",
+    "personen_gesamt", "personen_mieter",
+    "einheiten_gesamt", "einheiten_mieter", "grundstuecksflaeche",
+    "zaehlerdifferenz", "ort", "zahlungsfrist_tage", "anpassung_vorschlagen",
+)
+
+
+def neue_abrechnung(alt: Stammdaten) -> Stammdaten:
+    """Alles auf null - bis auf die Angaben, die dauerhaft gelten.
+
+    Gedacht fuer den Jahreswechsel und fuers Aufraeumen nach dem Ausprobieren:
+    Namen, Anschriften, Wohnflaechen und Personenzahl bleiben stehen,
+    Zeitraum, Betraege, Zaehlerstaende und Vorauszahlungen sind leer.
+    """
+    return replace(Stammdaten(), **{feld: getattr(alt, feld) for feld in FESTE_ANGABEN})
+
+
 def as_dict(stammdaten: Stammdaten, positionen: list[Position]) -> dict:
     return {
         "version": 2,
@@ -362,40 +387,34 @@ def _zaehler_aus_dict(daten: dict) -> list[Zaehlerstand]:
     return uebernommen
 
 
-def _gleicher_stand(a: "Zaehlerstand", b: "Zaehlerstand") -> bool:
-    return float(a.alt) == float(b.alt) and float(a.neu) == float(b.neu)
-
-
 def _leer(z: "Zaehlerstand") -> bool:
     return not float(z.alt) and not float(z.neu)
 
 
-def _warmwasser_zusammenlegen(wasser: Position, warm: Position) -> bool:
+def _warmwasser_zusammenlegen(wasser: Position, warm: Position) -> None:
     """Die doppelt gefuehrten Warmwasserzaehler auf die des Wassers zurueckfuehren.
 
-    Uebernommen wird nur, wenn dabei keine Zahl verlorengeht: Der Zaehler beim
-    Warmwasser ist leer, er steht ohnehin gleich wie beim Wasser, oder der beim
-    Wasser ist leer und bekommt den Stand uebertragen. Widersprechen sich zwei
-    Staende, bleibt alles stehen - dann sollen beide Zahlen sichtbar bleiben,
-    statt dass die App sich stillschweigend fuer eine entscheidet.
+    Es sind dieselben Zaehler: Was der Mieter an Warmwasser verbraucht hat,
+    steht beim Wasser - dieselbe Zahl noch einmal bei der Heizung einzutippen,
+    nur um daraus die Energiemenge zu bestimmen, ist doppelte Arbeit.
+
+    Massgeblich ist der Stand beim Wasser. Steht dort nichts und beim Warmwasser
+    schon, wandert er hinueber, damit nichts verlorengeht.
     """
     nach_name = {z.name.strip().lower(): z for z in wasser.zaehler}
-    paare = []
+    namen = []
     for z in warm.zaehler:
         gegenstueck = nach_name.get(z.name.strip().lower())
         if gegenstueck is None:
-            return False
-        if not (_leer(z) or _leer(gegenstueck) or _gleicher_stand(z, gegenstueck)):
-            return False
-        paare.append((z, gegenstueck))
-
-    for z, gegenstueck in paare:
+            wasser.zaehler.append(z)
+            namen.append(z.name)
+            continue
         if _leer(gegenstueck) and not _leer(z):
             gegenstueck.alt, gegenstueck.neu = z.alt, z.neu
-    warm.zaehler_nur = [z.name for z in warm.zaehler]
+        namen.append(gegenstueck.name)
+    warm.zaehler_nur = namen
     warm.zaehler_von = wasser.bezeichnung
     warm.zaehler = []
-    return True
 
 
 def _nachziehen(positionen: list[Position]) -> list[Position]:

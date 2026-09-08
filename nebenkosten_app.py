@@ -19,7 +19,7 @@ from nebenkosten import design, hilfe, katalog, pruefung, speicher, zugang
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
-    as_dict, from_dict, standard_positionen,
+    as_dict, from_dict, neue_abrechnung, standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
@@ -102,10 +102,18 @@ def ablage_einrichten() -> None:
         zugang = st.secrets.get("gcp_json")
         adresse = st.secrets.get("nebenkosten_sheet_url")
     except Exception as fehler:  # noqa: BLE001 – ohne oder mit kaputter secrets.toml
-        st.session_state["_ablagegrund"] = (
-            "Die Zugangsdaten (Secrets) lassen sich nicht lesen. Meistens ist ein "
-            "Zeichen zu viel oder zu wenig drin – häufig drei Anführungsstriche "
-            f"an der falschen Stelle. Meldung: {fehler}")
+        # „No secrets found" heißt: gar nicht eingerichtet. Alles andere heißt:
+        # eingerichtet, aber der Text stimmt nicht - ein Unterschied, der beim
+        # Suchen Stunden spart.
+        if "no secrets found" in str(fehler).lower():
+            st.session_state["_ablagegrund"] = (
+                "Es sind keine Zugangsdaten hinterlegt – der dauerhafte Speicher "
+                "ist für diese App noch gar nicht eingerichtet.")
+        else:
+            st.session_state["_ablagegrund"] = (
+                "Die Zugangsdaten (Secrets) lassen sich nicht lesen. Meistens ist ein "
+                "Zeichen zu viel oder zu wenig drin – häufig drei Anführungsstriche "
+                f"an der falschen Stelle. Meldung: {fehler}")
         return
     fehlend = [name for name, wert in (("nebenkosten_sheet_url", adresse),
                                        ("gcp_json", zugang)) if not wert]
@@ -369,10 +377,23 @@ with st.sidebar:
         sichern()
         neu_zeichnen()
 
-    if st.button("🗑️ Alles zurücksetzen", width="stretch"):
-        st.session_state.pop("stamm", None)
-        st.session_state.pop("positionen", None)
+    if st.button("🧹 Alles auf null setzen", width="stretch",
+                 help="Leert Zeitraum, Beträge, Zählerstände und Vorauszahlungen. "
+                      "Vermieter, Mieter und Haus bleiben stehen."):
+        st.session_state.stamm = neue_abrechnung(stamm)
+        st.session_state.positionen = standard_positionen()
+        sichern()
         neu_zeichnen()
+    st.caption("Namen, Anschriften, Wohnflächen und Personenzahl bleiben dabei erhalten – "
+               "die änderst du nur von Hand in den Bereichen 1 bis 3.")
+
+    with st.expander("Auch die festen Angaben löschen"):
+        st.caption("Danach ist die App leer wie am ersten Tag: ohne deinen Namen, "
+                   "ohne Anschrift, ohne Wohnflächen.")
+        if st.button("🗑️ Wirklich alles löschen", width="stretch"):
+            st.session_state.pop("stamm", None)
+            st.session_state.pop("positionen", None)
+            neu_zeichnen()
 
     st.divider()
     st.caption(
@@ -462,61 +483,94 @@ if begriff.strip():
 
 bereich = st.segmented_control(
     "Bereich", list(hilfe.BEREICHE), key="bereich",
-    format_func=lambda b: hilfe.BEREICHE[b], label_visibility="collapsed") or "haus"
+    format_func=lambda b: hilfe.BEREICHE[b], label_visibility="collapsed") or "vermieter"
 
 # --------------------------------------------------------------------------
 # 1 Haus und Vermieter – die Daten, die jedes Jahr gleich bleiben
 # --------------------------------------------------------------------------
-if bereich == "haus":
-    hilfe.ueberschrift("haus", "Haus und Vermieter",
-                       "Diese Angaben trägst du einmal ein. Die App merkt sie sich dauerhaft.")
+if bereich == "vermieter":
+    hilfe.ueberschrift("vermieter", "Du als Vermieter",
+                       "Trägst du einmal ein. Bleibt beim Zurücksetzen erhalten.")
     links, rechts = st.columns(2)
     with links:
-        st.subheader("Du als Vermieter")
         stamm.vermieter_name = st.text_input("Dein Name", stamm.vermieter_name, key="v_name")
-        stamm.vermieter_strasse = st.text_input("Straße und Hausnummer", stamm.vermieter_strasse, key="v_str")
-        stamm.vermieter_plz_ort = st.text_input("PLZ und Ort", stamm.vermieter_plz_ort, key="v_ort")
+        stamm.vermieter_strasse = st.text_input(
+            "Straße und Hausnummer", stamm.vermieter_strasse, key="v_str")
+        stamm.vermieter_plz_ort = st.text_input(
+            "PLZ und Ort", stamm.vermieter_plz_ort, key="v_ort")
+    with rechts:
         stamm.vermieter_iban = st.text_input(
             "Deine IBAN", stamm.vermieter_iban, key="v_iban",
             help="Steht im PDF, falls dein Mieter etwas nachzahlen muss.")
         if erweitert:
             stamm.vermieter_bank = st.text_input("Bank", stamm.vermieter_bank, key="v_bank")
+        stamm.ort = st.text_input(
+            "Ort für die Datumszeile", stamm.ort, key="s_ort",
+            help="Steht über dem Anschreiben, zum Beispiel „Gries, 12.03.2026“.")
 
-    with rechts:
-        st.subheader("Das Haus")
-        stamm.objekt_strasse = st.text_input("Straße und Hausnummer", stamm.objekt_strasse, key="o_str")
-        stamm.objekt_plz_ort = st.text_input("PLZ und Ort", stamm.objekt_plz_ort, key="o_ort")
+# --------------------------------------------------------------------------
+# 2 Mieter
+# --------------------------------------------------------------------------
+if bereich == "mieter":
+    hilfe.ueberschrift("mieter", "Dein Mieter",
+                       "Wer die Abrechnung bekommt. Bleibt beim Zurücksetzen erhalten.")
+    links, rechts = st.columns(2)
+    with links:
+        stamm.mieter_name = st.text_input("Name des Mieters", stamm.mieter_name, key="m_name")
         stamm.mieter_wohnung = st.text_input(
             "Welche Wohnung ist vermietet?", stamm.mieter_wohnung, key="m_wohnung",
             help="Zum Beispiel „Wohnung Obergeschoss“. Steht so im PDF.")
+        if erweitert:
+            stamm.anrede = st.text_input(
+                "Anrede im Brief", stamm.anrede, key="m_anrede",
+                help="Zum Beispiel „Sehr geehrter Herr Müller,“.")
+    with rechts:
+        stamm.flaeche_mieter = st.number_input(
+            "Wohnfläche der Mietwohnung (m²)", min_value=0.0, step=1.0,
+            value=float(stamm.flaeche_mieter), key="f_mieter",
+            help="Steht im Mietvertrag. Danach wird der größte Teil der Kosten verteilt.")
+        stamm.personen_mieter = st.number_input(
+            "Personen beim Mieter", min_value=0.0, step=1.0,
+            value=float(stamm.personen_mieter), key="p_mieter",
+            help="Nur für Kosten, die nach Köpfen geteilt werden – vor allem die Müllabfuhr.")
+        stamm.einheiten_mieter = st.number_input(
+            "vermietete Wohnungen", min_value=0.0, step=1.0,
+            value=float(stamm.einheiten_mieter), key="e_mieter")
+
+    if stamm.flaeche_gesamt and stamm.flaeche_mieter:
+        st.success(f"Anteil des Mieters an der Wohnfläche: "
+                   f"**{zahl(stamm.flaeche_mieter / stamm.flaeche_gesamt * 100)} %**")
+    elif not stamm.flaeche_gesamt:
+        st.info("Die Wohnfläche des ganzen Hauses fehlt noch – Bereich „3 · Haus“.")
+
+# --------------------------------------------------------------------------
+# 3 Haus
+# --------------------------------------------------------------------------
+if bereich == "haus":
+    hilfe.ueberschrift("haus", "Das Haus",
+                       "Ändert sich nichts am Haus, fasst du das nie wieder an.")
+    links, rechts = st.columns(2)
+    with links:
+        stamm.objekt_strasse = st.text_input(
+            "Straße und Hausnummer", stamm.objekt_strasse, key="o_str")
+        stamm.objekt_plz_ort = st.text_input("PLZ und Ort", stamm.objekt_plz_ort, key="o_ort")
         stamm.grundstuecksflaeche = st.number_input(
             "Grundstück (m²)", min_value=0.0, step=10.0,
             value=float(stamm.grundstuecksflaeche), key="g_flaeche",
             help="Nur zur Information im Kopf der Abrechnung. Für die Verteilung "
                  "der Kosten wird die Wohnfläche benutzt.")
-
-    st.divider()
-    st.subheader("Wohnflächen und Wohnungen")
-    st.caption("Danach werden die meisten Kosten verteilt. Die Wohnfläche steht im Mietvertrag.")
-    g1, g2 = st.columns(2)
-    with g1:
+    with rechts:
         stamm.flaeche_gesamt = st.number_input(
             "Wohnfläche des ganzen Hauses (m²)", min_value=0.0, step=1.0,
             value=float(stamm.flaeche_gesamt), key="f_gesamt",
             help="Deine Wohnung plus die Wohnung des Mieters.")
-        stamm.flaeche_mieter = st.number_input(
-            "davon Wohnung des Mieters (m²)", min_value=0.0, step=1.0,
-            value=float(stamm.flaeche_mieter), key="f_mieter")
-        if stamm.flaeche_gesamt and stamm.flaeche_mieter:
-            st.caption(f"Anteil des Mieters: "
-                       f"**{zahl(stamm.flaeche_mieter / stamm.flaeche_gesamt * 100)} %**")
-    with g2:
+        stamm.personen_gesamt = st.number_input(
+            "Personen im Haus insgesamt", min_value=0.0, step=1.0,
+            value=float(stamm.personen_gesamt), key="p_gesamt",
+            help="Alle Bewohner zusammen, deine Familie mitgezählt.")
         stamm.einheiten_gesamt = st.number_input(
             "Wohnungen im Haus", min_value=1.0, step=1.0,
             value=float(stamm.einheiten_gesamt), key="e_gesamt")
-        stamm.einheiten_mieter = st.number_input(
-            "davon vermietet", min_value=0.0, step=1.0,
-            value=float(stamm.einheiten_mieter), key="e_mieter")
 
 # --------------------------------------------------------------------------
 # 2 Diese Abrechnung – Art, Zeitraum, Mieter
@@ -589,33 +643,13 @@ if bereich == "diese":
         else:
             stamm.nutzung_von, stamm.nutzung_bis = stamm.zeitraum_von, stamm.zeitraum_bis
 
-    st.divider()
-    st.subheader("Dein Mieter")
-    m1, m2 = st.columns(2)
-    with m1:
-        stamm.mieter_name = st.text_input("Name des Mieters", stamm.mieter_name, key="m_name")
-        if erweitert:
-            stamm.anrede = st.text_input(
-                "Anrede im Brief", stamm.anrede, key="m_anrede",
-                help="Zum Beispiel „Sehr geehrter Herr Müller,“.")
-    with m2:
-        stamm.personen_gesamt = st.number_input(
-            "Personen im Haus insgesamt", min_value=0.0, step=1.0,
-            value=float(stamm.personen_gesamt), key="p_gesamt",
-            help="Alle Bewohner zusammen, deine Familie mitgezählt.")
-        stamm.personen_mieter = st.number_input(
-            "davon beim Mieter", min_value=0.0, step=1.0,
-            value=float(stamm.personen_mieter), key="p_mieter")
-
     if erweitert:
         st.divider()
         st.subheader("Anschreiben")
-        a1, a2, a3 = st.columns(3)
+        a1, a2 = st.columns(2)
         with a1:
-            stamm.ort = st.text_input("Ort für die Datumszeile", stamm.ort, key="s_ort")
-        with a2:
             stamm.datum = datum_feld("Datum der Abrechnung", stamm.datum, "s_datum")
-        with a3:
+        with a2:
             if stamm.ist_verbindlich:
                 stamm.zahlungsfrist_tage = int(st.number_input(
                     "Zahlungsfrist (Tage)", min_value=0, max_value=90, step=1,

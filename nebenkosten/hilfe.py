@@ -12,12 +12,14 @@ import streamlit as st
 
 # Reihenfolge der Bereiche; die Schlüssel steuern auch die Navigation.
 BEREICHE = {
-    "haus": "1 · Haus (bleibt gleich)",
-    "diese": "2 · Diese Abrechnung",
-    "kosten": "3 · Kosten",
-    "zaehler": "4 · Zählerstände",
-    "vz": "5 · Vorauszahlungen",
-    "ergebnis": "6 · Fertige Abrechnung",
+    "vermieter": "1 · Vermieter",
+    "mieter": "2 · Mieter",
+    "haus": "3 · Haus",
+    "diese": "4 · Diese Abrechnung",
+    "kosten": "5 · Kosten",
+    "zaehler": "6 · Zählerstände",
+    "vz": "7 · Vorauszahlungen",
+    "ergebnis": "8 · Fertige Abrechnung",
 }
 
 
@@ -97,11 +99,11 @@ THEMEN: list[Thema] = [
           "Üblich sind 30 % nach Wohnfläche, der Rest nach Verbrauch."),
 
     # --- Stammdaten und Abrechnung ---------------------------------------
-    Thema("Wohnfläche und Grundstück", "haus", "Abschnitt „Wohnflächen und Wohnungen“",
+    Thema("Wohnfläche und Grundstück", "haus", "Felder „Wohnfläche des ganzen Hauses“ und „Grundstück“",
           ["wohnfläche", "wohnflaeche", "quadratmeter", "qm", "grundstück", "fläche"]),
-    Thema("Deine Bankverbindung", "haus", "Abschnitt „Du als Vermieter“",
+    Thema("Deine Bankverbindung", "vermieter", "Feld „Deine IBAN“",
           ["iban", "konto", "bank", "überweisung", "bankverbindung"]),
-    Thema("Mieter und Personenzahl", "diese", "Abschnitt „Dein Mieter“",
+    Thema("Mieter und Personenzahl", "mieter", "Bereich „Mieter“",
           ["mieter", "name", "personen", "bewohner", "anschrift"]),
     Thema("Ein- oder Auszug im Jahr", "diese", "Art der Abrechnung → „Abrechnung zum Mietende“",
           ["auszug", "einzug", "mietende", "kündigung", "umzug", "zeitanteilig"]),
@@ -125,17 +127,42 @@ THEMEN: list[Thema] = [
 
 # Was in jedem Bereich erklärt wird, wenn man auf das Fragezeichen klickt.
 ERKLAERUNGEN = {
-    "haus": (
-        "Angaben, die jedes Jahr gleich bleiben",
+    "vermieter": (
+        "Deine eigenen Angaben",
         """
-Diese Seite füllst du **einmal** aus, danach steht alles.
+Das trägst du **einmal** ein, danach steht es.
 
-* **Du als Vermieter** – Name und Anschrift kommen so in den Briefkopf. Die IBAN
-  erscheint im PDF, falls dein Mieter nachzahlen muss.
-* **Das Haus** – Adresse des Hauses und Bezeichnung der vermieteten Wohnung.
-  Das Grundstück ist nur eine Angabe im Kopf der Abrechnung.
-* **Wohnflächen** – die wichtigste Zahl der ganzen App: Danach werden die meisten
-  Kosten verteilt. Beide Werte stehen im Mietvertrag.
+* **Name und Anschrift** kommen so in den Briefkopf der Abrechnung.
+* **IBAN** erscheint im PDF, falls dein Mieter nachzahlen muss. Bei einem
+  Guthaben braucht die App sie nicht.
+* **Ort** steht in der Datumszeile über dem Anschreiben.
+
+Diese Angaben überstehen „Alles auf null setzen" – sie lassen sich nur hier
+ändern.
+        """,
+    ),
+    "mieter": (
+        "Wer die Abrechnung bekommt",
+        """
+* **Name** steht im Anschreiben und in der Anrede.
+* **Wohnung** – die Bezeichnung, die im PDF erscheint, etwa „Wohnung Obergeschoss".
+* **Wohnfläche der Mietwohnung** – danach wird der größte Teil der Kosten verteilt.
+  Die Zahl steht im Mietvertrag.
+* **Personen beim Mieter** – nur für Kosten, die nach Köpfen geteilt werden,
+  vor allem die Müllabfuhr.
+
+Zieht ein neuer Mieter ein, änderst du hier den Namen. Alles andere bleibt.
+        """,
+    ),
+    "haus": (
+        "Das Haus – bleibt jedes Jahr gleich",
+        """
+* **Adresse des Hauses** muss auf der Abrechnung stehen.
+* **Wohnfläche des ganzen Hauses** – die wichtigste Zahl der ganzen App: Der
+  Anteil des Mieters ergibt sich aus seiner Fläche geteilt durch diese.
+* **Personen im Haus insgesamt** – alle Bewohner zusammen, deine Familie
+  mitgezählt.
+* **Grundstück** ist nur eine Angabe im Kopf der Abrechnung.
 
 Ändert sich nichts am Haus, musst du hier nie wieder etwas anfassen.
         """,
@@ -147,8 +174,10 @@ Diese Seite füllst du **einmal** aus, danach steht alles.
   *Zum Mietende* rechnet bis zum Auszugstag und teilt alles tageweise.
   *Zwischenabrechnung* ist eine unverbindliche Momentaufnahme.
 * **Zeitraum** – meist 01.01. bis 31.12. Länger als zwölf Monate darf er nicht sein.
-* **Dein Mieter** – Name für das Anschreiben, Personenzahl für die Verteilung
-  von Kosten wie der Müllabfuhr.
+* **Mietzeit** – nur nötig, wenn der Mieter mitten im Jahr ein- oder ausgezogen ist.
+
+Diese Angaben gelten für genau eine Abrechnung und werden von „Alles auf null
+setzen" geleert.
         """,
     ),
     "kosten": (

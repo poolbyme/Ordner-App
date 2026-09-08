@@ -60,11 +60,11 @@ def pruefe(s: Stammdaten, positionen: list[Position], e: Ergebnis,
 
     # --- Pflicht ---------------------------------------------------------
     if not s.vermieter_name.strip():
-        bericht.pflicht.append(Punkt("Dein Name", "haus", "steht im Briefkopf der Abrechnung"))
+        bericht.pflicht.append(Punkt("Dein Name", "vermieter", "steht im Briefkopf der Abrechnung"))
     if not s.vermieter_plz_ort.strip():
-        bericht.pflicht.append(Punkt("Deine Anschrift", "haus", "gehört in den Briefkopf"))
+        bericht.pflicht.append(Punkt("Deine Anschrift", "vermieter", "gehört in den Briefkopf"))
     if not s.mieter_name.strip():
-        bericht.pflicht.append(Punkt("Name des Mieters", "diese", "die Abrechnung ist an ihn gerichtet"))
+        bericht.pflicht.append(Punkt("Name des Mieters", "mieter", "die Abrechnung ist an ihn gerichtet"))
     if not s.objekt_strasse.strip():
         bericht.pflicht.append(Punkt("Adresse des Hauses", "haus", "muss auf der Abrechnung stehen"))
 
@@ -73,10 +73,10 @@ def pruefe(s: Stammdaten, positionen: list[Position], e: Ergebnis,
             bericht.pflicht.append(Punkt("Wohnfläche des ganzen Hauses", "haus",
                                          "danach werden die meisten Kosten verteilt"))
         if s.flaeche_mieter <= 0:
-            bericht.pflicht.append(Punkt("Wohnfläche der Mietwohnung", "haus",
+            bericht.pflicht.append(Punkt("Wohnfläche der Mietwohnung", "mieter",
                                          "ohne sie lässt sich kein Anteil ausrechnen"))
     if "personen" in schluessel and s.personen_gesamt <= 0:
-        bericht.pflicht.append(Punkt("Personen im Haus", "diese",
+        bericht.pflicht.append(Punkt("Personen im Haus", "haus",
                                      "eine Kostenart wird nach Personenzahl verteilt"))
 
     if not any(p.aktiv and p.betrag for p in positionen):
@@ -88,7 +88,7 @@ def pruefe(s: Stammdaten, positionen: list[Position], e: Ergebnis,
 
     # --- Kann ------------------------------------------------------------
     if e.ist_nachzahlung and e.betrag_absolut >= 0.01 and not s.vermieter_iban.strip():
-        bericht.kann.append(Punkt("Deine IBAN", "haus",
+        bericht.kann.append(Punkt("Deine IBAN", "vermieter",
                                   "dein Mieter muss nachzahlen und braucht ein Konto"))
     if e.vorauszahlungen <= 0 and not s.ist_zwischenabrechnung:
         bericht.kann.append(Punkt("Vorauszahlungen des Mieters", "vz",

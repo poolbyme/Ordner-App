@@ -387,31 +387,21 @@ def _zaehler_aus_dict(daten: dict) -> list[Zaehlerstand]:
     return uebernommen
 
 
-def _leer(z: "Zaehlerstand") -> bool:
-    return not float(z.alt) and not float(z.neu)
-
-
 def _warmwasser_zusammenlegen(wasser: Position, warm: Position) -> None:
-    """Die doppelt gefuehrten Warmwasserzaehler auf die des Wassers zurueckfuehren.
+    """Die Warmwasserzaehler beim Warmwasser entfernen und die des Wassers nehmen.
 
-    Es sind dieselben Zaehler: Was der Mieter an Warmwasser verbraucht hat,
-    steht beim Wasser - dieselbe Zahl noch einmal bei der Heizung einzutippen,
-    nur um daraus die Energiemenge zu bestimmen, ist doppelte Arbeit.
-
-    Massgeblich ist der Stand beim Wasser. Steht dort nichts und beim Warmwasser
-    schon, wandert er hinueber, damit nichts verlorengeht.
+    Es sind dieselben Zaehler. Abgelesen und eingetragen werden sie beim Wasser;
+    fuer die Gaskosten wird nur darauf zugegriffen. Beim Warmwasser bleibt
+    deshalb nichts stehen, was man eintippen koennte.
     """
-    nach_name = {z.name.strip().lower(): z for z in wasser.zaehler}
+    vorhanden = {z.name.strip().lower(): z.name for z in wasser.zaehler}
     namen = []
     for z in warm.zaehler:
-        gegenstueck = nach_name.get(z.name.strip().lower())
-        if gegenstueck is None:
+        treffer = vorhanden.get(z.name.strip().lower())
+        if treffer is None:
             wasser.zaehler.append(z)
-            namen.append(z.name)
-            continue
-        if _leer(gegenstueck) and not _leer(z):
-            gegenstueck.alt, gegenstueck.neu = z.alt, z.neu
-        namen.append(gegenstueck.name)
+            treffer = z.name
+        namen.append(treffer)
     warm.zaehler_nur = namen
     warm.zaehler_von = wasser.bezeichnung
     warm.zaehler = []
@@ -431,8 +421,18 @@ def _nachziehen(positionen: list[Position]) -> list[Position]:
     nach_name = {p.bezeichnung.strip().lower(): p for p in positionen}
     wasser = nach_name.get("wasser")
     warm = nach_name.get("warmwasser (gas)")
-    if wasser and warm and warm.zaehler and not warm.zaehler_von:
-        _warmwasser_zusammenlegen(wasser, warm)
+    if wasser and warm:
+        if warm.zaehler and not warm.zaehler_von:
+            _warmwasser_zusammenlegen(wasser, warm)
+        if not warm.zaehler_nur:
+            # Ohne diese Liste naehme das Warmwasser alle Wasserzaehler, also
+            # auch Kaltwasser und Garten. Zwischenstaende aus aelteren Fassungen
+            # haben sie nicht - deshalb hier aus den Namen erschliessen.
+            gefunden = [z.name for z in wasser.zaehler
+                        if "warmwasser" in z.name.strip().lower()]
+            if gefunden:
+                warm.zaehler_nur = gefunden
+                warm.zaehler_von = wasser.bezeichnung
 
     for pos in positionen:
         for z in pos.zaehler:

@@ -985,19 +985,28 @@ und der Heizungsanteil nach den Wärmemengenzählern.
             p.einheit = k2.text_input(
                 "Einheit", p.einheit or "m³", key=f"zae{i}_einheit",
                 help="Was misst der Zähler? Wasser m³, Wärmemenge kWh, Gas m³.")
-            andere = [n for n in namen_aller if n != p.bezeichnung]
-            auswahl = ["(eigene Zähler)"] + andere
-            vorgabe = p.zaehler_von if p.zaehler_von in andere else "(eigene Zähler)"
-            gewaehlt = k3.selectbox(
-                "Zähler", auswahl, index=auswahl.index(vorgabe), key=f"zae{i}_von",
-                help="Abwasser wird meist nach der Frischwassermenge abgerechnet – dann "
-                     "hier „Wasser“ auswählen, statt dieselben Stände noch einmal einzutippen.")
-            p.zaehler_von = "" if gewaehlt == "(eigene Zähler)" else gewaehlt
+            # Zeilen mit fest hinterlegten Zaehlern (Warmwasser) bekommen hier
+            # nichts zum Anfassen: Der Zaehler wird beim Wasser abgelesen und
+            # dort eingetragen, sonst nirgends.
+            fest_verdrahtet = bool(p.zaehler_von and p.zaehler_nur)
+            if not fest_verdrahtet:
+                andere = [n for n in namen_aller if n != p.bezeichnung]
+                auswahl = ["(eigene Zähler)"] + andere
+                vorgabe = p.zaehler_von if p.zaehler_von in andere else "(eigene Zähler)"
+                gewaehlt = k3.selectbox(
+                    "Zähler", auswahl, index=auswahl.index(vorgabe), key=f"zae{i}_von",
+                    help="Abwasser wird meist nach der Frischwassermenge abgerechnet – dann "
+                         "hier „Wasser“ auswählen, statt dieselben Stände noch einmal "
+                         "einzutippen.")
+                p.zaehler_von = "" if gewaehlt == "(eigene Zähler)" else gewaehlt
+            else:
+                k3.markdown("**Zähler**")
+                k3.caption(f"fest von „{p.zaehler_von}“")
 
             if p.zaehler_von:
                 if p.zaehler_nur:
-                    st.info("Es werden die Zählerstände von **{}** benutzt, und zwar {}. "
-                            "Du trägst sie also nur einmal ein.".format(
+                    st.info("Die Stände kommen von **{}**: {}. Dort liest du sie ab, dort "
+                            "trägst du sie ein – hier gibt es nichts einzutippen.".format(
                                 p.zaehler_von,
                                 " und ".join(f"„{n}“" for n in p.zaehler_nur)))
                 else:

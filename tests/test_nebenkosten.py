@@ -868,21 +868,54 @@ def test_gespeicherte_daten_bekommen_die_einheit_je_zaehler():
     assert einheiten["Wärmemenge Fußbodenheizung Mieter"] == "kWh"
 
 
-def test_eingetippte_staende_wandern_mit_hinueber():
-    """Nur beim Warmwasser eingetragen, beim Wasser leer: Der Stand darf beim
-    Zusammenlegen nicht verlorengehen."""
+def test_warmwasser_behaelt_keine_eigenen_felder():
+    """Der Zaehler wird beim Wasser abgelesen und dort eingetragen. Beim
+    Warmwasser darf gar nichts zum Eintippen uebrig bleiben."""
     from nebenkosten.modell import from_dict
 
     daten = _alter_stand()
-    warm = daten["positionen"][1]
-    warm["zaehler"][0]["alt"], warm["zaehler"][0]["neu"] = 100, 148
+    daten["positionen"][1]["zaehler"][0]["alt"] = 100
+    daten["positionen"][1]["zaehler"][0]["neu"] = 148
+
+    _, positionen = from_dict(daten)
+    warm = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
+    assert warm.zaehler == []
+    assert warm.zaehler_von == "Wasser"
+
+
+def test_unbekannter_zaehler_wandert_zum_wasser():
+    """Steht beim Warmwasser ein Zaehler, den es beim Wasser gar nicht gibt,
+    muss er dorthin - sonst verschwaende er samt Stand."""
+    from nebenkosten.modell import from_dict
+
+    daten = _alter_stand()
+    daten["positionen"][1]["zaehler"].append(
+        {"name": "Warmwasser Einliegerwohnung", "partei": "mieter", "alt": 10, "neu": 30})
 
     _, positionen = from_dict(daten)
     nach_name = {p.bezeichnung: p for p in positionen}
+    gewandert = next(z for z in nach_name["Wasser"].zaehler
+                     if z.name == "Warmwasser Einliegerwohnung")
+    assert (gewandert.alt, gewandert.neu) == (10, 30)
     assert nach_name["Warmwasser (Gas)"].zaehler == []
-    uebernommen = next(z for z in nach_name["Wasser"].zaehler
-                       if z.name == "Warmwasser Mieter")
-    assert (uebernommen.alt, uebernommen.neu) == (100, 148)
+
+
+def test_halb_umgestellte_daten_werden_repariert():
+    """Zwischenstand aus einer aelteren Fassung: verknuepft, aber ohne die Liste
+    der Zaehler - dann naehme das Warmwasser alle Wasserzaehler, auch Kaltwasser
+    und Garten."""
+    from nebenkosten.berechnung import zaehlerquelle
+    from nebenkosten.modell import from_dict
+
+    daten = _alter_stand()
+    daten["positionen"][1]["zaehler"] = []
+    daten["positionen"][1]["zaehler_von"] = "Wasser"
+
+    _, positionen = from_dict(daten)
+    warm = next(p for p in positionen if p.bezeichnung == "Warmwasser (Gas)")
+    assert warm.zaehler_nur == ["Warmwasser Mieter", "Warmwasser eigene Wohnung"]
+    benutzt = [z.name for z in zaehlerquelle(warm, positionen).zaehler]
+    assert benutzt == ["Warmwasser Mieter", "Warmwasser eigene Wohnung"]
 
 
 def test_gleiche_staende_werden_einfach_zusammengelegt():

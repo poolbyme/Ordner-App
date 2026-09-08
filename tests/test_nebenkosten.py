@@ -1492,6 +1492,77 @@ def test_kein_test_verdeckt_einen_anderen():
     assert not doppelt, f"doppelt vergeben: {doppelt}"
 
 
+def test_nur_die_brennstoffzeilen_werden_berechnet():
+    """„Heizungswartung" faengt mit „Heizung" an, ist aber eine eigene Rechnung
+    des Heizungsbauers. Wird sie als berechnet eingestuft, verschwindet sie aus
+    der Kostentabelle und bekommt obendrein den Betrag der Gasrechnung - die
+    Heizkosten stuenden dann zweimal in der Abrechnung."""
+    from nebenkosten.modell import brennstoffzeile
+
+    assert brennstoffzeile("Heizung (Gas)") == "heizung"
+    assert brennstoffzeile("Heizung (Öl)") == "heizung"
+    assert brennstoffzeile("Fernwärme") == "heizung"
+    assert brennstoffzeile("Verbundene Heizungs- und Warmwasseranlage") == "heizung"
+    assert brennstoffzeile("Warmwasser (Gas)") == "warmwasser"
+    assert brennstoffzeile("Warmwasser (Strom, Boiler)") == "warmwasser"
+
+    for eigene_rechnung in ("Heizungswartung", "Wartung der Etagenheizung",
+                            "Wartung der verbundenen Anlage", "Schornsteinfeger",
+                            "Betriebsstrom der Heizung", "Miete und Eichung der Wärmezähler",
+                            "Reinigung der Heizanlage und des Heizraums",
+                            "Kosten der Heizkostenabrechnung"):
+        assert brennstoffzeile(eigene_rechnung) == "", eigene_rechnung
+
+
+def test_heizungswartung_bleibt_in_der_kostentabelle():
+    """Auch nach dem Laden gespeicherter Daten."""
+    from nebenkosten.modell import Stammdaten, as_dict, from_dict, standard_positionen
+
+    _, positionen = from_dict(as_dict(Stammdaten(), standard_positionen()))
+    nach_name = {p.bezeichnung: p for p in positionen}
+    assert nach_name["Heizungswartung"].berechnet is False
+    assert nach_name["Schornsteinfeger"].berechnet is False
+    assert nach_name["Heizung (Gas)"].berechnet is True
+    assert nach_name["Warmwasser (Gas)"].berechnet is True
+
+
+def test_falsch_gekennzeichnete_zeile_wird_beim_laden_repariert():
+    """Wer die App zwischendurch benutzt hat, hat den Fehler gespeichert."""
+    from nebenkosten.modell import from_dict
+
+    daten = {
+        "stammdaten": {},
+        "positionen": [
+            {"bezeichnung": "Heizungswartung", "kategorie": "gas", "betrag": 180.0,
+             "berechnet": True},
+            {"bezeichnung": "Heizung (Gas)", "kategorie": "gas", "berechnet": True},
+        ],
+    }
+    _, positionen = from_dict(daten)
+    nach_name = {p.bezeichnung: p for p in positionen}
+    assert nach_name["Heizungswartung"].berechnet is False
+    assert nach_name["Heizungswartung"].betrag == 180.0
+    assert nach_name["Heizung (Gas)"].berechnet is True
+
+
+def test_faelschlich_abgeschaltete_zeile_kommt_zurueck():
+    """Die App hatte solchen Zeilen den Betrag der Brennstoffrechnung zugewiesen
+    und sie abgeschaltet, wenn der 0 war. Sonst bliebe die Wartung unsichtbar."""
+    from nebenkosten.modell import from_dict
+
+    daten = {"stammdaten": {}, "positionen": [
+        {"bezeichnung": "Heizungswartung", "kategorie": "gas", "betrag": 0.0,
+         "aktiv": False, "berechnet": True},
+        {"bezeichnung": "Gartenpflege", "kategorie": "sonstiges", "betrag": 0.0,
+         "aktiv": False, "berechnet": False},
+    ]}
+    _, positionen = from_dict(daten)
+    nach_name = {p.bezeichnung: p for p in positionen}
+    assert nach_name["Heizungswartung"].aktiv is True
+    # Von Hand abgewaehlte Zeilen bleiben aus.
+    assert nach_name["Gartenpflege"].aktiv is False
+
+
 if __name__ == "__main__":
     fehlgeschlagen = 0
     for name, funktion in sorted(globals().items()):

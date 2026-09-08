@@ -20,7 +20,8 @@ from nebenkosten import (design, heizung, hilfe, katalog, pruefung, speicher,
 from nebenkosten.modell import (
     ABRECHNUNGSARTEN, DIFFERENZ_VERTEILUNG, KATEGORIEN, PARTEIEN, SCHLUESSEL,
     ZAEHLER_GRUNDLAGE, ZWISCHEN_ANLAESSE, Position, Stammdaten, Zaehlerstand,
-    as_dict, aus_katalog, from_dict, neue_abrechnung, standard_positionen,
+    as_dict, aus_katalog, brennstoffzeile, from_dict, neue_abrechnung,
+    standard_positionen,
 )
 from nebenkosten.pdf import dateiname, erzeuge_pdf
 
@@ -106,13 +107,11 @@ def heizungsaufteilung() -> heizung.Aufteilung:
 def betraege_uebernehmen(a: heizung.Aufteilung) -> None:
     """Die errechneten Beträge in die beiden berechneten Zeilen schreiben."""
     for p in st.session_state.positionen:
-        if not p.berechnet:
-            continue
-        name = p.bezeichnung.strip().lower()
-        if name.startswith("warmwasser"):
+        art = brennstoffzeile(p.bezeichnung) if p.berechnet else ""
+        if art == "warmwasser":
             p.betrag = a.kosten_warmwasser
             p.aktiv = bool(a.kosten_warmwasser)
-        elif name.startswith("heizung"):
+        elif art == "heizung":
             p.betrag = a.kosten_heizung
             p.aktiv = bool(a.kosten_heizung)
 

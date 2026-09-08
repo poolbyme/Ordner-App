@@ -412,6 +412,26 @@ def _zaehler_aus_dict(daten: dict) -> list[Zaehlerstand]:
     return uebernommen
 
 
+def brennstoffzeile(bezeichnung: str) -> str:
+    """„heizung", „warmwasser" oder leer.
+
+    Nur diese beiden Zeilen bekommen ihren Betrag aus der Brennstoffrechnung.
+    Der Name allein reicht dafuer nicht: „Heizungswartung" faengt zwar mit
+    „Heizung" an, ist aber eine eigene Rechnung des Heizungsbauers und gehoert
+    in die Kostentabelle wie jede andere auch.
+    """
+    name = bezeichnung.strip().lower()
+    if name.startswith(("wartung", "reinigung", "miete", "kosten", "betriebsstrom")):
+        return ""
+    if name == "heizung" or name.startswith("heizung ("):
+        return "heizung"
+    if name == "warmwasser" or name.startswith("warmwasser ("):
+        return "warmwasser"
+    if name.startswith(("fernwärme", "fernwaerme", "verbundene heiz")):
+        return "heizung"
+    return ""
+
+
 def _warmwasser_zusammenlegen(wasser: Position, warm: Position) -> None:
     """Die Warmwasserzaehler beim Warmwasser entfernen und die des Wassers nehmen.
 
@@ -447,7 +467,7 @@ def _nachziehen(positionen: list[Position]) -> list[Position]:
     wasser = nach_name.get("wasser")
     # Die Zeile kann „Warmwasser (Gas)" oder „Warmwasser (Öl)" heissen.
     warm = next((p for p in positionen
-                 if p.bezeichnung.strip().lower().startswith("warmwasser")), None)
+                 if brennstoffzeile(p.bezeichnung) == "warmwasser"), None)
     if wasser and warm:
         if warm.zaehler and not warm.zaehler_von:
             _warmwasser_zusammenlegen(wasser, warm)
@@ -462,10 +482,14 @@ def _nachziehen(positionen: list[Position]) -> list[Position]:
                 warm.zaehler_von = wasser.bezeichnung
 
     for pos in positionen:
-        anfang = pos.bezeichnung.strip().lower()
-        if anfang.startswith(("heizung", "warmwasser")):
-            # Diese Betraege kommen aus der Brennstoffrechnung, nicht aus der Tabelle.
-            pos.berechnet = True
+        richtig = bool(brennstoffzeile(pos.bezeichnung))
+        if pos.berechnet and not richtig:
+            # Diese Zeile war faelschlich als berechnet gekennzeichnet - dabei
+            # hat die App ihr den Betrag der Brennstoffrechnung zugewiesen und
+            # sie abgeschaltet, wenn der 0 war. Beides wird zurueckgenommen.
+            if not pos.betrag:
+                pos.aktiv = True
+        pos.berechnet = richtig
         for z in pos.zaehler:
             if z.einheit:
                 continue

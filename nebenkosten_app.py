@@ -73,7 +73,13 @@ def init_state() -> None:
     st.session_state.setdefault("bereich", "haus")
 
     if st.session_state.pop("_felder_leeren", False):
-        for schluessel in [k for k in st.session_state if k not in BEHALTEN]:
+        # Nur Eingabefelder vergessen. Alles mit Unterstrich davor ist interne
+        # Merkung - darunter wer angemeldet ist und welches Arbeitsblatt ihm
+        # gehoert. Die mitzuloeschen hat nach "Alles auf null setzen" die
+        # Personenverwaltung verschwinden lassen, und wer ein eigenes Blatt
+        # hatte, waere still auf dem geteilten gelandet.
+        for schluessel in [k for k in st.session_state
+                           if k not in BEHALTEN and not str(k).startswith("_")]:
             del st.session_state[schluessel]
 
     if "stamm" in st.session_state:
@@ -422,6 +428,80 @@ def kontoverwaltung() -> None:
                         st.error(str(fehler))
 
 
+def archiv_pdf(eintrag) -> tuple[bytes, str] | None:
+    """PDF einer abgelegten Abrechnung – Inhalt und Dateiname."""
+    geladen = speicher.aus_archiv(eintrag)
+    if not geladen:
+        return None
+    alt_stamm, alt_pos = geladen
+    ergebnis = berechne(alt_stamm, alt_pos)
+    if ergebnis.fehler or not ergebnis.zeilen:
+        return None
+    return erzeuge_pdf(alt_stamm, ergebnis), dateiname(alt_stamm)
+
+
+def archiv_aktionen(eintrag) -> None:
+    """Was man mit einer abgelegten Abrechnung machen kann.
+
+    Teilen und Drucken kann eine Webseite nicht selbst: Sie darf weder eine
+    E-Mail mit Anhang schreiben noch etwas an WhatsApp geben. Was sie darf, ist
+    die fertige Datei an das Teilen-Fenster des Geräts übergeben – dort stehen
+    dann WhatsApp, E-Mail und Drucken nebeneinander. Deshalb dieser eine Knopf
+    statt drei, die nicht funktionieren würden.
+    """
+    name = speicher.archivname(eintrag)
+    schluessel = str(eintrag)
+
+    k1, k2 = st.columns(2)
+    if k1.button("📂 Öffnen", key="arch_auf", width="stretch",
+                 help="Lädt diese Abrechnung in die App – zum Ansehen oder Ändern."):
+        geladen = speicher.aus_archiv(eintrag)
+        if geladen:
+            st.session_state.stamm, st.session_state.positionen = geladen
+            sichern()
+            neu_zeichnen()
+        else:
+            st.error("Die Abrechnung konnte nicht gelesen werden.")
+
+    # Das PDF wird erst auf Wunsch gebaut: Sonst entstuende es bei jedem
+    # Tastendruck irgendwo in der App neu, nur um ungesehen dazuliegen.
+    if k2.button("📄 PDF", key="arch_pdf", width="stretch",
+                 help="Erzeugt das PDF zum Herunterladen, Teilen und Drucken."):
+        st.session_state["_arch_pdf_fuer"] = schluessel
+
+    if st.session_state.get("_arch_pdf_fuer") == schluessel:
+        fertig = archiv_pdf(eintrag)
+        if fertig is None:
+            st.warning("Aus dieser Abrechnung lässt sich kein PDF machen – "
+                       "öffne sie und schau, was noch fehlt.")
+        else:
+            inhalt, pdf_name = fertig
+            st.download_button("⬇️ PDF herunterladen", data=inhalt,
+                               file_name=pdf_name, mime="application/pdf",
+                               key="arch_laden", width="stretch")
+            design.teilen_knopf(pdf_name, inhalt)
+
+    if st.session_state.get("_arch_weg_fuer") == schluessel:
+        st.warning(f"**{name}** wirklich löschen? Das lässt sich nicht rückgängig "
+                   "machen.")
+        w1, w2 = st.columns(2)
+        if w1.button("Ja, löschen", key="arch_weg_ja", type="primary",
+                     width="stretch"):
+            try:
+                speicher.archiv_loeschen(eintrag)
+                st.session_state.pop("_arch_weg_fuer", None)
+                st.session_state.pop("_arch_pdf_fuer", None)
+                st.rerun()
+            except OSError as fehler:
+                st.error(f"Löschen nicht möglich: {fehler}")
+        if w2.button("Abbrechen", key="arch_weg_nein", width="stretch"):
+            st.session_state.pop("_arch_weg_fuer", None)
+            st.rerun()
+    elif st.button("🗑️ Löschen", key="arch_weg", width="stretch"):
+        st.session_state["_arch_weg_fuer"] = schluessel
+        st.rerun()
+
+
 def sichern() -> None:
     """Alles in die Datei schreiben. Fehler landen sichtbar in der Seitenleiste."""
     try:
@@ -645,14 +725,7 @@ with st.sidebar:
         with st.expander(f"📁 Fertige Abrechnungen ({len(abgelegt)})"):
             auswahl = st.selectbox("Frühere Abrechnung", abgelegt,
                                    format_func=speicher.archivname)
-            if st.button("Diese Abrechnung öffnen", width="stretch"):
-                geladen = speicher.aus_archiv(auswahl)
-                if geladen:
-                    st.session_state.stamm, st.session_state.positionen = geladen
-                    sichern()
-                    neu_zeichnen()
-                else:
-                    st.error("Die Datei konnte nicht gelesen werden.")
+            archiv_aktionen(auswahl)
 
     st.divider()
     if st.button("📅 Nächstes Jahr vorbereiten", width="stretch",

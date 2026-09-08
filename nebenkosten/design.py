@@ -29,7 +29,7 @@ if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
 # der Betreiber die neue Fassung schon ausliefert.
 # Regel: Bei jeder Änderung, die ausgeliefert wird, eine Stelle weiterzählen –
 # hinten für Kleinigkeiten und Korrekturen, in der Mitte für neue Funktionen.
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"
@@ -549,6 +549,68 @@ def _startbildschirm() -> None:
 """.replace("ANGABEN", angaben).replace("MANIFESTNAME", MANIFEST_NAME),
             height=_html_hoehe,
         )
+
+
+def teilen_knopf(dateiname: str, inhalt: bytes,
+                 beschriftung: str = "📤 Teilen oder drucken") -> None:
+    """Die Datei an das Teilen-Fenster des Geräts übergeben.
+
+    Auf dem Handy öffnet das die gewohnte Auswahl: WhatsApp, E-Mail, Drucken,
+    Speichern. Das kann nur der Browser selbst – eine Webseite darf weder eine
+    E-Mail mit Anhang schreiben noch etwas direkt an WhatsApp geben.
+
+    Kann das Gerät es nicht (die meisten Rechner können es nicht), sagt der
+    Kasten das und verweist auf den Knopf zum Herunterladen daneben.
+    """
+    if _html_baustein is None:
+        return
+    daten = base64.b64encode(inhalt).decode("ascii")
+    _html_baustein(
+        """
+<style>
+ body {margin:0; font-family:-apple-system,"Segoe UI",Roboto,sans-serif;}
+ button {width:100%; padding:11px 14px; font-size:15px; font-weight:600;
+         color:#fff; background:#176a94; border:0; border-radius:10px;
+         cursor:pointer;}
+ button[disabled] {background:#8fa3b4; cursor:default;}
+ p {margin:6px 2px 0; font-size:12.5px; color:#5b6b7c;}
+</style>
+<button id="teilen">BESCHRIFTUNG</button>
+<p id="hinweis"></p>
+<script>
+(function () {
+  const knopf = document.getElementById('teilen');
+  const hinweis = document.getElementById('hinweis');
+  const roh = atob("DATEN");
+  const bytes = new Uint8Array(roh.length);
+  for (let i = 0; i < roh.length; i++) bytes[i] = roh.charCodeAt(i);
+  const datei = new File([bytes], "DATEINAME", {type: 'application/pdf'});
+  // canShare mit Dateien sagt vorher, ob es klappt. Ohne diese Frage kaeme
+  // beim Tippen nur eine Fehlermeldung, und niemand wuesste warum.
+  const geht = navigator.canShare && navigator.canShare({files: [datei]});
+  if (!geht) {
+    knopf.disabled = true;
+    hinweis.textContent = 'Dieses Gerät kann nicht direkt teilen. '
+      + 'Nimm „PDF herunterladen" – danach lässt es sich aus dem Ordner '
+      + 'Downloads verschicken und drucken.';
+    return;
+  }
+  knopf.addEventListener('click', async () => {
+    try {
+      await navigator.share({files: [datei], title: "DATEINAME"});
+    } catch (fehler) {
+      if (fehler && fehler.name !== 'AbortError') {
+        hinweis.textContent = 'Das Teilen hat nicht geklappt: ' + fehler;
+      }
+    }
+  });
+})();
+</script>
+""".replace("BESCHRIFTUNG", beschriftung)
+   .replace("DATEINAME", dateiname.replace('"', ""))
+   .replace("DATEN", daten),
+        height=110,
+    )
 
 
 def anwenden() -> None:

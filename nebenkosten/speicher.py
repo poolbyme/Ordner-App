@@ -112,6 +112,21 @@ def archiv() -> list:
     return sorted(ARCHIV.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
 
 
+def archiv_loeschen(eintrag) -> None:
+    """Eine abgelegte Abrechnung entfernen.
+
+    Ohne diesen Weg wächst die Liste in der Seitenleiste immer weiter, und ein
+    Fehlversuch bleibt für immer stehen.
+    """
+    if _ablage is not None:
+        entfernen = getattr(_ablage, "loeschen", None)
+        if entfernen is None:
+            raise OSError("Diese Ablage kann nichts löschen.")
+        entfernen(str(eintrag))
+        return
+    Path(eintrag).unlink(missing_ok=True)
+
+
 def archivname(eintrag) -> str:
     """Anzeigename eines Archiveintrags – egal ob Datei oder Tabellenzeile."""
     name = eintrag.stem if isinstance(eintrag, Path) else str(eintrag)

@@ -86,6 +86,11 @@ class TabellenSpeicher:
                 self.blatt.append_row(SPALTEN)
             self.blatt.append_row([schluessel, jetzt, text])
 
+    def loeschen(self, schluessel: str) -> None:
+        nummer = self._zeilennummer(schluessel)
+        if nummer:
+            self.blatt.delete_rows(nummer)
+
     def zeitpunkt(self, schluessel: str) -> datetime | None:
         for zeile in self._zeilen():
             if zeile and zeile[0] == schluessel and len(zeile) > 1:

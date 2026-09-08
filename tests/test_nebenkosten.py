@@ -1862,3 +1862,90 @@ def test_kein_name_verdeckt_einen_anderen():
                     f"{datei.name}: {knoten.name} steht in Zeile {gesehen.get(knoten.name)} "
                     f"und noch einmal in Zeile {knoten.lineno}")
                 gesehen[knoten.name] = knoten.lineno
+
+def test_neu_zeichnen_wirft_die_anmeldung_nicht_weg():
+    """Nach „Alles auf null setzen" war die Personenverwaltung plötzlich weg:
+    Das Leeren der Eingabefelder hat auch _benutzer und _blatt geloescht. Wer
+    ein eigenes Arbeitsblatt hatte, waere danach still auf dem geteilten
+    gelandet."""
+    quelle = Path(__file__).resolve().parents[1] / "nebenkosten_app.py"
+    if not quelle.exists():
+        quelle = Path(__file__).resolve().parents[1] / "streamlit_app.py"
+    zeilen = quelle.read_text(encoding="utf-8").splitlines()
+
+    treffer = [i for i, z in enumerate(zeilen)
+               if "del st.session_state[schluessel]" in z]
+    assert treffer, "die Stelle gibt es nicht mehr - Test anpassen"
+    for i in treffer:
+        umfeld = "\n".join(zeilen[max(0, i - 6):i + 1])
+        assert 'startswith("_")' in umfeld, (
+            "das Leeren trifft wieder interne Schluessel wie _benutzer und "
+            f"_blatt (Zeile {i + 1})")
+
+
+def test_abgelegte_abrechnung_laesst_sich_loeschen():
+    """Ohne diesen Weg waechst die Liste immer weiter und ein Fehlversuch
+    bleibt fuer immer stehen."""
+    from nebenkosten import speicher
+
+    class Ablage:
+        beschreibung = "Test"
+        adresse = ""
+
+        def __init__(self):
+            self.zeilen = {"2025_Mieter_Jahr.json": {"a": 1}}
+
+        def schluessel(self):
+            return list(self.zeilen)
+
+        def lesen(self, schluessel):
+            return self.zeilen.get(schluessel)
+
+        def loeschen(self, schluessel):
+            self.zeilen.pop(schluessel, None)
+
+    vorher = speicher._ablage
+    ablage = Ablage()
+    speicher.konfiguriere(ablage)
+    try:
+        assert speicher.archiv() == ["2025_Mieter_Jahr.json"]
+        speicher.archiv_loeschen("2025_Mieter_Jahr.json")
+        assert speicher.archiv() == []
+    finally:
+        speicher.konfiguriere(vorher)
+
+
+def test_loeschen_ohne_faehige_ablage_sagt_es():
+    """Lieber eine klare Meldung als ein Klick, der nichts tut."""
+    from nebenkosten import speicher
+
+    class Stumm:
+        beschreibung = "Test"
+
+        def schluessel(self):
+            return []
+
+    vorher = speicher._ablage
+    speicher.konfiguriere(Stumm())
+    try:
+        speicher.archiv_loeschen("egal")
+    except OSError:
+        pass
+    else:
+        raise AssertionError("das Loeschen ist stillschweigend durchgegangen")
+    finally:
+        speicher.konfiguriere(vorher)
+
+
+def test_teilen_fragt_vorher_ob_das_geraet_es_kann():
+    """Ohne canShare kaeme beim Tippen nur eine Fehlermeldung, und niemand
+    wuesste, warum. Rechner koennen meist nicht teilen."""
+    import inspect
+
+    from nebenkosten import design
+
+    quelle = inspect.getsource(design.teilen_knopf)
+    assert "navigator.canShare" in quelle
+    assert "navigator.share" in quelle
+    assert "knopf.disabled = true" in quelle
+    assert "PDF herunterladen" in quelle, "es braucht einen Weg fuer den Notfall"

@@ -361,6 +361,42 @@ input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {{
 """
 
 
+MANIFEST_DATEI = STATISCH / "nebenkosten-manifest.json"
+MANIFEST_NAME = MANIFEST_DATEI.name
+
+
+def manifest_inhalt() -> dict:
+    """Das Manifest als richtige Datei neben den Bildern.
+
+    Android baut aus einem Manifest eine echte App und lässt die Bilder dafür
+    von einem fremden Rechner nachladen. Der kann nur Adressen abrufen – Bilder,
+    die im Seitentext stecken, erreicht er nicht, und dann entsteht am Ende gar
+    nichts. Deshalb liegen Manifest und Bilder als Dateien in static/.
+
+    Alle Angaben darin sind absichtlich relativ: „/" löst sich gegen die Adresse
+    der Manifest-Datei auf und trifft damit immer die richtige Domain, ohne dass
+    hier eine feste Adresse stehen muss.
+    """
+    return {
+        "name": "Nebenkosten",
+        "short_name": "Nebenkosten",
+        "description": "Betriebskostenabrechnung für die vermietete Wohnung",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#f6f8fb",
+        "theme_color": "#0e2b47",
+        "lang": "de",
+        "start_url": "/",
+        "scope": "/",
+        "icons": [
+            {"src": "app-icon-180.png", "sizes": "180x180", "type": "image/png"},
+            {"src": "app-icon.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "app-icon.png", "sizes": "512x512", "type": "image/png",
+             "purpose": "maskable"},
+        ],
+    }
+
+
 def _startbildschirm_angaben() -> dict:
     """Manifest und Symbole für den Startbildschirm.
 
@@ -406,22 +442,27 @@ def _startbildschirm_angaben() -> dict:
 def _startbildschirm() -> None:
     """Symbol, Name und Farbe für „Zum Startbildschirm hinzufügen" hinterlegen.
 
-    Die Angaben gehören in den Kopf der **obersten** Seite. Das ist der Kern
-    der Sache: Der Betreiber steckt die App noch einmal in einen Rahmen
-    (bei Streamlit Cloud unter /~/+/), und Streamlit rendert eigene Bausteine
-    in einen weiteren Rahmen darin. Wer nur eine Ebene nach oben geht, trägt
-    alles in einen Rahmen ein, den der Browser für die Verknüpfung gar nicht
-    ansieht – dann bleibt oben das Zeichen des Betreibers stehen.
+    Zwei Dinge haben hier je einen Anlauf gekostet, beide stehen im Code:
 
-    start_url und scope trägt erst das Skript ein: In einer Datenadresse sind
-    relative Angaben ungültig und der Browser wirft das Manifest weg.
+    1. Die Angaben gehören in den Kopf der **obersten** Seite. Der Betreiber
+       steckt die App noch einmal in einen Rahmen (bei Streamlit Cloud unter
+       /~/+/), und Streamlit rendert eigene Bausteine in einen weiteren Rahmen
+       darin. Wer nur eine Ebene hochgeht, schreibt in einen Rahmen, den der
+       Browser für die Verknüpfung gar nicht ansieht.
+    2. Ein Manifest darf nur dann in die Seite, wenn Manifest und Bilder unter
+       einer **abrufbaren Adresse** liegen. Android baut daraus eine echte App
+       und lässt die Bilder von einem fremden Rechner nachladen; Bilder im
+       Seitentext erreicht der nicht, das Anlegen bricht still ab und auf dem
+       Handy erscheint nichts. Ohne Manifest legt der Browser dagegen eine
+       schlichte Verknüpfung an und nimmt das Bild direkt aus der Seite. Ein
+       Manifest ohne abrufbare Bilder ist also schlechter als gar keines.
     """
     if _html_baustein is None:
         return
     angaben = json.dumps(_startbildschirm_angaben())
     # Der eigene Behaelter traegt einen Namen, damit der Stil nur diesen einen
     # Rahmen auf Hoehe 0 zieht. Frueher galt das fuer alle - dann bliebe auch
-    # der Pruefkasten unsichtbar.
+    # jeder andere eingebettete Inhalt unsichtbar.
     with st.container(key="nk-startbildschirm"):
         _html_baustein(
             """
@@ -443,59 +484,67 @@ def _startbildschirm() -> None:
     return fenster;
   }
   const seite = obersteSeite();
-  const kopf = seite.document.head;
-  if (!kopf || kopf.querySelector('link#nk-manifest')) return;
-  // Der Betreiber haengt sein eigenes Manifest in die Seite - dann nimmt der
-  // Browser dessen Symbol und dessen Namen fuer den Startbildschirm.
-  for (const fremd of kopf.querySelectorAll('link[rel="manifest"]')) fremd.remove();
+  const kopf = seite.document && seite.document.head;
+  if (!kopf || seite.__nkFertig) return;
+  seite.__nkFertig = true;  // vor dem Nachfragen setzen: Streamlit zeichnet neu
+
   const angaben = ANGABEN;
-  const ort = seite.location;
-  // Im Manifest muss jede Adresse vollstaendig sein: es haengt selbst in einer
-  // Datenadresse, und dagegen laesst sich nichts Relatives aufloesen.
-  const voll = (a) => (a && a.startsWith('/') ? ort.origin + a : a);
-  const manifest = Object.assign({}, angaben.manifest, {
-    start_url: ort.origin + ort.pathname,
-    scope: ort.origin + ort.pathname.replace(/[^/]*$/, ''),
-    icons: (angaben.manifest.icons || []).map(
-      (s) => Object.assign({}, s, {src: voll(s.src)})),
-  });
-  const alsAdresse = 'data:application/manifest+json;base64,' +
-    btoa(unescape(encodeURIComponent(JSON.stringify(manifest))));
-  const eintraege = [
-    ['link', {id: 'nk-manifest', rel: 'manifest', href: alsAdresse}],
-    ['meta', {name: 'apple-mobile-web-app-capable', content: 'yes'}],
-    ['meta', {name: 'apple-mobile-web-app-title', content: 'Nebenkosten'}],
-    ['meta', {name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent'}],
-    ['meta', {name: 'theme-color', content: '#0e2b47'}],
-    ['meta', {name: 'mobile-web-app-capable', content: 'yes'}],
-  ];
-  if (angaben.apfel) {
-    for (const alt of kopf.querySelectorAll('link[rel="apple-touch-icon"]')) alt.remove();
-    eintraege.push(['link', {rel: 'apple-touch-icon', sizes: '180x180', href: angaben.apfel}]);
-  }
-  if (angaben.symbol) {
-    for (const fremd of kopf.querySelectorAll('link[rel="shortcut icon"], link[rel="icon"]')) {
-      if (!(fremd.getAttribute('href') || '').startsWith('data:')) fremd.remove();
-    }
-    eintraege.push(['link', {rel: 'icon', type: 'image/png', sizes: '512x512',
-                             href: angaben.symbol}]);
-  }
-  for (const [art, eigenschaften] of eintraege) {
-    const knoten = seite.document.createElement(art);
-    for (const [name, wert] of Object.entries(eigenschaften)) knoten.setAttribute(name, wert);
-    kopf.appendChild(knoten);
-  }
+  // Die Dateien liegen beim Streamlit-Rahmen, nicht bei der obersten Seite:
+  // in der Cloud haengt die App unter /~/+/ und static/ darunter.
+  const appOrt = window.parent.location;
+  const basis = appOrt.origin + appOrt.pathname.replace(/[^/]*$/, '') + 'app/static/';
+
   // Der Name unter dem Symbol kommt vom Titel der obersten Seite. Beim
-  // Betreiber heisst die "Streamlit"; die App weiter unten kann daran nichts
-  // aendern. Nachfassen, falls der Betreiber ihn spaeter noch einmal setzt.
+  // Betreiber heisst die "Streamlit"; die App im Rahmen darin kann daran
+  // nichts aendern. Nachfassen, falls der Betreiber ihn spaeter neu setzt.
   const namen = () => {
     if (seite.document.title !== 'Nebenkosten') seite.document.title = 'Nebenkosten';
   };
   namen();
   setInterval(namen, 1000);
+
+  const anhaengen = (art, eigenschaften) => {
+    const knoten = seite.document.createElement(art);
+    for (const [name, wert] of Object.entries(eigenschaften)) knoten.setAttribute(name, wert);
+    kopf.appendChild(knoten);
+  };
+  const fremdesWeg = () => {
+    for (const fremd of kopf.querySelectorAll('link[rel="manifest"]')) fremd.remove();
+    for (const fremd of kopf.querySelectorAll('link[rel="apple-touch-icon"]')) fremd.remove();
+    for (const fremd of kopf.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')) {
+      if (!(fremd.getAttribute('href') || '').startsWith('data:')) fremd.remove();
+    }
+  };
+  const grundangaben = (symbol, apfel) => {
+    anhaengen('meta', {name: 'apple-mobile-web-app-capable', content: 'yes'});
+    anhaengen('meta', {name: 'apple-mobile-web-app-title', content: 'Nebenkosten'});
+    anhaengen('meta', {name: 'apple-mobile-web-app-status-bar-style',
+                       content: 'black-translucent'});
+    anhaengen('meta', {name: 'theme-color', content: '#0e2b47'});
+    anhaengen('meta', {name: 'mobile-web-app-capable', content: 'yes'});
+    if (symbol) anhaengen('link', {rel: 'icon', type: 'image/png', sizes: '512x512',
+                                   href: symbol});
+    if (apfel) anhaengen('link', {rel: 'apple-touch-icon', sizes: '180x180', href: apfel});
+  };
+
+  const manifestAdresse = basis + 'MANIFESTNAME';
+  fetch(manifestAdresse, {cache: 'no-store'})
+    .then((antwort) => (antwort.ok ? antwort.json() : Promise.reject(antwort.status)))
+    .then((inhalt) => {
+      if (!inhalt || !inhalt.icons || !inhalt.icons.length) return Promise.reject('leer');
+      fremdesWeg();
+      grundangaben(basis + 'app-icon.png', basis + 'app-icon-apple.png');
+      anhaengen('link', {id: 'nk-manifest', rel: 'manifest', href: manifestAdresse});
+    })
+    .catch(() => {
+      // Keine abrufbaren Dateien: dann bewusst ohne Manifest. Das Bild steckt
+      // im Seitentext, daraus macht der Browser eine schlichte Verknuepfung.
+      fremdesWeg();
+      grundangaben(angaben.symbol, angaben.apfel);
+    });
 })();
 </script>
-""".replace("ANGABEN", angaben),
+""".replace("ANGABEN", angaben).replace("MANIFESTNAME", MANIFEST_NAME),
             height=_html_hoehe,
         )
 

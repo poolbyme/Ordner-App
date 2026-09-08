@@ -1615,7 +1615,7 @@ def test_fremdes_manifest_wird_verdraengt():
     from nebenkosten import design
 
     quelle = inspect.getsource(design._startbildschirm)
-    assert "link#nk-manifest" in quelle, "ohne eigene Kennung wird doppelt eingehaengt"
+    assert "seite.__nkFertig" in quelle, "ohne eigene Kennung wird doppelt eingehaengt"
     assert "querySelectorAll('link[rel=\"manifest\"]')" in quelle
     assert "fremd.remove()" in quelle
     assert "id: 'nk-manifest'" in quelle
@@ -1682,7 +1682,7 @@ def test_eintrag_geht_bis_zur_obersten_seite():
     assert "function obersteSeite()" in fuer_kopf
     assert "fenster !== window.top" in fuer_kopf
     assert "seite.document.head" in fuer_kopf
-    assert "seite.location" in fuer_kopf
+    assert "seite.document.createElement" in fuer_kopf
 
 
 def test_name_der_obersten_seite_wird_gesetzt():
@@ -1696,3 +1696,41 @@ def test_name_der_obersten_seite_wird_gesetzt():
     quelle = inspect.getsource(design._startbildschirm)
     assert "seite.document.title = 'Nebenkosten'" in quelle
     assert "setInterval(namen" in quelle
+
+def test_manifest_liegt_als_datei_neben_den_bildern():
+    """Android baut aus einem Manifest eine echte App und laesst die Bilder von
+    einem fremden Rechner nachladen. Der erreicht nur Adressen - Bilder im
+    Seitentext nicht. Genau daran ist das Anlegen einmal still gescheitert:
+    kein Symbol, keine Meldung."""
+    from nebenkosten import design
+
+    assert design.MANIFEST_DATEI.exists(), "ohne die Datei gibt es keine App"
+    auf_platte = json.loads(design.MANIFEST_DATEI.read_text(encoding="utf-8"))
+    assert auf_platte == design.manifest_inhalt(), (
+        "Datei und Code sind auseinandergelaufen")
+    for symbol in auf_platte["icons"]:
+        assert not symbol["src"].startswith("data:"), "Bild muss abrufbar sein"
+        assert (design.STATISCH / symbol["src"]).exists(), symbol["src"]
+    # Relativ zur Manifest-Adresse - so trifft es jede Domain ohne feste Angabe.
+    assert auf_platte["start_url"] == "/"
+    assert auf_platte["scope"] == "/"
+
+
+def test_ohne_abrufbare_dateien_gar_kein_manifest():
+    """Ein Manifest ohne abrufbare Bilder ist schlechter als gar keines: Der
+    Browser versucht dann eine echte App und legt am Ende nichts an. Ohne
+    Manifest entsteht wenigstens eine schlichte Verknuepfung mit dem Bild aus
+    der Seite."""
+    import inspect
+
+    from nebenkosten import design
+
+    quelle = inspect.getsource(design._startbildschirm)
+    kopf, rest = quelle.split("fetch(manifestAdresse", 1)
+    assert "rel: 'manifest'" not in kopf, (
+        "das Manifest darf erst nach der erfolgreichen Nachfrage in die Seite")
+    erfolg, notfall = rest.split(".catch(", 1)
+    assert "rel: 'manifest'" in erfolg
+    assert "rel: 'manifest'" not in notfall, (
+        "im Notfall-Weg darf kein Manifest gesetzt werden")
+    assert "angaben.symbol" in notfall, "dort zaehlt das Bild aus der Seite"

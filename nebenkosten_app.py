@@ -486,12 +486,6 @@ with st.sidebar:
     else:
         st.info("Wird gespeichert, sobald du etwas eingibst.")
 
-    with st.expander("🔎 Symbol für den Startbildschirm prüfen"):
-        st.caption(f"Stand der App: {design.STAND}")
-        st.caption("Haken überall: Der Browser hat alles fürs Symbol. "
-                   "Ein Kreuz sagt, woran es hakt.")
-        design.pruefansicht()
-
     with st.expander("Wo liegen meine Daten?"):
         st.markdown(f"**Ablage:** {speicher.beschreibung()}")
         st.code(speicher.adresse(), language=None)
@@ -573,6 +567,10 @@ with st.sidebar:
         st.session_state.positionen = standard_positionen()
         sichern()
         neu_zeichnen()
+
+    # Leise Zeile am Ende: Daran ist von jedem Gerät aus zu sehen, ob schon die
+    # neue Fassung ausgeliefert wird - sonst bleibt bei Fragen nur Raten.
+    st.caption(f"Nebenkosten · Stand {design.STAND}")
     st.caption("Namen, Anschriften, Wohnflächen und Personenzahl bleiben dabei erhalten – "
                "die änderst du nur von Hand in den Bereichen 1 bis 3.")
 

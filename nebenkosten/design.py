@@ -25,9 +25,9 @@ if _html_baustein is None:  # pragma: no cover - ältere Streamlit-Fassungen
     except ImportError:
         _html_baustein = None
 
-# Sichtbarer Stand der Anwendung. Nur so lässt sich vom Handy aus sagen, ob
-# der Betreiber die neue Fassung schon ausliefert oder noch die alte läuft.
-STAND = "2026-09-08 · Startbildschirm 5"
+# Sichtbarer Stand der Anwendung. Nur so lässt sich von einem fremden Gerät
+# aus sagen, ob der Betreiber die neue Fassung schon ausliefert.
+STAND = "2026-09-08"
 
 STATISCH = Path(__file__).resolve().parents[1] / "static"
 ICON = STATISCH / "app-icon-180.png"
@@ -498,100 +498,6 @@ def _startbildschirm() -> None:
 """.replace("ANGABEN", angaben),
             height=_html_hoehe,
         )
-
-
-def pruefansicht() -> None:
-    """Zeigen, was der Browser für den Startbildschirm wirklich vorliegen hat.
-
-    Der Kniff mit dem Manifest spielt sich im Kopf der obersten Seite ab –
-    dort kann niemand hineinsehen, und Raten hat schon genug Zeit gekostet.
-    Dieser Kasten liest genau das aus, was der Browser gerade hat, und zeigt
-    es im Klartext. Ein Bild davon genügt, um zu sagen, woran es liegt.
-    """
-    if _html_baustein is None:
-        return
-    _html_baustein(
-        """
-<style>
- body {margin:0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-       font-size: 13px; color:#12263a; background:#ffffff;}
- .zeile {display:flex; gap:8px; padding:3px 0; align-items:flex-start;}
- .wert {font-weight:600; word-break:break-all;}
- .bild {margin-top:10px; display:flex; gap:10px; align-items:center;}
- .bild img {width:56px; height:56px; border-radius:12px;
-            border:1px solid #e3e9f0; background:#f4f7fa;}
- code {background:#f4f7fa; padding:1px 4px; border-radius:4px;}
-</style>
-<div id="bericht">wird geprüft …</div>
-<script>
-function obersteSeite() {
-  let fenster = window;
-  while (fenster !== window.top) {
-    try {
-      const oben = fenster.parent;
-      void oben.document.head;
-      fenster = oben;
-    } catch (fehler) {
-      break;
-    }
-  }
-  return fenster;
-}
-function nachsehen() {
-  const zeilen = [];
-  const sage = (name, wert, gut) => zeilen.push(
-    '<div class="zeile"><span>' + (gut ? '✅' : '❌') + '</span>' +
-    '<span>' + name + ': <span class="wert">' + wert + '</span></span></div>');
-  let bild = '';
-  try {
-    const seite = obersteSeite();
-    const kopf = seite.document.head;
-    const eigen = kopf.querySelector('link#nk-manifest');
-    const fremde = Array.from(kopf.querySelectorAll('link[rel="manifest"]'))
-      .filter((l) => l.id !== 'nk-manifest');
-    sage('Oberste Seite erreicht', seite === window.top ? 'ja' : 'nein',
-         seite === window.top);
-    sage('Adresse dieser Seite', seite.location.pathname,
-         seite.location.pathname.indexOf('/~/') !== 0);
-    sage('Seitenname', seite.document.title || '(leer)',
-         (seite.document.title || '').indexOf('Nebenkosten') === 0);
-    sage('Eigenes Manifest im Kopf', eigen ? 'ja' : 'nein', !!eigen);
-    sage('Fremdes Manifest daneben', fremde.length ? fremde.length + ' Stück' : 'keines',
-         fremde.length === 0);
-    if (eigen) {
-      const roh = eigen.getAttribute('href') || '';
-      const inhalt = JSON.parse(decodeURIComponent(escape(atob(roh.split(',')[1]))));
-      const symbole = inhalt.icons || [];
-      sage('Name für den Startbildschirm', inhalt.short_name || '(leer)',
-           inhalt.short_name === 'Nebenkosten');
-      sage('Bilder im Manifest', symbole.length + ' Stück', symbole.length > 0);
-      sage('Startadresse', inhalt.start_url || '(leer)',
-           (inhalt.start_url || '').indexOf('/~/') < 0);
-      if (symbole.length) {
-        const gross = symbole[symbole.length - 1];
-        bild = '<div class="bild"><img src="' + gross.src + '" alt="">' +
-               '<span>Dieses Bild landet auf dem Startbildschirm.</span></div>';
-      }
-    }
-    const seitenbild = kopf.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
-    const adresse = seitenbild ? (seitenbild.getAttribute('href') || '') : '';
-    sage('Bild im Browser-Reiter', adresse ? adresse.slice(0, 22) + '…' : '(keines)',
-         adresse.startsWith('data:'));
-  } catch (fehler) {
-    zeilen.push('<div class="zeile"><span>❌</span><span>Der Kasten kommt nicht an den ' +
-                'Seitenkopf heran: <code>' + fehler + '</code></span></div>');
-  }
-  document.getElementById('bericht').innerHTML = zeilen.join('') + bild;
-}
-// Immer wieder nachsehen: Dieser Kasten und der Eintrag im Seitenkopf werden
-// unabhängig voneinander geladen. Wer nur einmal misst, meldet leicht ein
-// Fehlen, das eine Zehntelsekunde später keines mehr ist.
-nachsehen();
-setInterval(nachsehen, 700);
-</script>
-""",
-        height=350,
-    )
 
 
 def anwenden() -> None:

@@ -1636,10 +1636,10 @@ if __name__ == "__main__":
     print("Alle Tests bestanden." if not fehlgeschlagen else f"{fehlgeschlagen} Test(s) fehlgeschlagen.")
     sys.exit(1 if fehlgeschlagen else 0)
 
-def test_pruefkasten_bleibt_sichtbar():
-    """Der Prüfkasten darf nicht von der Regel getroffen werden, die den
-    unsichtbaren Kopf-Baustein flach zieht. Genau das ist einmal passiert:
-    Die Regel galt für jeden eingebetteten Rahmen."""
+def test_nur_der_kopf_baustein_wird_flach_gezogen():
+    """Die Regel, die den unsichtbaren Kopf-Baustein auf Höhe null zieht, galt
+    einmal für jeden eingebetteten Rahmen. Alles andere in einem Rahmen wäre
+    damit unsichtbar - das hat schon einen Anlauf gekostet."""
     import inspect
 
     from nebenkosten import design
@@ -1648,24 +1648,11 @@ def test_pruefkasten_bleibt_sichtbar():
     for zeile in stil.splitlines():
         if '[data-testid="stIFrame"]' in zeile and "height: 0" in zeile:
             assert zeile.lstrip().startswith(".st-key-nk-startbildschirm"), (
-                "die Regel gilt wieder für alle Rahmen - der Prüfkasten wäre "
-                f"unsichtbar: {zeile}")
+                "die Regel gilt wieder für alle Rahmen - eingebettete "
+                f"Inhalte wären unsichtbar: {zeile}")
     assert '.st-key-nk-startbildschirm [data-testid="stIFrame"]' in stil
     quelle = inspect.getsource(design._startbildschirm)
     assert 'st.container(key="nk-startbildschirm")' in quelle
-
-
-def test_pruefkasten_sieht_immer_wieder_nach():
-    """Kopf-Baustein und Prüfkasten laden unabhängig voneinander. Wer nur einmal
-    misst, meldet ein Fehlen, das eine Zehntelsekunde später keines mehr ist."""
-    import inspect
-
-    from nebenkosten import design
-
-    quelle = inspect.getsource(design.pruefansicht)
-    assert "setInterval(nachsehen" in quelle
-    assert "link#nk-manifest" in quelle
-    assert "STAND" in inspect.getsource(design).split("def ")[0]
 
 
 def test_stand_wird_angezeigt():
@@ -1677,9 +1664,7 @@ def test_stand_wird_angezeigt():
     quelle = Path(__file__).resolve().parents[1] / "nebenkosten_app.py"
     if not quelle.exists():
         quelle = Path(__file__).resolve().parents[1] / "streamlit_app.py"
-    text = quelle.read_text(encoding="utf-8")
-    assert "design.STAND" in text
-    assert "design.pruefansicht()" in text
+    assert "design.STAND" in quelle.read_text(encoding="utf-8")
 
 def test_eintrag_geht_bis_zur_obersten_seite():
     """Der Betreiber steckt die App in einen weiteren Rahmen (bei Streamlit
@@ -1711,15 +1696,3 @@ def test_name_der_obersten_seite_wird_gesetzt():
     quelle = inspect.getsource(design._startbildschirm)
     assert "seite.document.title = 'Nebenkosten'" in quelle
     assert "setInterval(namen" in quelle
-
-
-def test_pruefkasten_zeigt_die_ebene():
-    """Ohne diese Zeile war von außen nicht zu sehen, dass der Eintrag im
-    falschen Rahmen landet."""
-    import inspect
-
-    from nebenkosten import design
-
-    quelle = inspect.getsource(design.pruefansicht)
-    assert "Oberste Seite erreicht" in quelle
-    assert "obersteSeite()" in quelle

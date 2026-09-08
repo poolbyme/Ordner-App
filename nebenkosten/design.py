@@ -40,6 +40,13 @@ FARBEN_HELL = {
     "gedaempft": "#5b6b7c",
     "akzent": "#176a94",
     "akzent_dunkel": "#0e2b47",
+    "akzent_hell": "#56bed6",
+    "gut": "#0f7b57",
+    "gut_grund": "#e6f6ef",
+    "warn": "#a35a09",
+    "warn_grund": "#fdf3e3",
+    "wasser": "#3d9fd6",
+    "waerme": "#e8952f",
     "schatten": "0 1px 2px rgba(16,40,64,.06), 0 8px 24px rgba(16,40,64,.06)",
 }
 FARBEN_DUNKEL = {
@@ -49,6 +56,13 @@ FARBEN_DUNKEL = {
     "text": "#e8eef5",
     "gedaempft": "#9fb0c2",
     "akzent": "#1f6f96",
+    "akzent_hell": "#56bed6",
+    "gut": "#4fd1a0",
+    "gut_grund": "#12312a",
+    "warn": "#f0b25c",
+    "warn_grund": "#33260f",
+    "wasser": "#4fa8dd",
+    "waerme": "#e8952f",
     "akzent_dunkel": "#0b1926",
     "schatten": "0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35)",
 }
@@ -102,6 +116,72 @@ def _stil() -> str:
 }}
 h1, h2, h3, h4 {{ color: var(--nk-text); letter-spacing: -.01em; }}
 h4 {{ font-size: 1.02rem; margin: 1.4rem 0 .4rem; }}
+
+/* ---------- Kennzahlen und Fortschritt ---------- */
+.nk-zahlen {{
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin: 0 0 12px;
+}}
+.nk-kachel {{
+    background: var(--nk-flaeche); border: 1px solid var(--nk-rand);
+    border-radius: var(--nk-radius); padding: 12px 14px;
+    box-shadow: var(--nk-schatten);
+    position: relative; overflow: hidden;
+    transition: transform .18s ease, box-shadow .18s ease;
+}}
+.nk-kachel::before {{
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+    background: var(--nk-akzent);
+}}
+.nk-kachel.gut::before {{ background: var(--nk-gut); }}
+.nk-kachel.warn::before {{ background: var(--nk-warn); }}
+.nk-kachel:hover {{ transform: translateY(-2px); box-shadow: 0 6px 22px rgba(16,40,64,.14); }}
+.nk-kachel .nk-label {{
+    color: var(--nk-gedaempft); font-size: .74rem; text-transform: uppercase;
+    letter-spacing: .05em; font-weight: 600;
+}}
+.nk-kachel .nk-wert {{
+    color: var(--nk-text); font-size: 1.32rem; font-weight: 680;
+    margin-top: 2px; line-height: 1.15; font-variant-numeric: tabular-nums;
+}}
+.nk-kachel.gut .nk-wert {{ color: var(--nk-gut); }}
+.nk-kachel.warn .nk-wert {{ color: var(--nk-warn); }}
+.nk-kachel .nk-fuss {{ color: var(--nk-gedaempft); font-size: .72rem; margin-top: 2px; }}
+@media (max-width: 640px) {{
+    .nk-zahlen {{ grid-template-columns: 1fr 1fr; }}
+    .nk-kachel:first-child {{ grid-column: 1 / -1; }}
+    .nk-kachel .nk-wert {{ font-size: 1.18rem; }}
+}}
+
+.nk-fortschritt {{ margin: 0 0 16px; }}
+.nk-fortschritt .nk-balken {{
+    height: 7px; border-radius: 99px; background: var(--nk-rand); overflow: hidden;
+}}
+.nk-fortschritt .nk-fuellung {{
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, var(--nk-akzent), var(--nk-akzent-hell));
+    transition: width .5s cubic-bezier(.4,0,.2,1);
+}}
+.nk-fortschritt .nk-schritte {{
+    display: flex; flex-wrap: wrap; gap: 5px 8px; margin-top: 7px;
+    font-size: .74rem; color: var(--nk-gedaempft);
+}}
+.nk-fortschritt .nk-schritt.fertig {{ color: var(--nk-gut); font-weight: 600; }}
+
+/* ---------- Sparten ---------- */
+.nk-sparte {{
+    display: flex; align-items: center; gap: 10px;
+    margin: 22px 0 8px; padding: 9px 13px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--nk-sparte) 10%, var(--nk-flaeche));
+    border: 1px solid color-mix(in srgb, var(--nk-sparte) 26%, transparent);
+}}
+.nk-sparte-symbol {{ font-size: 1.15rem; line-height: 1; }}
+.nk-sparte-name {{ font-weight: 650; color: var(--nk-text); font-size: 1.02rem; }}
+.nk-sparte-summe {{
+    margin-left: auto; font-weight: 650; color: var(--nk-sparte);
+    font-variant-numeric: tabular-nums;
+}}
 
 /* ---------- Kopfzeile ---------- */
 .nk-kopf {{
@@ -238,6 +318,37 @@ input, textarea, [data-baseweb="select"] > div, [data-baseweb="input"] {{
    Streamlit die Höhe 0 nicht mehr zulässt. Hier nimmt er keinen Platz ein.
    Kein display:none - dann führen manche Browser das Skript darin nicht aus. */
 [data-testid="stIFrame"] {{ height: 0 !important; min-height: 0 !important; }}
+
+/* ---------- etwas Leben ---------- */
+@keyframes nk-auf {{ from {{ opacity: 0; transform: translateY(6px); }}
+                     to {{ opacity: 1; transform: none; }} }}
+.nk-kopf, .nk-zahlen, .nk-fortschritt {{ animation: nk-auf .35s ease both; }}
+
+/* Karten heben sich, wenn der Zeiger darueber liegt */
+[data-testid="stVerticalBlockBorderWrapper"] {{
+    transition: box-shadow .2s ease, border-color .2s ease;
+}}
+[data-testid="stVerticalBlockBorderWrapper"]:hover {{
+    box-shadow: 0 4px 18px rgba(16,40,64,.10);
+}}
+
+/* Der Ring um das aktive Feld gehoert zur Akzentfarbe, nicht zu Streamlits Rot */
+input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {{
+    border-color: var(--nk-akzent) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--nk-akzent) 22%, transparent) !important;
+}}
+
+/* Knoepfe: leichter Auftrieb statt Stillstand */
+.stButton button, .stDownloadButton button, .stFormSubmitButton button {{
+    transition: transform .12s ease, box-shadow .18s ease, background-color .18s ease;
+}}
+.stButton button:hover, .stDownloadButton button:hover, .stFormSubmitButton button:hover {{
+    transform: translateY(-1px); box-shadow: 0 4px 14px rgba(16,40,64,.14);
+}}
+.stButton button:active, .stDownloadButton button:active {{ transform: translateY(0); }}
+
+/* Die gewaehlte Sparte deutlicher hervorheben */
+.stApp [role="radiogroup"] label[data-baseweb="radio"] {{ transition: color .15s ease; }}
 </style>
 """
 
@@ -366,6 +477,53 @@ def anwenden() -> None:
     """Stil laden und die App als Startbildschirm-Symbol anmeldbar machen."""
     st.markdown(_stil(), unsafe_allow_html=True)
     _startbildschirm()
+
+
+SPARTENFARBE = {"wasser": "var(--nk-wasser)", "gas": "var(--nk-waerme)",
+                "sonstiges": "var(--nk-gedaempft)"}
+
+
+def spartenkopf(symbol: str, name: str, summe: str, sparte: str = "") -> None:
+    """Überschrift einer Kostensparte mit Symbol, Farbe und Zwischensumme."""
+    farbe = SPARTENFARBE.get(sparte, "var(--nk-akzent)")
+    st.markdown(
+        f'<div class="nk-sparte" style="--nk-sparte:{farbe}">'
+        f'<span class="nk-sparte-symbol">{symbol}</span>'
+        f'<span class="nk-sparte-name">{name}</span>'
+        f'<span class="nk-sparte-summe">{summe}</span></div>',
+        unsafe_allow_html=True)
+
+
+def kennzahlen(eintraege: list[tuple[str, str, str, str]]) -> None:
+    """Kacheln mit den Zahlen, um die es geht.
+
+    Je Eintrag: Beschriftung, Wert, Fusszeile und eine Tönung
+    („", „gut" oder „warn"). Sie stehen unter der Kopfzeile und bewegen sich
+    beim Eintippen mit - so sieht man sofort, wohin die Abrechnung läuft,
+    statt bis zum Schluss im Dunkeln zu tippen.
+    """
+    kacheln = "".join(
+        f'<div class="nk-kachel {toenung}">'
+        f'<div class="nk-label">{label}</div>'
+        f'<div class="nk-wert">{wert}</div>'
+        f'<div class="nk-fuss">{fuss}</div></div>'
+        for label, wert, fuss, toenung in eintraege)
+    st.markdown(f'<div class="nk-zahlen">{kacheln}</div>', unsafe_allow_html=True)
+
+
+def fortschritt(schritte: list[tuple[str, bool]]) -> None:
+    """Balken mit den Etappen bis zur fertigen Abrechnung."""
+    fertig = sum(1 for _, erledigt in schritte if erledigt)
+    anteil = round(fertig / len(schritte) * 100) if schritte else 0
+    punkte = " ".join(
+        f'<span class="nk-schritt {"fertig" if erledigt else ""}">'
+        f'{"✓" if erledigt else "○"} {name}</span>'
+        for name, erledigt in schritte)
+    st.markdown(
+        f'<div class="nk-fortschritt">'
+        f'<div class="nk-balken"><div class="nk-fuellung" style="width:{anteil}%"></div></div>'
+        f'<div class="nk-schritte">{punkte}</div></div>',
+        unsafe_allow_html=True)
 
 
 def kopfzeile(titel: str, untertitel: str = "") -> None:

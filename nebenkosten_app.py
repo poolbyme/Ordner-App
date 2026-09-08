@@ -125,6 +125,7 @@ KOSTEN_UEBERSCHRIFT = {
     "gas": "Weitere Kosten rund um die Heizung",
     "sonstiges": "Sonstige Betriebskosten",
 }
+KOSTEN_SYMBOL = {"wasser": "💧", "gas": "🔥", "sonstiges": "📄"}
 KOSTEN_ERKLAERUNG = {
     "gas": "Die Rechnung für Gas, Öl oder Pellets selbst gehört **oben in den "
            "roten Kasten**. Hier steht nur, was zusätzlich anfällt: "
@@ -207,25 +208,31 @@ def heizungsblock() -> None:
         a = heizungsaufteilung()
         betraege_uebernehmen(a)
         menge = warmwassermenge_haus()
+
+        # Immer nur der eine Hinweis, der gerade zaehlt - drei Kaesten
+        # uebereinander liest niemand.
         if not a.energie_gesamt:
             st.info("Trag die Rechnung und die Verbrauchsmenge ein – dann teilt die App "
                     "sie in Heizkosten und Warmwasserkosten auf.")
-        else:
-            for zeile in a.rechenweg:
-                st.caption(zeile)
-            if a.kosten_warmwasser:
-                st.success(
-                    f"Davon **{eur(a.kosten_warmwasser)} €** für das Warmwasser "
-                    f"({zahl(a.anteil_warmwasser * 100)} % der Energie) und "
-                    f"**{eur(a.kosten_heizung)} €** für die Heizung.")
-            else:
-                st.info(f"Die ganze Rechnung steht bei der Heizung: "
-                        f"**{eur(a.kosten_heizung)} €**.")
-        if art.macht_warmwasser and stamm.warmwasser_zentral and not menge:
+        elif art.macht_warmwasser and stamm.warmwasser_zentral and not menge:
             st.warning("Für die Aufteilung fehlt das Warmwasser in m³. Trag die "
-                       "Warmwasserzähler im Bereich „6 · Zählerstände“ bei **Wasser** ein.")
-        for hinweis in a.hinweise:
-            st.warning(hinweis)
+                       "Warmwasserzähler im Bereich „6 · Zählerstände“ bei **Wasser** ein. "
+                       f"Solange steht die ganze Rechnung bei der Heizung: "
+                       f"**{eur(a.kosten_heizung)} €**.")
+        elif a.hinweise:
+            st.warning(a.hinweise[0])
+        elif a.kosten_warmwasser:
+            st.success(
+                f"**{eur(a.kosten_warmwasser)} €** für das Warmwasser "
+                f"({zahl(a.anteil_warmwasser * 100)} % der Energie), "
+                f"**{eur(a.kosten_heizung)} €** für die Heizung.")
+        else:
+            st.info(f"Die ganze Rechnung steht bei der Heizung: "
+                    f"**{eur(a.kosten_heizung)} €**.")
+        if a.energie_gesamt:
+            with st.expander("Wie die App darauf kommt"):
+                for zeile in a.rechenweg:
+                    st.markdown(f"- {zeile}")
 
 
 def _blattname(benutzer: str) -> str:
@@ -441,10 +448,14 @@ stamm: Stammdaten = st.session_state.stamm
 # Seitenleiste
 # --------------------------------------------------------------------------
 with st.sidebar:
-    handy = st.toggle(
-        "📱 Handy-Ansicht", key="handy",
-        help="Statt breiter Tabellen einzelne Eingabefelder untereinander – "
-             "auf einem kleinen Bildschirm viel einfacher zu tippen.")
+    # Karten sind der Normalfall - eine Abrechnung soll nicht wie eine
+    # Tabellenkalkulation aussehen. Die Tabelle bleibt fuer alle, die viele
+    # Zeilen am Stueck tippen.
+    tabelle = st.toggle(
+        "🧮 Tabellen-Ansicht", key="tabelle",
+        help="Alle Kostenzeilen in einem Raster wie in einer Tabellenkalkulation – "
+             "praktisch am Rechner, wenn du viele Zeilen auf einmal tippst.")
+    handy = not tabelle
     erweitert = st.toggle(
         "Mehr Einstellungen anzeigen", key="erweitert",
         help="Zeigt zusätzliche Felder: Lohnkosten für die Steuererklärung des "
@@ -574,6 +585,34 @@ _zeitraum = f"{_fmt(stamm.zeitraum_von)} – {_fmt(stamm.zeitraum_bis)}"
 _objekt = stamm.wohnung_anschrift[0] or "noch kein Objekt eingetragen"
 design.kopfzeile("Nebenkostenabrechnung",
                  f"{_objekt} · {stamm.bezeichnung_abrechnung} {_zeitraum}")
+
+# Die drei Zahlen, um die es geht - immer sichtbar, nicht erst am Ende. Wer
+# tippt, sieht sofort, wohin die Abrechnung laeuft.
+_stand = berechne(stamm, st.session_state.positionen)
+if _stand.saldo > 0:
+    _saldo = (f"{eur(_stand.saldo)} €", "Nachzahlung des Mieters", "warn")
+elif _stand.saldo < 0:
+    _saldo = (f"{eur(abs(_stand.saldo))} €", "Guthaben des Mieters", "gut")
+else:
+    _saldo = ("—", "noch nichts eingetragen", "")
+design.kennzahlen([
+    ("Kosten des Hauses", f"{eur(_stand.summe_gesamtkosten)} €",
+     f"{len([z for z in _stand.zeilen if z.gesamtkosten])} Kostenarten", ""),
+    ("Anteil des Mieters", f"{eur(_stand.umlage)} €",
+     (f"{zahl(_stand.umlage / _stand.summe_gesamtkosten * 100)} % der Kosten"
+      if _stand.summe_gesamtkosten else "noch nichts verteilt"), ""),
+    ("Ergebnis", _saldo[0], _saldo[1], _saldo[2]),
+])
+
+design.fortschritt([
+    ("Vermieter", bool(stamm.vermieter_name and stamm.vermieter_plz_ort)),
+    ("Mieter", bool(stamm.mieter_name)),
+    ("Wohnung", bool(stamm.flaeche_mieter and stamm.flaeche_gesamt)),
+    ("Zeitraum", bool(stamm.zeitraum_von and stamm.zeitraum_bis)),
+    ("Kosten", any(p.betrag for p in st.session_state.positionen if p.aktiv)),
+    ("Zählerstände", any(z.verbrauch for p in st.session_state.positionen for z in p.zaehler)),
+    ("Vorauszahlungen", bool(stamm.vorauszahlung_gesamt)),
+])
 
 # Ob die Eingaben einen Neustart ueberleben, entscheidet alles - deshalb steht
 # das hier oben und nicht in der Seitenleiste, wo es niemand sucht.
@@ -909,16 +948,23 @@ if bereich == "kosten":
 
     if handy:
         for schluessel in KATEGORIEN:
-            st.markdown(f"#### {KOSTEN_UEBERSCHRIFT[schluessel]}")
+            gruppe = kategorie_positionen(schluessel)
+            teilsumme = sum(p.betrag for p in gruppe if p.aktiv)
+            design.spartenkopf(KOSTEN_SYMBOL[schluessel], KOSTEN_UEBERSCHRIFT[schluessel],
+                               f"{eur(teilsumme)} €", schluessel)
             if KOSTEN_ERKLAERUNG.get(schluessel):
                 st.caption(KOSTEN_ERKLAERUNG[schluessel])
-            gruppe = kategorie_positionen(schluessel)
             for i, p in enumerate(gruppe):
                 if not p.aktiv:
                     continue
-                p.betrag = st.number_input(
-                    f"{p.bezeichnung} (€)", min_value=0.0, step=10.0,
-                    value=float(p.betrag), key=f"kos_{schluessel}_{i}_betrag", help=p.hinweis)
+                with st.container(border=True):
+                    k1, k2 = st.columns([3, 2], vertical_alignment="bottom")
+                    k1.markdown(f"**{p.bezeichnung}**")
+                    k1.caption(SCHLUESSEL.get(p.schluessel, ""))
+                    p.betrag = k2.number_input(
+                        "Betrag (€)", min_value=0.0, step=10.0, value=float(p.betrag),
+                        key=f"kos_{schluessel}_{i}_betrag", help=p.hinweis,
+                        label_visibility="collapsed", placeholder="0,00")
             with st.expander("Zeilen für „{}“ ein- und ausschalten".format(
                     KOSTEN_UEBERSCHRIFT[schluessel])):
                 for i, p in enumerate(gruppe):
@@ -952,7 +998,8 @@ if bereich == "kosten":
         for schluessel in KATEGORIEN:
             gruppe = kategorie_positionen(schluessel)
             teilsumme = sum(p.betrag for p in gruppe if p.aktiv)
-            st.markdown(f"#### {KOSTEN_UEBERSCHRIFT[schluessel]} · {eur(teilsumme)} €")
+            design.spartenkopf(KOSTEN_SYMBOL[schluessel], KOSTEN_UEBERSCHRIFT[schluessel],
+                               f"{eur(teilsumme)} €", schluessel)
             if KOSTEN_ERKLAERUNG.get(schluessel):
                 st.caption(KOSTEN_ERKLAERUNG[schluessel])
             bearbeitet = st.data_editor(

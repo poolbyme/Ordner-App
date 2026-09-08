@@ -553,7 +553,7 @@ with st.sidebar:
     )
 
 _zeitraum = f"{_fmt(stamm.zeitraum_von)} – {_fmt(stamm.zeitraum_bis)}"
-_objekt = stamm.objekt_strasse or "noch kein Objekt eingetragen"
+_objekt = stamm.wohnung_anschrift[0] or "noch kein Objekt eingetragen"
 design.kopfzeile("Nebenkostenabrechnung",
                  f"{_objekt} · {stamm.bezeichnung_abrechnung} {_zeitraum}")
 
@@ -717,6 +717,14 @@ if bereich == "objekt":
         stamm.mieter_wohnung = st.text_input(
             "Bezeichnung der Wohnung", stamm.mieter_wohnung, key="m_wohnung",
             help="Zum Beispiel „Wohnung Obergeschoss“. Steht so im PDF.")
+        stamm.wohnung_strasse = st.text_input(
+            "Straße und Hausnummer der Wohnung", stamm.wohnung_strasse, key="w_str",
+            placeholder=stamm.objekt_strasse or "wie beim Haus",
+            help="Nur ausfüllen, wenn die Wohnung eine eigene Anschrift hat – etwa "
+                 "Hausnummer 27a bei einem Anbau. Leer heißt: dieselbe wie beim Haus.")
+        stamm.wohnung_plz_ort = st.text_input(
+            "PLZ und Ort der Wohnung", stamm.wohnung_plz_ort, key="w_ort",
+            placeholder=stamm.objekt_plz_ort or "wie beim Haus")
         stamm.flaeche_mieter = st.number_input(
             "Wohnfläche der Mietwohnung (m²)", min_value=0.0, step=1.0,
             value=float(stamm.flaeche_mieter), key="f_mieter",

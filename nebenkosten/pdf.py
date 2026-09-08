@@ -124,9 +124,10 @@ def _kopf(pdf: Abrechnung) -> None:
     pdf.line(pdf.l_margin, pdf.get_y() + 0.5, pdf.l_margin + 85, pdf.get_y() + 0.5)
     pdf.abstand(4)
 
+    _w_strasse, _w_ort = s.wohnung_anschrift
     empfaenger = ([s.vermieter_name, "eigene Wohnung", s.objekt_strasse, s.objekt_plz_ort]
                   if pdf.eigene_aufstellung
-                  else [s.mieter_name, s.mieter_wohnung, s.objekt_strasse, s.objekt_plz_ort])
+                  else [s.mieter_name, s.mieter_wohnung, _w_strasse, _w_ort])
     pdf.font(11)
     for teil in [x for x in empfaenger if x]:
         pdf.cell(0, 5.5, pdf.t(teil), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -166,7 +167,7 @@ def _kopf(pdf: Abrechnung) -> None:
 def _objektdaten(pdf: Abrechnung, e: Ergebnis) -> None:
     s = pdf.s
     zeilen = [
-        ("Mietobjekt", ", ".join(x for x in [s.objekt_strasse, s.objekt_plz_ort] if x) or "—"),
+        ("Mietobjekt", ", ".join(x for x in s.wohnung_anschrift if x) or "—"),
         ("Wohneinheit", s.mieter_wohnung or "—"),
         ("Nutzer" if pdf.eigene_aufstellung else "Mieter",
          (s.vermieter_name if pdf.eigene_aufstellung else s.mieter_name) or "—"),

@@ -167,8 +167,12 @@ class Stammdaten:
     mieter_name: str = ""
     anrede: str = "Sehr geehrte Damen und Herren,"
     mieter_wohnung: str = "Wohnung Obergeschoss"
-    objekt_strasse: str = ""
+    objekt_strasse: str = ""          # Anschrift des ganzen Hauses
     objekt_plz_ort: str = ""
+    # Anschrift der vermieteten Wohnung, falls sie von der des Hauses abweicht -
+    # etwa Hausnummer 27a bei einem Anbau. Leer heisst: dieselbe wie beim Haus.
+    wohnung_strasse: str = ""
+    wohnung_plz_ort: str = ""
 
     # Art der Abrechnung
     abrechnungsart: str = "jahr"   # "jahr", "mietende" oder "zwischen"
@@ -219,6 +223,12 @@ class Stammdaten:
     datum: str = field(default_factory=lambda: date.today().isoformat())
     anpassung_vorschlagen: bool = True
     eigene_abrechnung: bool = False
+
+    @property
+    def wohnung_anschrift(self) -> tuple[str, str]:
+        """Anschrift der Mietwohnung – ersatzweise die des Hauses."""
+        return (self.wohnung_strasse.strip() or self.objekt_strasse,
+                self.wohnung_plz_ort.strip() or self.objekt_plz_ort)
 
     @property
     def ist_endabrechnung(self) -> bool:
@@ -342,7 +352,7 @@ FESTE_ANGABEN = (
     "vermieter_name", "vermieter_strasse", "vermieter_plz_ort",
     "vermieter_iban", "vermieter_bank",
     "mieter_name", "anrede", "mieter_wohnung",
-    "objekt_strasse", "objekt_plz_ort",
+    "objekt_strasse", "objekt_plz_ort", "wohnung_strasse", "wohnung_plz_ort",
     "flaeche_gesamt", "flaeche_mieter",
     "personen_gesamt", "personen_mieter",
     "einheiten_gesamt", "einheiten_mieter", "grundstuecksflaeche",

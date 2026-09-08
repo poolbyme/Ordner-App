@@ -1442,19 +1442,54 @@ def test_heizzeilen_stehen_nicht_in_der_kostentabelle():
     assert sorted(berechnet) == ["Heizung (Gas)", "Warmwasser (Gas)"]
 
 
-def test_jedes_suchthema_zeigt_auf_einen_bereich_den_es_gibt():
-    """Sonst springt die Suche ins Leere."""
-    from nebenkosten import hilfe
+def test_wohnung_kann_eine_eigene_anschrift_haben():
+    """Der Anbau hat die 27a, das Haus die 27 - im PDF muss die Wohnung stehen."""
+    s = basis_stammdaten(objekt_strasse="Raiffeisenring 27",
+                         objekt_plz_ort="66903 Gries")
+    assert s.wohnung_anschrift == ("Raiffeisenring 27", "66903 Gries")
 
-    unbekannt = {t.bereich for t in hilfe.THEMEN} - set(hilfe.BEREICHE)
-    assert not unbekannt, f"Themen zeigen auf: {sorted(unbekannt)}"
+    s = basis_stammdaten(objekt_strasse="Raiffeisenring 27", objekt_plz_ort="66903 Gries",
+                         wohnung_strasse="Raiffeisenring 27a")
+    assert s.wohnung_anschrift == ("Raiffeisenring 27a", "66903 Gries")
+
+    s = basis_stammdaten(objekt_strasse="Raiffeisenring 27", objekt_plz_ort="66903 Gries",
+                         wohnung_strasse="Nebenweg 3", wohnung_plz_ort="66903 Gries-Nord")
+    assert s.wohnung_anschrift == ("Nebenweg 3", "66903 Gries-Nord")
 
 
-def test_jeder_bereich_hat_eine_erklaerung():
-    from nebenkosten import hilfe
+def test_pdf_zeigt_die_anschrift_der_wohnung():
+    from nebenkosten.berechnung import berechne
+    from nebenkosten.pdf import erzeuge_pdf
 
-    ohne = set(hilfe.BEREICHE) - set(hilfe.ERKLAERUNGEN)
-    assert not ohne, f"ohne Fragezeichen-Text: {sorted(ohne)}"
+    s = basis_stammdaten(objekt_strasse="Raiffeisenring 27", objekt_plz_ort="66903 Gries",
+                         wohnung_strasse="Raiffeisenring 27a")
+    positionen = [Position("Grundsteuer", "sonstiges", betrag=400.0)]
+    daten = erzeuge_pdf(s, berechne(s, positionen))
+    assert daten[:4] == b"%PDF"
+    assert len(daten) > 1000
+
+
+def test_eigene_wohnungsanschrift_ueberlebt_das_zuruecksetzen():
+    from nebenkosten.modell import neue_abrechnung
+
+    s = basis_stammdaten(wohnung_strasse="Raiffeisenring 27a", wohnung_plz_ort="66903 Gries")
+    frisch = neue_abrechnung(s)
+    assert frisch.wohnung_strasse == "Raiffeisenring 27a"
+    assert frisch.wohnung_plz_ort == "66903 Gries"
+
+
+def test_kein_test_verdeckt_einen_anderen():
+    """Zwei Tests mit demselben Namen: Der zweite verdeckt den ersten, und der
+    laeuft ab da nie wieder - ohne dass irgendwo etwas rot wird."""
+    import ast
+    from collections import Counter
+    from pathlib import Path
+
+    baum = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    namen = Counter(k.name for k in baum.body
+                    if isinstance(k, ast.FunctionDef) and k.name.startswith("test_"))
+    doppelt = sorted(name for name, anzahl in namen.items() if anzahl > 1)
+    assert not doppelt, f"doppelt vergeben: {doppelt}"
 
 
 if __name__ == "__main__":

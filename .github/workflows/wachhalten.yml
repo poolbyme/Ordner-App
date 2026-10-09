@@ -5,14 +5,18 @@
 # gebacken" - bei dieser App besonders lange, weil sie beim Start pandas und
 # die PDF-Erzeugung mitlaedt.
 #
-# Zwei Dinge reichen dafuer nicht, beide ausprobiert:
+# Drei Dinge reichen dafuer nicht, alle drei ausprobiert:
 #  * Ein blosser Aufruf der Adresse (curl). Streamlit zaehlt keine HTTP-
 #    Aufrufe, sondern echte Browser-Sitzungen.
 #  * Nur die Seite oeffnen. Eine schlafende App zeigt erst eine Zwischenseite
 #    mit dem Knopf "Yes, get this app back up!" - ohne Druck darauf wacht sie
-#    nicht auf. Genau daran ist der erste Lauf gescheitert.
+#    nicht auf.
+#  * Nur die aeussere Seite durchsuchen. Streamlit Cloud steckt die App in
+#    einen eigenen Rahmen unter /~/+/; die aeussere Seite selbst ist leer.
+#    Genau daran ist der zweite Lauf gescheitert: fuenf Minuten gewartet, und
+#    im Protokoll stand "Was auf der Seite stand:" und dann nichts.
 #
-# Deshalb: richtiger Browser, Knopf druecken, warten bis die App steht.
+# Deshalb: richtiger Browser, in allen Rahmen suchen, Knopf druecken, warten.
 name: App wach halten
 
 on:
@@ -47,38 +51,64 @@ jobs:
           import os
           import re
           import sys
+          import time
+
           from playwright.sync_api import sync_playwright
 
-          adresse = os.environ["ADRESSE"]
+          ADRESSE = os.environ["ADRESSE"]
+          GESUCHT = "nebenkosten"
+          WECKTEXT = re.compile("get this app back up", re.I)
+          FRIST = 360          # Sekunden, die die App zum Hochfahren bekommt
+
+
+          def rahmentexte(seite):
+              """Text jedes Rahmens - die App steckt nicht in der aeusseren Seite."""
+              for rahmen in seite.frames:
+                  try:
+                      yield rahmen, rahmen.inner_text("body") or ""
+                  except Exception:
+                      continue
+
+
+          def weckknopf(seite):
+              for rahmen in seite.frames:
+                  try:
+                      knopf = rahmen.get_by_role("button", name=WECKTEXT)
+                      if knopf.count():
+                          return knopf.first
+                  except Exception:
+                      continue
+              return None
+
+
           with sync_playwright() as p:
               browser = p.chromium.launch()
               seite = browser.new_context().new_page()
-              seite.goto(adresse, wait_until="load", timeout=180_000)
+              seite.goto(ADRESSE, wait_until="load", timeout=120_000)
 
-              # Schlaeft die App, kommt zuerst eine Zwischenseite mit einem Knopf.
-              # Ohne Druck darauf bleibt sie liegen. Der Text ist englisch, egal
-              # welche Sprache das Geraet hat.
-              for versuch in range(3):
-                  knopf = seite.get_by_role(
-                      "button", name=re.compile("get this app back up", re.I))
-                  if knopf.count() == 0:
+              gedrueckt = 0
+              ende = time.time() + FRIST
+              steht = False
+              while time.time() < ende:
+                  if any(GESUCHT in text.lower() for _, text in rahmentexte(seite)):
+                      steht = True
                       break
-                  print(f"Die App schlief - Weckknopf gedrueckt (Versuch {versuch + 1}).")
-                  knopf.first.click()
-                  seite.wait_for_timeout(15_000)
+                  knopf = weckknopf(seite)
+                  if knopf is not None and gedrueckt < 3:
+                      gedrueckt += 1
+                      print(f"Die App schlief - Weckknopf gedrueckt ({gedrueckt}).")
+                      try:
+                          knopf.click()
+                      except Exception as fehler:
+                          print(f"(Knopf liess sich nicht druecken: {fehler})")
+                  seite.wait_for_timeout(5_000)
 
-              # Jetzt warten, bis die App wirklich steht. Das Hochfahren dauert
-              # bei dieser App laenger als bei kleinen, sie laedt viel mit.
-              try:
-                  seite.wait_for_selector("text=Nebenkosten", timeout=300_000)
-              except Exception as fehler:
-                  print("::error::Die App war nach fuenf Minuten nicht erreichbar.")
-                  print(f"Meldung: {fehler}")
-                  print("Was auf der Seite stand:")
-                  try:
-                      print(seite.inner_text("body")[:600])
-                  except Exception as lesefehler:
-                      print(f"(nicht lesbar: {lesefehler})")
+              if not steht:
+                  print("::error::Die App war nach sechs Minuten nicht erreichbar.")
+                  print(f"Seitentitel: {seite.title()!r}")
+                  for rahmen, text in rahmentexte(seite):
+                      kurz = " ".join(text.split())[:200]
+                      print(f"  Rahmen {rahmen.url} -> {kurz!r}")
                   browser.close()
                   sys.exit(1)
 

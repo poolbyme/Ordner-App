@@ -1,0 +1,42 @@
+# Haelt die Nebenkosten-App wach.
+#
+# Kostenlose Streamlit-Apps werden nach etwa einem halben Tag ohne Besucher
+# schlafen gelegt. Beim naechsten Oeffnen steht dann minutenlang "Ihre App wird
+# gebacken". Fuer eine App, die man einmal im Jahr braucht, heisst das: Sie
+# schlaeft immer.
+#
+# Dieser Ablauf ruft die Adresse alle sechs Stunden auf - oft genug, dass die
+# Uhr nie ablaeuft. Er laeuft bei GitHub, kostet nichts und braucht kein
+# eingeschaltetes Geraet.
+name: App wach halten
+
+on:
+  schedule:
+    # Alle sechs Stunden. Streamlit legt nach rund zwoelf Stunden ohne Besuch
+    # schlafen - die Haelfte davon laesst Luft fuer ausgefallene Laeufe.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:        # von Hand ausloesbar, Reiter "Actions"
+
+permissions:
+  contents: read
+
+jobs:
+  wecken:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Adresse aufrufen
+        env:
+          ADRESSE: https://nebenkosten-komjagin.streamlit.app/
+        run: |
+          echo "Erster Aufruf - weckt die App, falls sie schlaeft."
+          erst=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 60 "$ADRESSE" || echo "000")
+          echo "Antwort: $erst"
+          # Das Hochfahren dauert. Ohne das Warten bricht der Besuch ab, bevor
+          # die App steht - dann zaehlt er womoeglich gar nicht als Besuch.
+          sleep 60
+          echo "Zweiter Aufruf - jetzt sollte sie stehen."
+          zweit=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 60 "$ADRESSE" || echo "000")
+          echo "Antwort: $zweit"
+          if [ "$zweit" != "200" ]; then
+            echo "::warning::Die App hat mit $zweit geantwortet statt mit 200."
+          fi

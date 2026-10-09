@@ -1,19 +1,20 @@
 # Haelt die Nebenkosten-App wach.
 #
-# Kostenlose Streamlit-Apps werden nach etwa einem halben Tag ohne Besucher
+# Kostenlose Streamlit-Apps werden nach rund zwoelf Stunden ohne Besucher
 # schlafen gelegt. Beim naechsten Oeffnen steht dann minutenlang "Ihre App wird
-# gebacken". Fuer eine App, die man einmal im Jahr braucht, heisst das: Sie
-# schlaeft immer.
+# gebacken" - bei dieser App besonders lange, weil sie beim Start pandas und
+# die PDF-Erzeugung mitlaedt.
 #
-# Dieser Ablauf ruft die Adresse alle sechs Stunden auf - oft genug, dass die
-# Uhr nie ablaeuft. Er laeuft bei GitHub, kostet nichts und braucht kein
-# eingeschaltetes Geraet.
+# Wichtig: Ein blosser Aufruf der Adresse (curl) zaehlt NICHT als Besuch.
+# Streamlit zaehlt echte Browser-Sitzungen, also eine stehende Verbindung.
+# Deshalb faehrt dieser Ablauf einen richtigen Browser hoch, oeffnet die Seite
+# und bleibt kurz darauf stehen.
 name: App wach halten
 
 on:
   schedule:
-    # Alle sechs Stunden. Streamlit legt nach rund zwoelf Stunden ohne Besuch
-    # schlafen - die Haelfte davon laesst Luft fuer ausgefallene Laeufe.
+    # Alle sechs Stunden. Die Grenze liegt bei etwa zwoelf - die Haelfte davon
+    # laesst Luft, falls ein Lauf ausfaellt oder sich verspaetet.
     - cron: "17 */6 * * *"
   workflow_dispatch:        # von Hand ausloesbar, Reiter "Actions"
 
@@ -23,20 +24,39 @@ permissions:
 jobs:
   wecken:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Adresse aufrufen
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Browser einrichten
+        run: |
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Seite wirklich besuchen
         env:
           ADRESSE: https://nebenkosten-komjagin.streamlit.app/
         run: |
-          echo "Erster Aufruf - weckt die App, falls sie schlaeft."
-          erst=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 60 "$ADRESSE" || echo "000")
-          echo "Antwort: $erst"
-          # Das Hochfahren dauert. Ohne das Warten bricht der Besuch ab, bevor
-          # die App steht - dann zaehlt er womoeglich gar nicht als Besuch.
-          sleep 60
-          echo "Zweiter Aufruf - jetzt sollte sie stehen."
-          zweit=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 60 "$ADRESSE" || echo "000")
-          echo "Antwort: $zweit"
-          if [ "$zweit" != "200" ]; then
-            echo "::warning::Die App hat mit $zweit geantwortet statt mit 200."
-          fi
+          python - <<'PY'
+          import os, sys
+          from playwright.sync_api import sync_playwright
+
+          adresse = os.environ["ADRESSE"]
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              seite = browser.new_context().new_page()
+              seite.goto(adresse, wait_until="load", timeout=180_000)
+              # Beim Aufwachen zeigt Streamlit erst den Backofen. Warten, bis die
+              # App wirklich steht - sonst bricht der Besuch vorher ab.
+              try:
+                  seite.wait_for_selector("text=Nebenkosten", timeout=180_000)
+                  print("Die App steht.")
+              except Exception as fehler:
+                  print(f"::warning::Die App war nach drei Minuten noch nicht da: {fehler}")
+                  print(seite.inner_text("body")[:300])
+              # Kurz stehen bleiben: Die Sitzung soll als Besuch zaehlen.
+              seite.wait_for_timeout(20_000)
+              browser.close()
+          PY

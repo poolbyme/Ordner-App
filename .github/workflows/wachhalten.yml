@@ -5,10 +5,14 @@
 # gebacken" - bei dieser App besonders lange, weil sie beim Start pandas und
 # die PDF-Erzeugung mitlaedt.
 #
-# Wichtig: Ein blosser Aufruf der Adresse (curl) zaehlt NICHT als Besuch.
-# Streamlit zaehlt echte Browser-Sitzungen, also eine stehende Verbindung.
-# Deshalb faehrt dieser Ablauf einen richtigen Browser hoch, oeffnet die Seite
-# und bleibt kurz darauf stehen.
+# Zwei Dinge reichen dafuer nicht, beide ausprobiert:
+#  * Ein blosser Aufruf der Adresse (curl). Streamlit zaehlt keine HTTP-
+#    Aufrufe, sondern echte Browser-Sitzungen.
+#  * Nur die Seite oeffnen. Eine schlafende App zeigt erst eine Zwischenseite
+#    mit dem Knopf "Yes, get this app back up!" - ohne Druck darauf wacht sie
+#    nicht auf. Genau daran ist der erste Lauf gescheitert.
+#
+# Deshalb: richtiger Browser, Knopf druecken, warten bis die App steht.
 name: App wach halten
 
 on:
@@ -24,7 +28,7 @@ permissions:
 jobs:
   wecken:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -40,7 +44,9 @@ jobs:
           ADRESSE: https://nebenkosten-komjagin.streamlit.app/
         run: |
           python - <<'PY'
-          import os, sys
+          import os
+          import re
+          import sys
           from playwright.sync_api import sync_playwright
 
           adresse = os.environ["ADRESSE"]
@@ -48,14 +54,35 @@ jobs:
               browser = p.chromium.launch()
               seite = browser.new_context().new_page()
               seite.goto(adresse, wait_until="load", timeout=180_000)
-              # Beim Aufwachen zeigt Streamlit erst den Backofen. Warten, bis die
-              # App wirklich steht - sonst bricht der Besuch vorher ab.
+
+              # Schlaeft die App, kommt zuerst eine Zwischenseite mit einem Knopf.
+              # Ohne Druck darauf bleibt sie liegen. Der Text ist englisch, egal
+              # welche Sprache das Geraet hat.
+              for versuch in range(3):
+                  knopf = seite.get_by_role(
+                      "button", name=re.compile("get this app back up", re.I))
+                  if knopf.count() == 0:
+                      break
+                  print(f"Die App schlief - Weckknopf gedrueckt (Versuch {versuch + 1}).")
+                  knopf.first.click()
+                  seite.wait_for_timeout(15_000)
+
+              # Jetzt warten, bis die App wirklich steht. Das Hochfahren dauert
+              # bei dieser App laenger als bei kleinen, sie laedt viel mit.
               try:
-                  seite.wait_for_selector("text=Nebenkosten", timeout=180_000)
-                  print("Die App steht.")
+                  seite.wait_for_selector("text=Nebenkosten", timeout=300_000)
               except Exception as fehler:
-                  print(f"::warning::Die App war nach drei Minuten noch nicht da: {fehler}")
-                  print(seite.inner_text("body")[:300])
+                  print("::error::Die App war nach fuenf Minuten nicht erreichbar.")
+                  print(f"Meldung: {fehler}")
+                  print("Was auf der Seite stand:")
+                  try:
+                      print(seite.inner_text("body")[:600])
+                  except Exception as lesefehler:
+                      print(f"(nicht lesbar: {lesefehler})")
+                  browser.close()
+                  sys.exit(1)
+
+              print("Die App steht.")
               # Kurz stehen bleiben: Die Sitzung soll als Besuch zaehlen.
               seite.wait_for_timeout(20_000)
               browser.close()
